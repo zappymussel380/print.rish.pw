@@ -1,0 +1,176 @@
+// print.rish.pw — quotation system schema.
+// Money is always integer paise. Slice statistics are per single unit;
+// quantity multiplication happens in the pricing engine.
+
+generator client {
+  provider      = "prisma-client-js"
+  // Emit into the package so the client + query engine live inside the traced
+  // workspace source (reliable with Next standalone in a monorepo), rather than
+  // in a version-hashed .pnpm path that file-tracing misses.
+  output        = "../generated/client"
+  // "native" covers local dev; the debian target matches the node:20-slim /
+  // ubuntu:24.04 container runtime (OpenSSL 3.0) for web and worker.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MaterialId {
+  PLA
+  PETG
+}
+
+enum SupportMode {
+  AUTO
+  OFF
+  ALWAYS
+}
+
+enum QuotationStatus {
+  PENDING
+  QUOTED
+  APPROVED
+  PRINTING
+  COMPLETED
+  DELIVERED
+  CANCELLED
+}
+
+enum SliceStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// A customer-uploaded 3D model file. Files live outside the web root under
+/// UPLOAD_DIR, named by id; originalName is sanitised and display-only.
+model UploadedModel {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Anonymous quote-session id (signed cookie). Ownership boundary until the
+  /// model is attached to a quotation.
+  sessionId    String   @db.Uuid
+  originalName String
+  storedPath   String
+  fileHash     String   @db.Char(64)
+  sizeBytes    Int
+  format       String
+  bboxXMm      Float?
+  bboxYMm      Float?
+  bboxZMm      Float?
+  volumeCm3    Float?
+  thumbPath    String?
+  createdAt    DateTime @default(now())
+
+  items QuotationItem[]
+
+  @@index([fileHash])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+/// Slice-result cache: one row per (file, slice-settings) combination.
+/// Survives sessions and duplicate uploads of identical files.
+model SliceResult {
+  id            String      @id @default(uuid()) @db.Uuid
+  fileHash      String      @db.Char(64)
+  /// Canonical settings key, e.g. "PLA:200:15:auto" (see shared/settings-key).
+  settingsKey   String
+  settingsJson  Json
+  status        SliceStatus @default(QUEUED)
+  /// Per-unit statistics from OrcaSlicer.
+  filamentGrams Decimal?    @db.Decimal(10, 3)
+  filamentMm    Decimal?    @db.Decimal(12, 1)
+  printSeconds  Int?
+  supportGrams  Decimal?    @db.Decimal(10, 3)
+  slicerVersion String
+  /// Full parsed slicer metadata (slice_info.config + gcode extras).
+  rawMeta       Json?
+  errorCode     String?
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  completedAt   DateTime?
+
+  items QuotationItem[]
+
+  @@unique([fileHash, settingsKey])
+  @@index([status])
+}
+
+model Quotation {
+  id                  String          @id @default(uuid()) @db.Uuid
+  /// Human-facing unique number, e.g. RSP-2026-0042.
+  number              String          @unique
+  status              QuotationStatus @default(PENDING)
+  customerName        String
+  customerEmail       String
+  customerPhone       String
+  customerCity        String
+  notes               String          @default("")
+  setupFeePaise       Int
+  totalPaise          Int
+  /// Catalog + full breakdown frozen at submission time, so later price
+  /// changes never alter an issued quotation.
+  pricingSnapshot     Json
+  pdfPath             String?
+  /// Random token that authorises customer access to the PDF/confirmation.
+  accessToken         String          @unique
+  estimatedCompletion DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  items   QuotationItem[]
+  history StatusHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerEmail])
+}
+
+model QuotationItem {
+  id            String      @id @default(uuid()) @db.Uuid
+  quotationId   String      @db.Uuid
+  quotation     Quotation   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  modelId       String      @db.Uuid
+  model         UploadedModel @relation(fields: [modelId], references: [id])
+  sliceResultId String      @db.Uuid
+  sliceResult   SliceResult @relation(fields: [sliceResultId], references: [id])
+
+  material      MaterialId
+  colour        String
+  layerHeightUm Int
+  infillPct     Int
+  supports      SupportMode
+  quantity      Int
+
+  unitGrams        Decimal @db.Decimal(10, 3)
+  unitPrintSeconds Int
+
+  materialPaise    Int
+  electricityPaise Int
+  maintenancePaise Int
+  subtotalPaise    Int
+
+  @@index([quotationId])
+}
+
+model StatusHistory {
+  id          String           @id @default(uuid()) @db.Uuid
+  quotationId String           @db.Uuid
+  quotation   Quotation        @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  fromStatus  QuotationStatus?
+  toStatus    QuotationStatus
+  note        String           @default("")
+  createdAt   DateTime         @default(now())
+
+  @@index([quotationId])
+}
+
+/// Per-year sequence for quotation numbers; incremented in a transaction.
+model QuotationCounter {
+  year    Int @id
+  counter Int @default(0)
+}

@@ -1,0 +1,84 @@
+import type { ColourId, MaterialId } from "./quote-types";
+
+/**
+ * Business configuration: printers, materials, rates.
+ *
+ * The pricing engine takes a catalog as a parameter, so replacing this
+ * constant with a database-backed catalog later requires no engine changes.
+ * All money is integer paise (₹1 = 100 paise).
+ */
+
+export interface MaterialSpec {
+  name: string;
+  /** Customer-facing selling rate per gram of filament used. */
+  sellPerGramPaise: number;
+  /** Internal filament cost per kilogram — informational, never billed on top. */
+  costPerKgPaise: number;
+  densityGcm3: number;
+  colours: readonly ColourId[];
+}
+
+export interface PrinterSpec {
+  name: string;
+  nozzleMm: number;
+  /** Printable envelope in millimetres. */
+  bedMm: readonly [number, number, number];
+  /** Average power draw while printing, in kWh per hour of print time. */
+  kwhPerHour: number;
+}
+
+export interface Catalog {
+  currency: "INR";
+  /** One-time fee per order, regardless of file count. */
+  setupFeePaise: number;
+  printers: Record<string, PrinterSpec>;
+  defaultPrinterId: string;
+  materials: Record<MaterialId, MaterialSpec>;
+  /** Internal electricity rate — informational component of the breakdown. */
+  electricityPerKwhPaise: number;
+  /** Internal maintenance allocation — informational component of the breakdown. */
+  maintenancePerGramPaise: number;
+  leadTime: {
+    /** Effective printing hours available per calendar day. */
+    printHoursPerDay: number;
+    /** Days added on top of raw print time for prep, cooling, QC, packing. */
+    bufferDays: number;
+  };
+}
+
+export const CATALOG: Catalog = {
+  currency: "INR",
+  setupFeePaise: 150_00,
+  printers: {
+    "bbl-a1": {
+      name: "Bambu Lab A1",
+      nozzleMm: 0.4,
+      bedMm: [256, 256, 256],
+      kwhPerHour: 0.09,
+    },
+  },
+  defaultPrinterId: "bbl-a1",
+  materials: {
+    PLA: {
+      name: "PLA",
+      sellPerGramPaise: 200,
+      costPerKgPaise: 600_00,
+      // Matches filament_density in the flattened Bambu PLA Basic profile.
+      densityGcm3: 1.26,
+      colours: ["black", "white"],
+    },
+    PETG: {
+      name: "PETG",
+      sellPerGramPaise: 250,
+      costPerKgPaise: 800_00,
+      densityGcm3: 1.27,
+      colours: ["black", "white"],
+    },
+  },
+  electricityPerKwhPaise: 10_00,
+  maintenancePerGramPaise: 20,
+  leadTime: {
+    printHoursPerDay: 8,
+    bufferDays: 2,
+  },
+};

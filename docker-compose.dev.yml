@@ -1,0 +1,37 @@
+# Development-only stack: just Postgres and Redis.
+# Run the app locally against it:
+#   docker compose -f docker-compose.dev.yml up -d
+#   DATABASE_URL=postgresql://print:print@localhost:5433/print \
+#   REDIS_URL=redis://localhost:6380 pnpm dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: print
+      POSTGRES_PASSWORD: print
+      POSTGRES_DB: print
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U print -d print"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redisdata-dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata-dev:
+  redisdata-dev:

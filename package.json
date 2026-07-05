@@ -1,0 +1,20 @@
+{
+  "name": "print-rish-pw",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Instant 3D-printing quotation system for print.rish.pw",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @print/web --filter @print/worker dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @print/db migrate:dev",
+    "db:generate": "pnpm --filter @print/db generate"
+  }
+}

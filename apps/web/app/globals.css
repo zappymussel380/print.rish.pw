@@ -1,0 +1,285 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Design tokens — ported verbatim from rish.pw (index.html).
+ * Dark is the default; light is toggled via html[data-theme="light"] and
+ * persisted in localStorage under "rish-theme" (same mechanism as the main
+ * site). The accent is identical in both themes.
+ * ------------------------------------------------------------------------- */
+:root {
+  --bg: #050505;
+  --surface: #0c0c0c;
+  --line: #252525;
+  --accent: #ff5555;
+  --text: #eeeeee;
+  --muted: #9a9a9a;
+  --faint: #555555;
+  color-scheme: dark;
+
+  /* Signature easing curves from the main site. */
+  --ease-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html[data-theme="light"] {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --line: #dfdad2;
+  --accent: #ff5555;
+  --text: #111111;
+  --muted: #66615b;
+  --faint: #aaa29a;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --ease-expo: var(--ease-expo);
+  --ease-out: var(--ease-out);
+
+  --radius-input: 0.65rem;
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-weight: 450;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  ::placeholder {
+    color: var(--faint);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 5px;
+    border-radius: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Uppercase eyebrow label — the recurring rish.pw section-kicker motif. */
+  .eyebrow {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* Large display heading with the site's tight tracking. */
+  .display-title {
+    font-size: clamp(2.2rem, 4.8vw, 4.4rem);
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .section-title {
+    font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    color: var(--text);
+  }
+
+  /* Card: 1px line border on surface, accent border on hover — no drop
+     shadows, matching .work-tile on the main site. */
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease;
+  }
+
+  .tile-hover:hover {
+    border-color: var(--accent);
+  }
+
+  /* Primary pill button — mirrors .contact-submit. */
+  .btn-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--bg);
+    border: 1px solid var(--accent);
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    min-height: 2.8rem;
+    padding: 0.66rem 1.4rem;
+    transition:
+      filter 150ms ease,
+      transform 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .btn-pill:hover:not(:disabled) {
+    filter: brightness(1.04);
+    transform: translateY(-0.04rem);
+  }
+
+  .btn-pill:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  /* Secondary / ghost pill. */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    color: var(--text);
+    border: 1px solid var(--line);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    min-height: 2.8rem;
+    padding: 0.66rem 1.4rem;
+    transition:
+      border-color 150ms ease,
+      color 150ms ease,
+      background-color 150ms ease;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Input — mirrors .contact-input. */
+  .input-base {
+    width: 100%;
+    border-radius: 0.65rem;
+    border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+    background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+    color: var(--text);
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .input-base:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+  }
+
+  /* Small uppercase chip/tag. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.62rem;
+  }
+
+  .chip-accent {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+  }
+
+  /* Accent divider line, as used between sections on the main site. */
+  .accent-divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent), var(--line) 42%, transparent);
+  }
+
+  /* Soft glow used on interactive highlights. */
+  .glow-accent {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 44%, transparent);
+  }
+
+  /* Accent range slider (infill). */
+  .range-accent {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line) 70%, transparent);
+    outline-offset: 6px;
+  }
+  .range-accent::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+  .range-accent::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+
+  .skeleton {
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--line) 55%, transparent);
+    animation: skeleton-pulse 1.4s var(--ease-out) infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}

@@ -1,0 +1,127 @@
+import { describe, expect, it } from "vitest";
+import { CATALOG } from "./catalog";
+import { estimateCompletionDate } from "./completion-date";
+import { formatFromFilename, sanitizeOriginalName } from "./filename";
+import { formatDuration, formatGrams, formatPaise } from "./money";
+import { settingsKey } from "./settings-key";
+import { sliceJobId } from "./slice-job";
+import { summariseItems } from "./order-summary";
+import { buildWhatsAppMessage, buildWhatsAppUrl } from "./whatsapp";
+
+describe("settingsKey", () => {
+  it("is stable and excludes colour/quantity by construction", () => {
+    expect(
+      settingsKey({ material: "PLA", layerHeightUm: 160, infillPct: 25, supports: "auto" }),
+    ).toBe("PLA:160:25:auto");
+  });
+});
+
+describe("buildWhatsAppUrl", () => {
+  const input = {
+    number: "+91 98765-43210",
+    quotationNumber: "RSP-2026-0042",
+    customerName: "Asha",
+    materialsSummary: "2× PLA (black)",
+    totalPaise: 45050,
+  };
+
+  it("normalises the number and URL-encodes the message", () => {
+    const url = buildWhatsAppUrl(input);
+    expect(url.startsWith("https://wa.me/919876543210?text=")).toBe(true);
+    expect(url).not.toContain(" ");
+    const text = decodeURIComponent(url.split("?text=")[1]!);
+    expect(text).toContain("RSP-2026-0042");
+    expect(text).toContain("₹450.50");
+  });
+
+  it("clips very long notes", () => {
+    const msg = buildWhatsAppMessage({ ...input, notes: "x".repeat(2000) });
+    expect(msg.length).toBeLessThan(1200);
+    expect(msg).toContain("…");
+  });
+
+  it("throws when the number is unconfigured", () => {
+    expect(() => buildWhatsAppUrl({ ...input, number: "" })).toThrow();
+  });
+});
+
+describe("sanitizeOriginalName", () => {
+  it("strips directory components", () => {
+    expect(sanitizeOriginalName("../../etc/passwd")).toBe("passwd");
+    expect(sanitizeOriginalName("C:\\Users\\x\\benchy.stl")).toBe("benchy.stl");
+  });
+
+  it("removes control and bidi characters", () => {
+    expect(sanitizeOriginalName("mod\u0001el\u202e.stl")).toBe("model.stl");
+  });
+
+  it("falls back for empty results", () => {
+    expect(sanitizeOriginalName("///")).toBe("model");
+  });
+
+  it("caps length but keeps the extension", () => {
+    const out = sanitizeOriginalName(`${"a".repeat(500)}.stl`);
+    expect(out.length).toBeLessThanOrEqual(200);
+    expect(out.endsWith(".stl")).toBe(true);
+  });
+});
+
+describe("formatFromFilename", () => {
+  it("maps known extensions case-insensitively", () => {
+    expect(formatFromFilename("part.STL")).toBe("stl");
+    expect(formatFromFilename("part.3mf")).toBe("3mf");
+    expect(formatFromFilename("part.gcode")).toBeNull();
+    expect(formatFromFilename("no-extension")).toBeNull();
+  });
+});
+
+describe("estimateCompletionDate", () => {
+  it("spreads print hours over days and adds the buffer", () => {
+    const from = new Date("2026-07-05T10:00:00Z");
+    // 20h of printing at 8h/day = 3 days + 2 buffer = 5 days
+    const eta = estimateCompletionDate(20 * 3600, CATALOG.leadTime, from);
+    expect(eta.toISOString().slice(0, 10)).toBe("2026-07-10");
+  });
+
+  it("has a floor of one print day", () => {
+    const from = new Date("2026-07-05T10:00:00Z");
+    const eta = estimateCompletionDate(60, CATALOG.leadTime, from);
+    expect(eta.toISOString().slice(0, 10)).toBe("2026-07-08");
+  });
+});
+
+describe("sliceJobId", () => {
+  it("is colon-free so BullMQ never splits it into Redis key segments", () => {
+    const id = sliceJobId("a".repeat(64), "PLA:200:15:auto");
+    expect(id).not.toContain(":");
+    expect(id).toBe(`slice_${"a".repeat(64)}_PLA-200-15-auto`);
+  });
+  it("is deterministic for identical (file, settings)", () => {
+    expect(sliceJobId("abc", "PLA:200:15:auto")).toBe(sliceJobId("abc", "PLA:200:15:auto"));
+  });
+});
+
+describe("summariseItems", () => {
+  it("groups by material + colour and sums quantity", () => {
+    expect(
+      summariseItems([
+        { material: "PLA", colour: "black", quantity: 1 },
+        { material: "PLA", colour: "black", quantity: 1 },
+        { material: "PETG", colour: "white", quantity: 3 },
+      ]),
+    ).toBe("2× PLA (black), 3× PETG (white)");
+  });
+});
+
+describe("money formatting", () => {
+  it("formats paise as INR", () => {
+    expect(formatPaise(15000)).toContain("150");
+    expect(formatPaise(45050)).toContain("450.50");
+  });
+  it("formats durations and weights", () => {
+    expect(formatDuration(2439)).toBe("41m");
+    expect(formatDuration(7500)).toBe("2h 5m");
+    expect(formatGrams(5.11)).toBe("5.1 g");
+    expect(formatGrams(1234)).toBe("1.23 kg");
+  });
+});
