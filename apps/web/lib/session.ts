@@ -17,10 +17,14 @@ const ADMIN_TTL_SECONDS = 12 * 3600;
 
 const secretKey = () => new TextEncoder().encode(env.sessionSecret);
 
+// Mark cookies Secure only when the app is actually served over HTTPS (derived
+// from APP_ORIGIN's scheme). This keeps sessions working when the app is reached
+// over plain HTTP — e.g. a LAN IP for testing — while staying Secure in
+// production behind the TLS-terminating proxy (APP_ORIGIN=https://…).
 const cookieBase = {
   httpOnly: true,
   sameSite: "strict",
-  secure: process.env.NODE_ENV === "production",
+  secure: env.appOrigin.startsWith("https://"),
   path: "/",
 } as const;
 
