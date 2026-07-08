@@ -8,6 +8,11 @@
     "node": ">=20"
   },
   "packageManager": "pnpm@9.15.9",
+  "pnpm": {
+    "overrides": {
+      "postcss@<8.5.10": ">=8.5.10"
+    }
+  },
   "scripts": {
     "dev": "pnpm --parallel --filter @print/web --filter @print/worker dev",
     "build": "pnpm -r build",

@@ -157,12 +157,14 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
             <Text style={{ color: MUTED }}>Setup fee</Text>
             <Text>{money(data.setupFeePaise)}</Text>
           </View>
-          {data.shippingPaise ? (
-            <View style={s.totalRow}>
-              <Text style={{ color: MUTED }}>Shipping</Text>
+          <View style={s.totalRow}>
+            <Text style={{ color: MUTED }}>Shipping</Text>
+            {data.shippingPaise ? (
               <Text>{money(data.shippingPaise)}</Text>
-            </View>
-          ) : null}
+            ) : (
+              <Text style={{ color: MUTED }}>Not included</Text>
+            )}
+          </View>
           <View style={s.grandRow}>
             <Text style={s.grandLabel}>Total</Text>
             <Text style={s.grandValue}>{money(data.totalPaise)}</Text>

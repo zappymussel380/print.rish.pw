@@ -15,7 +15,11 @@ services:
       web:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      # Bound to loopback by default so the stack is never reachable from the
+      # host's public interfaces. Production sets PROXY_BIND in .env to the
+      # host's Tailscale IP so the VPS nginx can reach it over the tailnet —
+      # never 0.0.0.0 (see docs/DEPLOYMENT.md).
+      - "${PROXY_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - ./docker/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
     restart: unless-stopped

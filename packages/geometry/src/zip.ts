@@ -3,8 +3,11 @@ import { ModelParseError } from "./types";
 
 /** Decompressed-size ceiling for any single entry we extract from an
  *  uploaded container (3MF / zipped AMF). Keeps zip bombs from exhausting
- *  memory: the input file itself is already capped by the upload limit. */
-export const MAX_ENTRY_BYTES = 512 * 1024 * 1024;
+ *  memory: the input file itself is already capped by the upload limit
+ *  (~100 MB), and the only entries we ever extract are model XML — anything
+ *  expanding past this is hostile or unparseable in reasonable time anyway
+ *  (it would blow the XML parser's own MAX_XML_BYTES cap next). */
+export const MAX_ENTRY_BYTES = 128 * 1024 * 1024;
 
 /**
  * Safely extract entries from an untrusted zip using fflate's streaming

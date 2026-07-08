@@ -113,10 +113,14 @@ export function CheckoutForm() {
     setSubmitting(true);
     setError(null);
     try {
+      // Send the saved shipping token even if the client thinks it is stale:
+      // the customer chose delivery, so the server must judge the token and
+      // 409 a changed quote ("re-estimate") rather than silently submitting a
+      // delivery quote with zero shipping.
       const result = await submitQuotation(
         items.map(({ modelId, config }) => ({ modelId, config })),
         { ...form, notes: form.notes || undefined } as never,
-        shippingValid?.token,
+        shipping?.token,
       );
       clear();
       router.push(`/quotation/${result.number}?token=${result.accessToken}`);
@@ -262,8 +266,10 @@ export function CheckoutForm() {
           <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">
             <Row label="Materials" value={formatPaise(breakdown.totalPaise - breakdown.setupFeePaise)} />
             <Row label="Setup fee" value={formatPaise(breakdown.setupFeePaise)} />
-            {shippingValid && (
+            {shippingValid ? (
               <Row label={`Shipping (to ${shippingValid.pincode})`} value={formatPaise(shippingValid.amountPaise)} />
+            ) : (
+              <Row label="Shipping" value="Not included" muted />
             )}
             <Row label="Print time" value={formatDuration(breakdown.totals.printSeconds)} muted />
             {completion && <Row label="Ready by" value={dateFmt.format(completion)} muted />}
@@ -275,7 +281,7 @@ export function CheckoutForm() {
           <p className="mt-3 text-[0.7rem] leading-5 text-faint">
             {shippingValid
               ? "Includes estimated prepaid shipping. "
-              : ""}
+              : "Shipping is not included — pickup in Guwahati or arranged over WhatsApp. "}
             Estimate from real slicing on a {CATALOG.printers[CATALOG.defaultPrinterId]!.name}. Final
             confirmation over WhatsApp.
           </p>

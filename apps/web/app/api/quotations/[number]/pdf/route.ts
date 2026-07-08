@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
@@ -18,7 +18,9 @@ function tokenMatches(a: string, b: string): boolean {
 }
 
 /** Serve a quotation PDF. Access via the customer's access token or an admin
- *  session. */
+ *  session. For non-admins every failure — unknown number, missing PDF, bad or
+ *  absent token — collapses into one identical 404, so quotation numbers
+ *  (which are sequential) cannot be enumerated by probing this endpoint. */
 export async function GET(request: NextRequest, ctx: { params: Promise<{ number: string }> }) {
   const limit = await rateLimit(
     "pdf",
@@ -34,18 +36,24 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ number:
 
   const { number } = await ctx.params;
   const token = request.nextUrl.searchParams.get("token") ?? "";
+  const notFound = () => jsonError(404, "NOT_FOUND", "Quotation not found");
 
   const quotation = await prisma.quotation.findUnique({ where: { number } });
-  if (!quotation?.pdfPath) return jsonError(404, "NOT_FOUND", "Quotation PDF not found");
+  const admin = await isAdmin();
 
-  const authorised = (token && tokenMatches(token, quotation.accessToken)) || (await isAdmin());
-  if (!authorised) return jsonError(403, "FORBIDDEN", "Invalid or missing access token");
+  // Always run the token comparison — against a dummy when the quotation does
+  // not exist — so a probe cannot distinguish "no such quotation" from "wrong
+  // token" by response timing.
+  const expected = quotation?.accessToken ?? randomBytes(32).toString("hex");
+  const tokenOk = token.length > 0 && tokenMatches(token, expected) && quotation !== null;
+  if (!admin && !tokenOk) return notFound();
+  if (!quotation?.pdfPath) return notFound();
 
   let size: number;
   try {
     size = (await stat(quotation.pdfPath)).size;
   } catch {
-    return jsonError(404, "NOT_FOUND", "Quotation PDF not found");
+    return notFound();
   }
 
   const stream = Readable.toWeb(createReadStream(quotation.pdfPath)) as ReadableStream;

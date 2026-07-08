@@ -1,13 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
+import { csvCell } from "@/lib/csv";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function csvCell(value: string | number): string {
-  const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 /** Export all quotations as CSV. Admin-gated by middleware. */
 export async function GET(_request: NextRequest) {

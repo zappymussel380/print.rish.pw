@@ -27,6 +27,11 @@ export const dynamic = "force-dynamic";
 
 // Preview thumbnail resolution (matches the worker's THUMB_SIZE default).
 const THUMB_SIZE = 512;
+// Above this the inline render is left to the worker (which draws one on first
+// slice anyway): the rasteriser itself is budget-bounded, but its full-mesh
+// framing passes plus PNG encode still cost real event-loop time on the web
+// process, and a pathological mesh should never pay it inline.
+const MAX_INLINE_THUMB_TRIANGLES = 1_000_000;
 
 interface StreamedFile {
   tmpPath: string;
@@ -187,15 +192,17 @@ export async function POST(request: NextRequest) {
     // Done here (not only in the slicer) so every upload has a preview even when
     // its slice is served from cache and no worker job runs. Best-effort and
     // strictly after the critical persist above — a thumbnail is a nicety and
-    // must never fail an upload or strand its file. Bounded by the parser's
-    // MAX_TRIANGLES cap, so the render can't run away.
-    try {
-      await ensureStorageDirs();
-      const tp = thumbPath(model.id);
-      await writeFile(tp, renderThumbnail(parsed.positions, THUMB_SIZE));
-      await prisma.uploadedModel.update({ where: { id: model.id }, data: { thumbPath: tp } });
-    } catch {
-      // ignore — the worker still renders one on first slice as a fallback
+    // must never fail an upload or strand its file. Skipped for huge meshes
+    // (see MAX_INLINE_THUMB_TRIANGLES) — the worker renders those on first slice.
+    if (parsed.triangleCount <= MAX_INLINE_THUMB_TRIANGLES) {
+      try {
+        await ensureStorageDirs();
+        const tp = thumbPath(model.id);
+        await writeFile(tp, renderThumbnail(parsed.positions, THUMB_SIZE));
+        await prisma.uploadedModel.update({ where: { id: model.id }, data: { thumbPath: tp } });
+      } catch {
+        // ignore — the worker still renders one on first slice as a fallback
+      }
     }
 
     return NextResponse.json(

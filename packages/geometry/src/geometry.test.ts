@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ModelParseError, parseModel } from "./index";
+import { MAX_XML_BYTES, parseXml } from "./xml";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "..", "fixtures", name));
 
@@ -57,5 +58,39 @@ describe("parseModel", () => {
     const model = parseModel(quad, "obj");
     expect(model.triangleCount).toBe(2);
     expect(model.bboxMm).toEqual({ x: 10, y: 10, z: 0 });
+  });
+
+  it("rejects XML models carrying a DOCTYPE (billion-laughs guard)", () => {
+    // Classic entity-expansion bomb: without the DOCTYPE rejection xmldom
+    // would happily expand internal entities during parsing.
+    const bomb = Buffer.from(
+      [
+        '<?xml version="1.0"?>',
+        "<!DOCTYPE amf [",
+        '<!ENTITY a "aaaaaaaaaa">',
+        '<!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">',
+        '<!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">',
+        "]>",
+        '<amf unit="millimeter"><object id="0"><mesh/></object></amf>',
+      ].join("\n"),
+    );
+    expect(() => parseModel(bomb, "amf")).toThrowError(/DOCTYPE/);
+  });
+
+  it("rejects a DOCTYPE regardless of case or leading comments", () => {
+    const sneaky = Buffer.from(
+      '<?xml version="1.0"?><!-- x --><!doctype amf><amf><object><mesh/></object></amf>',
+    );
+    expect(() => parseModel(sneaky, "amf")).toThrowError(/DOCTYPE/);
+  });
+});
+
+describe("parseXml guards", () => {
+  it("rejects XML text above MAX_XML_BYTES before DOM parsing", () => {
+    // Padding inside a comment keeps the document trivially small for the DOM
+    // if the size guard were ever bypassed — the test must not depend on
+    // actually parsing a 128 MB document.
+    const oversized = `<!--${"x".repeat(MAX_XML_BYTES)}--><amf/>`;
+    expect(() => parseXml(oversized, "test")).toThrowError(/exceeds/);
   });
 });

@@ -8,6 +8,7 @@ Secrets have **no defaults** and fail loudly at first use.
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
 | `APP_ORIGIN` | yes (prod) | `http://localhost:3000` | Public origin; used for CSRF origin checks and links. |
+| `PROXY_BIND` | yes (prod) | `127.0.0.1` | Host address the compose proxy binds `8080` to. Set to the host's **Tailscale IP** in production; never `0.0.0.0`. |
 | `DATABASE_URL` | yes | — | PostgreSQL connection string. |
 | `REDIS_URL` | — | `redis://localhost:6379` | Redis connection string. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | yes (compose) | — | Wired into the Postgres container and `DATABASE_URL`. |

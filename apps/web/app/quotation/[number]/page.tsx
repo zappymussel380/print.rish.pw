@@ -127,10 +127,15 @@ export default async function ConfirmationPage({
             <span>Setup fee</span>
             <span>{formatPaise(quotation.setupFeePaise)}</span>
           </div>
-          {quotation.shippingPaise > 0 && (
+          {quotation.shippingPaise > 0 ? (
             <div className="flex justify-between text-muted">
               <span>Shipping{quotation.shippingPincode ? ` (to ${quotation.shippingPincode})` : ""}</span>
               <span>{formatPaise(quotation.shippingPaise)}</span>
+            </div>
+          ) : (
+            <div className="flex justify-between text-muted">
+              <span>Shipping</span>
+              <span>Not included — confirmed over WhatsApp</span>
             </div>
           )}
           {quotation.estimatedCompletion && (

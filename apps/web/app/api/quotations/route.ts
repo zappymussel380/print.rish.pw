@@ -12,7 +12,8 @@ import {
   settingsKey,
   summariseItems,
 } from "@print/shared";
-import { guardMutation, jsonError } from "@/lib/api-util";
+import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
+import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { renderQuotationPdf } from "@/lib/pdf/quotation-pdf";
 import { nextQuotationNumber } from "@/lib/quotation-number";
@@ -28,12 +29,23 @@ export const dynamic = "force-dynamic";
 
 const SUPPORT_ENUM = { auto: "AUTO", off: "OFF", always: "ALWAYS" } as const;
 
+// The body is small: customer details (notes ≤ 2000 chars) plus up to
+// maxModelsPerSession `{modelId,config}` refs and a shipping token. Anything
+// materially larger is abuse, so reject by Content-Length before reading it
+// (32 KiB is generous headroom for the real payload — mirrors /api/shipping).
+const MAX_BODY_BYTES = 32 * 1024;
+
 export async function POST(request: NextRequest) {
   const guard = await guardMutation(request, "checkout", RATE_LIMITS.checkout);
   if (guard) return guard;
 
   const sessionId = await getQuoteSessionId();
   if (!sessionId) return jsonError(401, "NO_SESSION", "No quote session");
+
+  // Reject oversized bodies before parsing so even a single in-budget request
+  // can't stream a huge payload at the parser.
+  const tooLarge = assertBodySize(request, MAX_BODY_BYTES);
+  if (tooLarge) return tooLarge;
 
   let body: unknown;
   try {
@@ -53,6 +65,13 @@ export async function POST(request: NextRequest) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     return jsonError(422, "NO_ITEMS", "Your quote has no models");
   }
+  if (rawItems.length > env.maxModelsPerSession) {
+    return jsonError(
+      422,
+      "TOO_MANY_ITEMS",
+      `A quote can contain at most ${env.maxModelsPerSession} models`,
+    );
+  }
 
   // Rebuild every line from authoritative DB state — client totals are never
   // trusted. A model must be session-owned and already sliced at its settings.
@@ -64,12 +83,23 @@ export async function POST(request: NextRequest) {
     stats: { filamentGrams: number; filamentMm: number; printSeconds: number; supportGrams: number | null };
   }[] = [];
 
+  // One line per model/settings — quantity handles multiples (matching the
+  // quote UI). Duplicates are rejected rather than silently merged: this
+  // becomes a financial document, so the server must never reinterpret what
+  // the customer submitted. The legit client can't produce duplicates.
+  const seenLines = new Set<string>();
+
   for (const raw of rawItems) {
     const modelId = (raw as { modelId?: unknown })?.modelId;
     const config = modelConfigSchema.safeParse((raw as { config?: unknown })?.config);
     if (typeof modelId !== "string" || !config.success) {
       return jsonError(422, "BAD_ITEM", "A model in your quote has invalid settings");
     }
+    const lineKey = `${modelId}::${settingsKey(config.data)}`;
+    if (seenLines.has(lineKey)) {
+      return jsonError(422, "DUPLICATE_ITEM", "A model appears twice in your quote — use quantity instead");
+    }
+    seenLines.add(lineKey);
 
     const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
     if (!model) return jsonError(404, "MODEL_NOT_FOUND", "A model in your quote was not found");
@@ -117,7 +147,9 @@ export async function POST(request: NextRequest) {
   // shown amount (never a fresh re-price, which could silently move) only if the
   // token verifies AND its bound parcel dimensions still match this rebuilt quote
   // — otherwise the estimate is stale/changed and we 409 so the user re-estimates
-  // and sees the new figure before committing. No token → no shipping line.
+  // and sees the new figure before committing. No token → shipping is explicitly
+  // EXCLUDED from the quotation (recorded in the snapshot and shown as "not
+  // included" on the page/PDF), never a silent ₹0 delivery line.
   const shippingToken = (body as { shippingToken?: unknown })?.shippingToken;
   let shippingPaise = 0;
   let shippingPincode: string | null = null;
@@ -162,7 +194,10 @@ export async function POST(request: NextRequest) {
         pricingSnapshot: {
           catalog: CATALOG,
           breakdown,
-          shipping: shippingPaise > 0 ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays } : null,
+          shipping:
+            shippingPaise > 0
+              ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays }
+              : { excluded: true },
           generatedAt: new Date().toISOString(),
         } as unknown as Prisma.InputJsonValue,
         items: {
