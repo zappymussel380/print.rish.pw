@@ -4,11 +4,10 @@ import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
 import pino from "pino";
 import { Prisma, prisma } from "@print/db";
-import { parseModel } from "@print/geometry";
+import { parseModel, renderThumbnail } from "@print/geometry";
 import { SLICE_QUEUE, type SliceJobData } from "@print/shared";
 import { config } from "./config.js";
 import { runSlice } from "./orca.js";
-import { renderThumbnail } from "./thumbnail.js";
 import { runRetention } from "./retention.js";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" });

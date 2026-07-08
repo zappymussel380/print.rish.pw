@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import busboy from "busboy";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
-import { ModelParseError, parseModel } from "@print/geometry";
+import { ModelParseError, parseModel, renderThumbnail } from "@print/geometry";
 import { CATALOG, formatFromFilename, sanitizeOriginalName } from "@print/shared";
 import { guardMutation, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
@@ -17,12 +17,16 @@ import {
   modelPath,
   moveIntoPlace,
   removeQuietly,
+  thumbPath,
   tmpUploadPath,
 } from "@/lib/storage";
 
 export const runtime = "nodejs";
 // Uploads can be large; never pre-render or cache.
 export const dynamic = "force-dynamic";
+
+// Preview thumbnail resolution (matches the worker's THUMB_SIZE default).
+const THUMB_SIZE = 512;
 
 interface StreamedFile {
   tmpPath: string;
@@ -96,7 +100,13 @@ export async function POST(request: NextRequest) {
   await ensureStorageDirs();
   const sessionId = await getOrCreateQuoteSessionId();
 
-  const existing = await prisma.uploadedModel.count({ where: { sessionId } });
+  // Only models not yet attached to a submitted quotation count toward the
+  // active-quote cap. A quoted model has left the quote being built and the
+  // cleanup path can't remove it, so counting it here would permanently wedge a
+  // session that once submitted a full quote. Mirrors GET/DELETE in api/models.
+  const existing = await prisma.uploadedModel.count({
+    where: { sessionId, items: { none: {} } },
+  });
   if (existing >= env.maxModelsPerSession) {
     return jsonError(
       422,
@@ -165,10 +175,28 @@ export async function POST(request: NextRequest) {
 
     const finalPath = modelPath(model.id, format);
     await moveIntoPlace(file.tmpPath, finalPath);
+    // Persist storedPath immediately — the file now exists on disk, so the DB
+    // must point at it before anything else can fail, or retention (which skips
+    // rows with an empty storedPath) could never reclaim an orphaned file.
     await prisma.uploadedModel.update({
       where: { id: model.id },
       data: { storedPath: finalPath },
     });
+
+    // Render the preview thumbnail now, while the geometry is already parsed.
+    // Done here (not only in the slicer) so every upload has a preview even when
+    // its slice is served from cache and no worker job runs. Best-effort and
+    // strictly after the critical persist above — a thumbnail is a nicety and
+    // must never fail an upload or strand its file. Bounded by the parser's
+    // MAX_TRIANGLES cap, so the render can't run away.
+    try {
+      await ensureStorageDirs();
+      const tp = thumbPath(model.id);
+      await writeFile(tp, renderThumbnail(parsed.positions, THUMB_SIZE));
+      await prisma.uploadedModel.update({ where: { id: model.id }, data: { thumbPath: tp } });
+    } catch {
+      // ignore — the worker still renders one on first slice as a fallback
+    }
 
     return NextResponse.json(
       {

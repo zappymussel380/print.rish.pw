@@ -38,6 +38,7 @@ export interface QuotationPdfData {
   customer: { name: string; email: string; phone: string; city: string; notes: string };
   lines: PdfLine[];
   setupFeePaise: number;
+  shippingPaise?: number;
   totalPaise: number;
   totalGrams: number;
   totalPrintSeconds: number;
@@ -150,12 +151,18 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
         <View style={s.totals}>
           <View style={s.totalRow}>
             <Text style={{ color: MUTED }}>Materials subtotal</Text>
-            <Text>{money(data.totalPaise - data.setupFeePaise)}</Text>
+            <Text>{money(data.totalPaise - data.setupFeePaise - (data.shippingPaise ?? 0))}</Text>
           </View>
           <View style={s.totalRow}>
             <Text style={{ color: MUTED }}>Setup fee</Text>
             <Text>{money(data.setupFeePaise)}</Text>
           </View>
+          {data.shippingPaise ? (
+            <View style={s.totalRow}>
+              <Text style={{ color: MUTED }}>Shipping</Text>
+              <Text>{money(data.shippingPaise)}</Text>
+            </View>
+          ) : null}
           <View style={s.grandRow}>
             <Text style={s.grandLabel}>Total</Text>
             <Text style={s.grandValue}>{money(data.totalPaise)}</Text>

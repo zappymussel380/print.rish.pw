@@ -10,6 +10,18 @@ export function jsonError(
   return NextResponse.json({ error: { code, message, ...extra } }, { status });
 }
 
+/** Reject a request whose declared body size exceeds `maxBytes`, BEFORE the body
+ *  is read — so a route never buffers/parses an oversized payload. A chunked or
+ *  absent Content-Length slips past (bounded elsewhere by rate limits / the
+ *  proxy); this is the cheap first line. Returns a 413 to short-circuit, or null
+ *  to proceed. */
+export function assertBodySize(request: NextRequest, maxBytes: number): NextResponse | null {
+  if (Number(request.headers.get("content-length") ?? 0) > maxBytes) {
+    return jsonError(413, "BODY_TOO_LARGE", "Request body too large.");
+  }
+  return null;
+}
+
 /** Shared preamble for mutating endpoints: CSRF origin check + rate limit.
  *  Returns a response to short-circuit with, or null to proceed. */
 export async function guardMutation(

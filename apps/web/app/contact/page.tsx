@@ -1,5 +1,6 @@
-import { Clock, Mail, MessageCircle } from "lucide-react";
+import { Mail, MessageCircle } from "lucide-react";
 import type { Metadata } from "next";
+import { ContactForm } from "@/components/contact/contact-form";
 import { PageIntro } from "@/components/shell/page-intro";
 import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
 
@@ -7,6 +8,10 @@ export const metadata: Metadata = {
   title: "Contact",
   description: "Reach print.rish.pw — WhatsApp first, email if you prefer. Based in Guwahati, India.",
 };
+
+// Rendered per request so the WhatsApp number / email reflect runtime env
+// (they aren't available at Docker build time, when static pages are baked).
+export const dynamic = "force-dynamic";
 
 export default function ContactPage() {
   const waUrl = whatsappChatUrl("Hi! I have a question about 3D printing.");
@@ -20,24 +25,22 @@ export default function ContactPage() {
       />
 
       <div className="mx-auto mt-12 grid max-w-3xl gap-4 sm:grid-cols-2">
-        <div className="tile tile-hover p-6 sm:col-span-2">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <MessageCircle strokeWidth={1.65} className="size-6 text-accent" aria-hidden="true" />
-              <h2 className="mt-3 text-lg font-[650]">WhatsApp</h2>
-              <p className="mt-1.5 max-w-md text-sm leading-6 text-muted">
-                Quotes, questions, progress updates — everything happens here. Expect a reply within
-                business hours, often much faster.
-              </p>
-            </div>
+        <div className="tile tile-hover flex flex-col p-6">
+          <MessageCircle strokeWidth={1.65} className="size-6 text-accent" aria-hidden="true" />
+          <h2 className="mt-3 text-lg font-[650]">WhatsApp</h2>
+          <p className="mt-1.5 text-sm leading-6 text-muted">
+            Quotes, questions, progress updates — everything happens here. Expect a reply within
+            business hours, often much faster.
+          </p>
+          <div className="mt-auto pt-5">
+            {waUrl ? (
+              <a href={waUrl} className="btn-pill" rel="noopener noreferrer" target="_blank">
+                Chat on WhatsApp
+              </a>
+            ) : (
+              <p className="text-sm text-faint">WhatsApp number not configured.</p>
+            )}
           </div>
-          {waUrl ? (
-            <a href={waUrl} className="btn-pill mt-5" rel="noopener noreferrer" target="_blank">
-              Chat on WhatsApp
-            </a>
-          ) : (
-            <p className="mt-5 text-sm text-faint">WhatsApp number not configured.</p>
-          )}
         </div>
 
         <div className="tile tile-hover p-6">
@@ -58,14 +61,7 @@ export default function ContactPage() {
           </p>
         </div>
 
-        <div className="tile p-6">
-          <Clock strokeWidth={1.65} className="size-6 text-accent" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-[650]">Hours</h2>
-          <p className="mt-1.5 text-sm text-muted">{siteConfig.businessHours}</p>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Printers, however, run around the clock.
-          </p>
-        </div>
+        <ContactForm />
       </div>
 
       {siteConfig.googleMapsEmbedUrl ? (

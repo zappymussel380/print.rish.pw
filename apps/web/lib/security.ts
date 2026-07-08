@@ -91,4 +91,17 @@ export const RATE_LIMITS = {
   checkout: { max: 5, windowSeconds: 600 },
   adminLogin: { max: 5, windowSeconds: 900 },
   pdf: { max: 30, windowSeconds: 600 },
+  contact: { max: 5, windowSeconds: 600 },
+  // Shipping estimate hits the paid Shiprocket API. Defence is layered (see
+  // app/api/shipping/route.ts): the request must come from a quote session that
+  // has actually sliced a model, results are cached 24 h (cache hits cost
+  // nothing and don't consume this budget), and a global daily cap backstops
+  // the bill. This per-(IP + browser) window just stops one client hammering
+  // distinct pincodes — a few genuine address checks, then a cool-off.
+  shipping: { max: 4, windowSeconds: 900 },
+  // Coarse frequency gate applied BEFORE the DB rebuild, so the endpoint can't
+  // be used as a database-saturation target (each request otherwise runs a
+  // per-item lookup). Generous enough for real use; cache hits stay free of the
+  // `shipping` budget above.
+  shippingRequest: { max: 20, windowSeconds: 300 },
 } as const;

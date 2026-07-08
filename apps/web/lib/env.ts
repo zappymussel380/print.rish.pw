@@ -47,4 +47,26 @@ export const env = {
   get fileRetentionDays() {
     return int("FILE_RETENTION_DAYS", 30);
   },
+  // Contact form → Resend. Secrets have no defaults so a misconfigured deploy
+  // fails loudly at send time rather than silently dropping messages.
+  get resendApiKey() {
+    return required("RESEND_API_KEY");
+  },
+  get mailTo() {
+    return required("MAIL_TO");
+  },
+  get contactFrom() {
+    return process.env.CONTACT_FROM ?? "print.rish.pw <contact@rish.pw>";
+  },
+  // Shiprocket rate calculator. Credentials are secrets (no defaults) so a
+  // misconfigured deploy returns NOT_CONFIGURED instead of silently failing.
+  get shiprocketEmail() {
+    return required("SHIPROCKET_EMAIL");
+  },
+  get shiprocketPassword() {
+    return required("SHIPROCKET_PASSWORD");
+  },
+  get shiprocketPickupPincode() {
+    return process.env.SHIPROCKET_PICKUP_PINCODE ?? "781007";
+  },
 };

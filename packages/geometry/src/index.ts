@@ -6,6 +6,7 @@ import { ModelParseError, type ParsedModel } from "./types";
 
 export { looksLikeAsciiStl, looksLikeBinaryStl } from "./stl";
 export { isZip } from "./zip";
+export { renderThumbnail } from "./thumbnail";
 export { MAX_TRIANGLES, ModelParseError } from "./types";
 export type { ParsedModel } from "./types";
 

@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Info } from "lucide-react";
 import {
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
@@ -23,7 +26,10 @@ export function SettingsPanel({ modelKey, config }: { modelKey: string; config: 
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Material">
+      <Field
+        label="Material"
+        info="PLA is stiff and easy to print — ideal for prototypes, models and display pieces. PETG is tougher and more heat- and moisture-resistant — better for functional or outdoor parts."
+      >
         <Segmented
           value={config.material}
           options={MATERIAL_IDS.map((m) => ({ value: m, label: m }))}
@@ -31,7 +37,10 @@ export function SettingsPanel({ modelKey, config }: { modelKey: string; config: 
         />
       </Field>
 
-      <Field label="Colour">
+      <Field
+        label="Colour"
+        info="The filament colour your part is printed in. Black and white are in stock; ask on WhatsApp for other colours. Colour has no effect on the price."
+      >
         <Segmented
           value={config.colour}
           options={[
@@ -42,7 +51,10 @@ export function SettingsPanel({ modelKey, config }: { modelKey: string; config: 
         />
       </Field>
 
-      <Field label="Layer height">
+      <Field
+        label="Layer height"
+        info="The thickness of each printed layer. 0.12 mm gives the finest detail but prints slowest; 0.20 mm (the default) is the fastest and most economical, with more visible layer lines; 0.16 mm sits in between."
+      >
         <Segmented
           value={config.layerHeightUm}
           options={LAYER_HEIGHTS_UM.map((um) => ({ value: um, label: `${(um / 1000).toFixed(2)}mm` }))}
@@ -50,7 +62,10 @@ export function SettingsPanel({ modelKey, config }: { modelKey: string; config: 
         />
       </Field>
 
-      <Field label="Supports">
+      <Field
+        label="Supports"
+        info="Temporary scaffolding printed under steep overhangs so they don't droop or fail. Turning supports off can lower the price, but parts with overhangs may fail to print without them. Leave this on Auto — it adds supports only where the model actually needs them."
+      >
         <Segmented
           value={config.supports}
           options={SUPPORT_MODES.map((s) => ({ value: s, label: SUPPORT_LABEL[s] }))}
@@ -85,14 +100,128 @@ export function SettingsPanel({ modelKey, config }: { modelKey: string; config: 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  info,
+  children,
+}: {
+  label: string;
+  info?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="mb-2 block text-[0.7rem] font-[650] uppercase tracking-[0.14em] text-muted">
+      <span className="mb-2 flex items-center gap-1.5 text-[0.7rem] font-[650] uppercase tracking-[0.14em] text-muted">
         {label}
+        {info ? <InfoTip label={label}>{info}</InfoTip> : null}
       </span>
       {children}
     </label>
+  );
+}
+
+/** A tap/click info affordance next to a setting label. Opens a small popover
+ *  explaining the option; closes on outside click, Escape or scroll. Kept as a
+ *  popover (not a hover tooltip) so it works on touch devices too, and rendered
+ *  through a portal with fixed positioning so it escapes the model card's
+ *  `overflow-hidden` clip. It flips above the icon near the viewport bottom and
+ *  clamps horizontally so it never runs off-screen. */
+function InfoTip({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLSpanElement>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Hover opens; leaving the icon or popover closes after a short grace period
+  // (so the pointer can travel from the icon to the popover without it closing).
+  const openNow = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    setOpen(true);
+  };
+  const closeSoon = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setOpen(false), 120);
+  };
+  useEffect(() => () => void (hoverTimer.current && clearTimeout(hoverTimer.current)), []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const place = () => {
+      const b = btnRef.current?.getBoundingClientRect();
+      if (!b) return;
+      const half = 116;
+      const margin = 12;
+      const left = Math.max(
+        margin + half,
+        Math.min(window.innerWidth - margin - half, b.left + b.width / 2),
+      );
+      const above = b.bottom + 8 + 170 > window.innerHeight;
+      setCoords({ top: above ? b.top - 8 : b.bottom + 8, left, above });
+    };
+    place();
+
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const close = () => setOpen(false);
+
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((o) => !o);
+        }}
+        onMouseEnter={openNow}
+        onMouseLeave={closeSoon}
+        aria-label={`What is ${label.toLowerCase()}?`}
+        aria-expanded={open}
+        className="grid size-4 place-items-center rounded-full text-faint transition-colors hover:text-accent"
+      >
+        <Info strokeWidth={2} className="size-3.5" />
+      </button>
+      {open && coords
+        ? createPortal(
+            <span
+              ref={popRef}
+              role="tooltip"
+              onMouseEnter={openNow}
+              onMouseLeave={closeSoon}
+              style={{
+                position: "fixed",
+                top: coords.top,
+                left: coords.left,
+                transform: coords.above ? "translate(-50%, -100%)" : "translateX(-50%)",
+              }}
+              className="z-50 w-56 max-w-[min(16rem,72vw)] rounded-lg border border-line bg-surface p-3 text-[0.72rem] font-normal normal-case leading-5 tracking-normal text-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
+            >
+              {children}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

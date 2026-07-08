@@ -18,6 +18,7 @@ import { renderQuotationPdf } from "@/lib/pdf/quotation-pdf";
 import { nextQuotationNumber } from "@/lib/quotation-number";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
+import { verifyEstimateToken } from "@/lib/shipping";
 import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
 import { ensureStorageDirs, pdfPath } from "@/lib/storage";
 import { buildWhatsAppUrl } from "@print/shared";
@@ -111,6 +112,36 @@ export async function POST(request: NextRequest) {
   const completion = estimateCompletionDate(breakdown.totals.printSeconds, CATALOG.leadTime);
   const accessToken = randomBytes(32).toString("hex");
 
+  // Optional prepaid shipping. The client sends the signed estimate token it got
+  // when the customer viewed shipping on the quote page. We honour that exact
+  // shown amount (never a fresh re-price, which could silently move) only if the
+  // token verifies AND its bound parcel dimensions still match this rebuilt quote
+  // — otherwise the estimate is stale/changed and we 409 so the user re-estimates
+  // and sees the new figure before committing. No token → no shipping line.
+  const shippingToken = (body as { shippingToken?: unknown })?.shippingToken;
+  let shippingPaise = 0;
+  let shippingPincode: string | null = null;
+  let shippingDays: string | null = null;
+  if (typeof shippingToken === "string" && shippingToken.length > 0) {
+    const verified = await verifyEstimateToken(
+      shippingToken,
+      breakdown.totals.grams,
+      breakdown.totalPaise,
+    );
+    if (!verified) {
+      logger.warn("checkout blocked: shipping estimate token invalid/expired/mismatched");
+      return jsonError(
+        409,
+        "SHIPPING_STALE",
+        "Your shipping estimate expired or the quote changed. Please re-estimate shipping and try again.",
+      );
+    }
+    shippingPaise = verified.amountPaise;
+    shippingPincode = verified.pincode;
+    shippingDays = verified.days;
+  }
+  const grandTotalPaise = breakdown.totalPaise + shippingPaise;
+
   const created = await prisma.$transaction(async (tx) => {
     const number = await nextQuotationNumber(tx);
     return tx.quotation.create({
@@ -124,11 +155,14 @@ export async function POST(request: NextRequest) {
         customerCity: customer.data.city,
         notes: customer.data.notes ?? "",
         setupFeePaise: breakdown.setupFeePaise,
-        totalPaise: breakdown.totalPaise,
+        totalPaise: grandTotalPaise,
+        shippingPaise,
+        shippingPincode,
         estimatedCompletion: completion,
         pricingSnapshot: {
           catalog: CATALOG,
           breakdown,
+          shipping: shippingPaise > 0 ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays } : null,
           generatedAt: new Date().toISOString(),
         } as unknown as Prisma.InputJsonValue,
         items: {
@@ -183,7 +217,8 @@ export async function POST(request: NextRequest) {
         subtotalPaise: line.subtotalPaise,
       })),
       setupFeePaise: breakdown.setupFeePaise,
-      totalPaise: breakdown.totalPaise,
+      shippingPaise,
+      totalPaise: grandTotalPaise,
       totalGrams: breakdown.totals.grams,
       totalPrintSeconds: breakdown.totals.printSeconds,
       completion,
@@ -196,7 +231,7 @@ export async function POST(request: NextRequest) {
   }
 
   logger.info(
-    { number: created.number, items: entries.length, totalPaise: breakdown.totalPaise },
+    { number: created.number, items: entries.length, totalPaise: grandTotalPaise, shippingPaise },
     "quotation created",
   );
 
@@ -209,7 +244,7 @@ export async function POST(request: NextRequest) {
         quotationNumber: created.number,
         customerName: customer.data.name,
         materialsSummary,
-        totalPaise: breakdown.totalPaise,
+        totalPaise: grandTotalPaise,
         notes: customer.data.notes,
       })
     : whatsappChatUrl();

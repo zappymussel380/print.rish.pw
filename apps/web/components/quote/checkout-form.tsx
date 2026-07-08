@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
@@ -13,19 +13,40 @@ import {
 } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { submitQuotation, type CheckoutError } from "@/lib/checkout-client";
+import { emailSuggestions, isProbablyEmail } from "@/lib/email-hint";
 import { sliceCacheKey, useQuoteStore } from "@/lib/quote-store";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+const isValidPhone = (v: string) => /^\d{10}$/.test(v);
+
+/** Reduce common Indian phone entry to the bare 10-digit mobile without ever
+ *  silently dropping real digits. A +91 / 91 country prefix (12 digits total)
+ *  or a leading 0 trunk prefix (11 digits) is stripped only when exactly 10
+ *  digits then remain; anything else is kept verbatim so validation rejects it
+ *  rather than truncating a pasted "+91 98765 43210" into a wrong-but-plausible
+ *  "9198765432". */
+const normalizeMobile = (raw: string): string => {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1);
+  return digits;
+};
 
 export function CheckoutForm() {
   const router = useRouter();
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
+  const shipping = useQuoteStore((s) => s.shipping);
   const clear = useQuoteStore((s) => s.clear);
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", city: "", notes: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<CheckoutError | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [emailNote, setEmailNote] = useState("");
+  const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => void (emailTimer.current && clearTimeout(emailTimer.current)), []);
 
   const { breakdown, pending, completion } = computePricing(models, slices);
 
@@ -53,18 +74,49 @@ export function CheckoutForm() {
     );
   }
 
+  // Only trust the saved shipping estimate if it was priced for this exact quote.
+  const quoteKey = `${breakdown.totals.grams}:${breakdown.totalPaise}`;
+  const shippingValid = shipping && shipping.quoteKey === quoteKey ? shipping : null;
+  const grandTotalPaise = breakdown.totalPaise + (shippingValid?.amountPaise ?? 0);
+
   const field = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
   const issue = (k: string) => error?.issues?.[k]?.[0];
 
+  const onEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, email: value }));
+    setSuggestions(emailSuggestions(value));
+    if (emailTimer.current) clearTimeout(emailTimer.current);
+    emailTimer.current = setTimeout(() => {
+      setEmailNote(value && !isProbablyEmail(value) ? "Email looks invalid." : "");
+    }, 1800);
+  };
+  const pickSuggestion = (s: string) => {
+    setForm((f) => ({ ...f, email: s }));
+    setSuggestions([]);
+    setEmailNote(isProbablyEmail(s) ? "" : "Email looks invalid.");
+  };
+  const onPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, phone: normalizeMobile(e.target.value) }));
+  };
+
+  const emailValid = isProbablyEmail(form.email);
+  const phoneValid = isValidPhone(form.phone);
+  const phoneNote = form.phone.length > 0 && !phoneValid ? "Enter a 10-digit number." : "";
+  const canSubmit =
+    !!form.name.trim() && !!form.city.trim() && emailValid && phoneValid && !submitting;
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
       const result = await submitQuotation(
         items.map(({ modelId, config }) => ({ modelId, config })),
         { ...form, notes: form.notes || undefined } as never,
+        shippingValid?.token,
       );
       clear();
       router.push(`/quotation/${result.number}?token=${result.accessToken}`);
@@ -86,8 +138,65 @@ export function CheckoutForm() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <Input label="Name" name="name" value={form.name} onChange={field("name")} error={issue("name")} required />
           <Input label="City" name="city" value={form.city} onChange={field("city")} error={issue("city")} required />
-          <Input label="Email" name="email" type="email" value={form.email} onChange={field("email")} error={issue("email")} required />
-          <Input label="Phone" name="phone" type="tel" value={form.phone} onChange={field("phone")} error={issue("phone")} required />
+
+          <label className="block">
+            <span className="mb-2 block text-[0.7rem] font-[650] uppercase tracking-[0.14em] text-muted">
+              Email
+            </span>
+            <input
+              name="email"
+              type="email"
+              inputMode="email"
+              value={form.email}
+              onChange={onEmailChange}
+              onBlur={() => setTimeout(() => setSuggestions([]), 120)}
+              className="input-base"
+              aria-invalid={!!emailNote || !!issue("email")}
+              required
+            />
+            {suggestions.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Email domain suggestions">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickSuggestion(s)}
+                    className="chip cursor-pointer hover:border-accent hover:text-accent"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            {(emailNote || issue("email")) && (
+              <span className="mt-1 block text-xs text-accent" role="alert">
+                {emailNote || issue("email")}
+              </span>
+            )}
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-[0.7rem] font-[650] uppercase tracking-[0.14em] text-muted">
+              Phone
+            </span>
+            <input
+              name="phone"
+              type="tel"
+              inputMode="numeric"
+              value={form.phone}
+              onChange={onPhoneChange}
+              placeholder="10-digit mobile"
+              className="input-base"
+              aria-invalid={!!phoneNote || !!issue("phone")}
+              required
+            />
+            {(phoneNote || issue("phone")) && (
+              <span className="mt-1 block text-xs text-accent" role="alert">
+                {phoneNote || issue("phone")}
+              </span>
+            )}
+          </label>
         </div>
         <label className="mt-4 block">
           <span className="mb-2 block text-[0.7rem] font-[650] uppercase tracking-[0.14em] text-muted">
@@ -110,7 +219,7 @@ export function CheckoutForm() {
           </p>
         )}
 
-        <button type="submit" disabled={submitting} className="btn-pill mt-6 w-full sm:w-auto">
+        <button type="submit" disabled={!canSubmit} className="btn-pill mt-6 w-full sm:w-auto">
           {submitting ? (
             <>
               <Loader2 strokeWidth={2} className="h-4 w-4 animate-spin" /> Generating quotation…
@@ -153,16 +262,22 @@ export function CheckoutForm() {
           <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">
             <Row label="Materials" value={formatPaise(breakdown.totalPaise - breakdown.setupFeePaise)} />
             <Row label="Setup fee" value={formatPaise(breakdown.setupFeePaise)} />
+            {shippingValid && (
+              <Row label={`Shipping (to ${shippingValid.pincode})`} value={formatPaise(shippingValid.amountPaise)} />
+            )}
             <Row label="Print time" value={formatDuration(breakdown.totals.printSeconds)} muted />
             {completion && <Row label="Ready by" value={dateFmt.format(completion)} muted />}
           </div>
           <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
             <span className="font-[650]">Total</span>
-            <span className="text-xl font-[750] text-accent">{formatPaise(breakdown.totalPaise)}</span>
+            <span className="text-xl font-[750] text-accent">{formatPaise(grandTotalPaise)}</span>
           </div>
           <p className="mt-3 text-[0.7rem] leading-5 text-faint">
-            Estimate from real slicing on a {CATALOG.printers[CATALOG.defaultPrinterId]!.name}.
-            Final confirmation over WhatsApp.
+            {shippingValid
+              ? "Includes estimated prepaid shipping. "
+              : ""}
+            Estimate from real slicing on a {CATALOG.printers[CATALOG.defaultPrinterId]!.name}. Final
+            confirmation over WhatsApp.
           </p>
         </div>
       </aside>

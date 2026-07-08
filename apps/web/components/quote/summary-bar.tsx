@@ -5,6 +5,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { CATALOG, formatDuration, formatGrams, formatPaise } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { useQuoteStore } from "@/lib/quote-store";
+import { RollingValue } from "./rolling-value";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
@@ -81,7 +82,7 @@ function Metric({
         {label}
       </span>
       <span className={`mt-0.5 block font-[700] ${accent ? "text-accent" : "text-text"}`}>
-        {children}
+        <RollingValue>{children}</RollingValue>
       </span>
     </div>
   );

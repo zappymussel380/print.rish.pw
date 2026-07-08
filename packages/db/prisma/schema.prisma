@@ -111,7 +111,13 @@ model Quotation {
   customerCity        String
   notes               String          @default("")
   setupFeePaise       Int
+  /// Grand total in paise = parts + setup + shipping. Every reader treats this
+  /// as the amount owed, so shipping (when present) is already included here.
   totalPaise          Int
+  /// Prepaid shipping added at submission (0 when no delivery pincode was
+  /// given). Stored separately so the PDF/view can show it as its own line.
+  shippingPaise       Int             @default(0)
+  shippingPincode     String?
   /// Catalog + full breakdown frozen at submission time, so later price
   /// changes never alter an issued quotation.
   pricingSnapshot     Json

@@ -127,6 +127,12 @@ export default async function ConfirmationPage({
             <span>Setup fee</span>
             <span>{formatPaise(quotation.setupFeePaise)}</span>
           </div>
+          {quotation.shippingPaise > 0 && (
+            <div className="flex justify-between text-muted">
+              <span>Shipping{quotation.shippingPincode ? ` (to ${quotation.shippingPincode})` : ""}</span>
+              <span>{formatPaise(quotation.shippingPaise)}</span>
+            </div>
+          )}
           {quotation.estimatedCompletion && (
             <div className="flex justify-between text-muted">
               <span>Estimated ready</span>

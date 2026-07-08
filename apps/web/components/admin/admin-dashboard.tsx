@@ -115,7 +115,7 @@ export function AdminDashboard({
           <h1 className="section-title mt-2">Quotations</h1>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/api/admin/quotations/export" className="btn-ghost text-sm">
+          <a href="/api/admin/quotations/export" download className="btn-ghost text-sm">
             <Download strokeWidth={1.8} className="h-4 w-4" /> Export CSV
           </a>
           <button type="button" onClick={logout} className="btn-ghost text-sm">

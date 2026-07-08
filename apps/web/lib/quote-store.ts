@@ -37,9 +37,23 @@ export function sliceCacheKey(modelId: string, settingsKey: string): string {
   return `${modelId}::${settingsKey}`;
 }
 
+/** A shipping estimate the customer ran on the quote page, carried through to
+ *  checkout. `quoteKey` (grams:totalPaise) ties it to the exact quote it was
+ *  estimated for, so the client hides it if the quote has since changed. `token`
+ *  is the server-signed proof of the shown amount that checkout verifies before
+ *  charging it — the amount/pincode/days here are for display only. */
+export interface SavedShipping {
+  pincode: string;
+  amountPaise: number;
+  days: string | null;
+  token: string;
+  quoteKey: string;
+}
+
 interface QuoteState {
   models: QuoteModel[];
   slices: Record<string, SliceState>;
+  shipping: SavedShipping | null;
 
   addUploading: (key: string, fileName: string, sizeBytes: number) => void;
   setProgress: (key: string, progress: number) => void;
@@ -50,11 +64,13 @@ interface QuoteState {
   clear: () => void;
 
   setSlice: (cacheKey: string, state: SliceState) => void;
+  setShipping: (shipping: SavedShipping | null) => void;
 }
 
 export const useQuoteStore = create<QuoteState>((set) => ({
   models: [],
   slices: {},
+  shipping: null,
 
   addUploading: (key, fileName, sizeBytes) =>
     set((s) => ({
@@ -90,8 +106,10 @@ export const useQuoteStore = create<QuoteState>((set) => ({
 
   remove: (key) => set((s) => ({ models: s.models.filter((m) => m.key !== key) })),
 
-  clear: () => set({ models: [], slices: {} }),
+  clear: () => set({ models: [], slices: {}, shipping: null }),
 
   setSlice: (cacheKey, state) =>
     set((s) => ({ slices: { ...s.slices, [cacheKey]: state } })),
+
+  setShipping: (shipping) => set({ shipping }),
 }));

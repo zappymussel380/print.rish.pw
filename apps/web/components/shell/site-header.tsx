@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { PrinterMark } from "./printer-mark";
 import { ThemeToggle } from "./theme-toggle";
 
 const nav = [
@@ -24,9 +25,12 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] backdrop-blur-[18px]">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <Link href="/" className="flex items-baseline gap-1.5 font-[650] tracking-tight">
-          <span className="text-text">rish.pw</span>
-          <span className="text-accent">/ print</span>
+        <Link href="/" className="flex items-center gap-2 font-[650] tracking-[0.02em]">
+          <PrinterMark className="size-5 shrink-0 text-accent" />
+          <span>
+            <span className="text-accent">print</span>
+            <span className="text-text">.rish.pw</span>
+          </span>
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">

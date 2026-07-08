@@ -5,7 +5,6 @@ export const siteConfig = {
   appOrigin: process.env.APP_ORIGIN ?? "http://localhost:3000",
   whatsappNumber: (process.env.WHATSAPP_NUMBER ?? "").replace(/[^0-9]/g, ""),
   contactEmail: process.env.CONTACT_EMAIL ?? "",
-  businessHours: process.env.BUSINESS_HOURS ?? "Mon–Sat, 10:00–19:00 IST",
   googleMapsEmbedUrl: process.env.GOOGLE_MAPS_EMBED_URL ?? "",
 };
 

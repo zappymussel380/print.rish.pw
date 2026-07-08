@@ -21,11 +21,12 @@ export interface CheckoutError {
 export async function submitQuotation(
   items: CheckoutItem[],
   customer: Customer,
+  shippingToken?: string,
 ): Promise<CheckoutResult> {
   const res = await fetch("/api/quotations", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-    body: JSON.stringify({ items, customer }),
+    body: JSON.stringify({ items, customer, shippingToken }),
   });
   if (!res.ok) {
     let err: CheckoutError = { code: "SUBMIT_FAILED", message: `Submission failed (HTTP ${res.status})` };

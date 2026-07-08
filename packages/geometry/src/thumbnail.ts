@@ -1,9 +1,18 @@
-import { encodePng } from "./png.js";
+import { encodePng } from "./png";
 
 /** Render a triangle-soup mesh (9 floats/triangle, mm) to a shaded PNG from a
  *  fixed 3/4 view. Pure software rasteriser — no GL, no native deps — because
- *  the Orca CLI does not emit a plate thumbnail and headless-GL is fragile. */
-export function renderThumbnail(positions: Float32Array, size: number): Buffer {
+ *  the Orca CLI does not emit a plate thumbnail and headless-GL is fragile.
+ *
+ *  This runs inline on the web upload route's event loop and the parser accepts
+ *  meshes up to MAX_TRIANGLES (8M), so the work is bounded two ways to keep one
+ *  upload from pinning the CPU and stalling concurrent requests: `maxTriangles`
+ *  stride-samples the triangles visited (bounding per-triangle setup), and an
+ *  internal pixel-work budget caps total rasterisation (bounding the case of a
+ *  few huge overlapping triangles that each cover the whole frame). Normal
+ *  models render fully and look identical; only pathological meshes are
+ *  truncated into a still-usable preview. */
+export function renderThumbnail(positions: Float32Array, size: number, maxTriangles = 200_000): Buffer {
   const rgba = new Uint8Array(size * size * 4); // transparent by default
   const zbuf = new Float32Array(size * size).fill(Infinity);
 
@@ -46,7 +55,21 @@ export function renderThumbnail(positions: Float32Array, size: number): Buffer {
 
   const base: Vec3 = [205, 209, 214];
 
-  for (let t = 0; t < positions.length; t += 9) {
+  // Two independent bounds keep this cheap regardless of the mesh:
+  //  1. Stride-sample so at most `maxTriangles` triangles are visited — bounds
+  //     per-triangle setup (project + normal + shading).
+  //  2. A total pixel-work budget — a triangle budget alone does NOT bound
+  //     rasterisation, since a few huge overlapping triangles can each cover the
+  //     whole frame. We charge every triangle its bounding-box area and stop
+  //     once the budget is spent. Normal models finish far under it; only
+  //     pathological overdraw is truncated, into a still-usable preview.
+  // (The bbox + extent passes above scan the full mesh, but those are cheap
+  //  min/max with no inner pixel loop, so framing stays correct.)
+  const triCount = (positions.length / 9) | 0;
+  const stride = triCount > maxTriangles ? Math.ceil(triCount / maxTriangles) : 1;
+  let pixelBudget = size * size * 16;
+  for (let ti = 0; ti < triCount; ti += stride) {
+    const t = ti * 9;
     const A = project(t);
     const B = project(t + 3);
     const C = project(t + 6);
@@ -65,12 +88,15 @@ export function renderThumbnail(positions: Float32Array, size: number): Buffer {
     const g = Math.min(255, base[1] * intensity);
     const b = Math.min(255, base[2] * intensity);
 
-    rasterize(rgba, zbuf, size, A, B, C, r, g, b);
+    pixelBudget -= rasterize(rgba, zbuf, size, A, B, C, r, g, b);
+    if (pixelBudget <= 0) break;
   }
 
   return encodePng(rgba, size, size);
 }
 
+/** Fill one triangle; returns the number of pixels tested (its clamped bounding
+ *  box area) so the caller can charge it against a global pixel-work budget. */
 function rasterize(
   rgba: Uint8Array,
   zbuf: Float32Array,
@@ -81,7 +107,7 @@ function rasterize(
   r: number,
   g: number,
   b: number,
-) {
+): number {
   const [ax, ay, az] = A as [number, number, number];
   const [bx, by, bz] = B as [number, number, number];
   const [cx2, cy2, cz] = C as [number, number, number];
@@ -90,10 +116,10 @@ function rasterize(
   const maxX = Math.min(size - 1, Math.ceil(Math.max(ax, bx, cx2)));
   const minY = Math.max(0, Math.floor(Math.min(ay, by, cy2)));
   const maxY = Math.min(size - 1, Math.ceil(Math.max(ay, by, cy2)));
-  if (minX > maxX || minY > maxY) return;
+  if (minX > maxX || minY > maxY) return 0;
 
   const area = (bx - ax) * (cy2 - ay) - (by - ay) * (cx2 - ax);
-  if (Math.abs(area) < 1e-9) return;
+  if (Math.abs(area) < 1e-9) return 0;
   const invArea = 1 / area;
 
   for (let y = minY; y <= maxY; y++) {
@@ -116,6 +142,7 @@ function rasterize(
       rgba[o + 3] = 255;
     }
   }
+  return (maxX - minX + 1) * (maxY - minY + 1);
 }
 
 type Vec3 = [number, number, number];

@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { UploadCloud } from "lucide-react";
+import { Files, Plus, UploadCloud, X } from "lucide-react";
 import { MAX_QUANTITY } from "@print/shared";
 import { useQuoteStore } from "@/lib/quote-store";
+import { clientUid } from "@/lib/uid";
 import {
   ACCEPT_ATTR,
   ACCEPTED_EXTENSIONS,
@@ -12,6 +13,15 @@ import {
 } from "@/lib/upload-client";
 
 const MAX_PARALLEL = 3;
+
+/** A file that matches one already in the quote (same name + size), awaiting
+ *  the user's call: bump the existing quantity, or upload a separate copy. */
+interface DuplicatePrompt {
+  id: string;
+  file: File;
+  existingKey: string;
+  name: string;
+}
 
 /** Run async tasks with a bounded concurrency so a bulk drop doesn't open
  *  dozens of simultaneous uploads. */
@@ -30,30 +40,24 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
-  const { models, addUploading, setProgress, markReady, markError } = useQuoteStore();
+  const [duplicates, setDuplicates] = useState<DuplicatePrompt[]>([]);
+  const { models, addUploading, setProgress, markReady, markError, updateConfig } = useQuoteStore();
 
-  const accept = useCallback(
-    async (fileList: FileList | File[]) => {
-      const files = Array.from(fileList);
-      const ok: File[] = [];
-      const bad: string[] = [];
-      for (const f of files) {
-        if (hasAcceptedExtension(f.name)) ok.push(f);
-        else bad.push(f.name);
-      }
-      setRejected(bad);
-
+  // Upload a set of files, honouring the per-quote model limit at call time.
+  const startUploads = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
       const remaining = maxModels - useQuoteStore.getState().models.length;
       if (remaining <= 0) {
         setRejected((r) => [...r, `Limit of ${maxModels} models reached`]);
         return;
       }
-      const toUpload = ok.slice(0, remaining);
-      if (ok.length > remaining) {
+      const toUpload = files.slice(0, remaining);
+      if (files.length > toUpload.length) {
         setRejected((r) => [...r, `Only ${remaining} more file(s) can be added`]);
       }
 
-      const tagged = toUpload.map((file) => ({ file, key: crypto.randomUUID() }));
+      const tagged = toUpload.map((file) => ({ file, key: clientUid() }));
       for (const { file, key } of tagged) addUploading(key, file.name, file.size);
 
       await runPooled(tagged, MAX_PARALLEL, async ({ file, key }) => {
@@ -71,6 +75,60 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
     },
     [addUploading, markError, markReady, maxModels, setProgress],
   );
+
+  const accept = useCallback(
+    async (fileList: FileList | File[]) => {
+      const files = Array.from(fileList);
+      const ok: File[] = [];
+      const bad: string[] = [];
+      for (const f of files) {
+        if (hasAcceptedExtension(f.name)) ok.push(f);
+        else bad.push(f.name);
+      }
+      setRejected(bad);
+
+      // A file already in the quote (by name + size) is likely an accidental
+      // re-upload — hold it back and ask, rather than silently duplicating.
+      // Errored rows don't count, so re-dropping a failed file just retries.
+      const existing = useQuoteStore.getState().models.filter((m) => m.status !== "error");
+      const fresh: File[] = [];
+      const dups: DuplicatePrompt[] = [];
+      for (const file of ok) {
+        const match = existing.find((m) => m.fileName === file.name && m.sizeBytes === file.size);
+        if (match) {
+          dups.push({ id: clientUid(), file, existingKey: match.key, name: file.name });
+        } else {
+          fresh.push(file);
+        }
+      }
+      if (dups.length) setDuplicates((d) => [...d, ...dups]);
+
+      await startUploads(fresh);
+    },
+    [startUploads],
+  );
+
+  const bumpQuantity = useCallback(
+    (d: DuplicatePrompt) => {
+      const model = useQuoteStore.getState().models.find((m) => m.key === d.existingKey);
+      const current = model?.config.quantity ?? 1;
+      updateConfig(d.existingKey, { quantity: Math.min(current + 1, MAX_QUANTITY) });
+      setDuplicates((list) => list.filter((x) => x.id !== d.id));
+    },
+    [updateConfig],
+  );
+
+  const addAnyway = useCallback(
+    (d: DuplicatePrompt) => {
+      setDuplicates((list) => list.filter((x) => x.id !== d.id));
+      void startUploads([d.file]);
+    },
+    [startUploads],
+  );
+
+  const dismissDuplicate = useCallback((id: string) => {
+    setDuplicates((list) => list.filter((x) => x.id !== id));
+  }, []);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -153,6 +211,61 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
         Accepted: {ACCEPTED_EXTENSIONS.join(", ")} · up to {maxModels} files · quantities up to{" "}
         {MAX_QUANTITY} per model
       </p>
+
+      {duplicates.length > 0 && (
+        <div
+          role="alert"
+          className="mt-4 rounded-[var(--radius-card)] border border-line bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] p-4"
+        >
+          <div className="flex items-start gap-2.5">
+            <Files strokeWidth={1.65} className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-[650]">Already in your quote</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted">
+                {duplicates.length === 1 ? "This file is" : "These files are"} already added. Need
+                more than one unit? Increase the quantity instead — or add a separate copy if that's
+                what you meant.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {duplicates.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] px-3 py-2"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm" title={d.name}>
+                  {d.name}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => bumpQuantity(d)}
+                    className="btn-pill h-8 min-h-0 gap-1 px-3 py-0 text-xs"
+                  >
+                    <Plus strokeWidth={2.2} className="size-3.5" /> Quantity
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addAnyway(d)}
+                    className="btn-ghost h-8 min-h-0 px-3 py-0 text-xs"
+                  >
+                    Add copy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dismissDuplicate(d.id)}
+                    aria-label={`Dismiss ${d.name}`}
+                    className="grid size-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:text-accent"
+                  >
+                    <X strokeWidth={1.65} className="size-4" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {rejected.length > 0 && (
         <ul className="mt-3 space-y-1" aria-live="polite">

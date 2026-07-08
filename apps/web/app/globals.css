@@ -282,4 +282,124 @@ html[data-theme="light"] {
       opacity: 1;
     }
   }
+
+  /* Slot-machine value roll — used by <RollingValue> in the quote summary. Each
+     character is its own reel: digit reels spin forward through the numbers and
+     decelerate to land (like a slot machine), non-digits slide-swap. Only the
+     characters that change move. Tabular figures keep the columns from
+     jittering. Collapses to an instant swap under prefers-reduced-motion. */
+  .rolling-value {
+    display: inline-block;
+  }
+  .rolling-reels {
+    display: inline-block;
+    white-space: nowrap;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Numeric reel: a fixed 1em window clipping a vertical strip of digits. */
+  .digit-reel {
+    display: inline-block;
+    height: 1em;
+    overflow: hidden;
+    vertical-align: bottom;
+  }
+  .digit-reel-strip {
+    display: block;
+    will-change: transform;
+  }
+  .digit-cell {
+    display: block;
+    height: 1em;
+    line-height: 1;
+    text-align: center;
+  }
+  /* Non-digit character slide. */
+  .roll-col {
+    display: inline-block;
+    vertical-align: bottom;
+  }
+  .roll-col.is-rolling {
+    position: relative;
+    overflow: hidden;
+  }
+  .roll-col .roll-in {
+    display: inline-block;
+    animation: rolling-in 1.8s var(--ease-out) both;
+  }
+  .roll-col .roll-out {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    animation: rolling-out 1.8s var(--ease-out) both;
+  }
+  @keyframes rolling-in {
+    from {
+      transform: translateY(0.9em);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  @keyframes rolling-out {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-0.9em);
+      opacity: 0;
+    }
+  }
+}
+
+/* Route cross-fade via the browser View Transitions API, driven by
+   components/shell/view-transitions.tsx. The default UA crossfade is barely
+   perceptible between similar dark pages, so we drive it explicitly: the
+   departing page fades fully out and lifts slightly, the incoming page fades in
+   and rises into place. These pseudo-elements sit outside the cascade layers so
+   they can't be shadowed.
+
+   Duration note: the View Transitions API paints STATIC snapshots of both pages
+   for the whole animation, so the real (incoming) DOM stays non-interactive
+   until the longest animation ends. Time-to-interactive therefore == the fade
+   length — a long fade and a snappy page are mutually exclusive here. These
+   durations are kept short and front-loaded (fast fade, gentle rise) so the
+   transition still reads as intentional but the page is clickable in ~0.45s. */
+::view-transition-old(root) {
+  animation: vt-page-out 0.9s var(--ease-out) both;
+}
+::view-transition-new(root) {
+  animation: vt-page-in 0.9s var(--ease-out) both;
+}
+
+@keyframes vt-page-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
 }
