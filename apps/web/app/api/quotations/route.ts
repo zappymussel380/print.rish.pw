@@ -280,6 +280,8 @@ export async function POST(request: NextRequest) {
         customerName: customer.data.name,
         materialsSummary,
         totalPaise: grandTotalPaise,
+        shippingPaise,
+        shippingPincode,
         notes: customer.data.notes,
       })
     : whatsappChatUrl();

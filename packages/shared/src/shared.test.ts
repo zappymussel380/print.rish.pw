@@ -23,6 +23,8 @@ describe("buildWhatsAppUrl", () => {
     customerName: "Asha",
     materialsSummary: "2× PLA (black)",
     totalPaise: 45050,
+    shippingPaise: 0,
+    shippingPincode: null,
   };
 
   it("normalises the number and URL-encodes the message", () => {
@@ -32,6 +34,24 @@ describe("buildWhatsAppUrl", () => {
     const text = decodeURIComponent(url.split("?text=")[1]!);
     expect(text).toContain("RSP-2026-0042");
     expect(text).toContain("₹450.50");
+  });
+
+  it("states that shipping is excluded when the quote has none", () => {
+    // Payment is agreed in this chat, so a shipping-excluded total must never
+    // read as the full amount owed.
+    const msg = buildWhatsAppMessage(input);
+    expect(msg).toContain("Shipping: not included — to be confirmed");
+  });
+
+  it("shows the prepaid shipping line when the quote includes it", () => {
+    const msg = buildWhatsAppMessage({
+      ...input,
+      totalPaise: 53050,
+      shippingPaise: 8000,
+      shippingPincode: "781001",
+    });
+    expect(msg).toContain("Shipping: ₹80.00 to 781001 (included in total)");
+    expect(msg).not.toContain("not included");
   });
 
   it("clips very long notes", () => {

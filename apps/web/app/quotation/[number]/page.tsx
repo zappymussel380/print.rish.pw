@@ -77,6 +77,8 @@ export default async function ConfirmationPage({
         customerName: quotation.customerName,
         materialsSummary,
         totalPaise: quotation.totalPaise,
+        shippingPaise: quotation.shippingPaise,
+        shippingPincode: quotation.shippingPincode,
         notes: quotation.notes,
       })
     : whatsappChatUrl();
