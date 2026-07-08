@@ -1,11 +1,11 @@
 # Deployment
 
-Production runs as a Docker Compose stack on the homelab host **tortuga**. The
-VPS-host nginx terminates TLS for `print.rish.pw` and reverse-proxies to the
-compose stack over Tailscale.
+Production runs as a Docker Compose stack on a homelab host. The VPS-host
+nginx terminates TLS for `print.rish.pw` and reverse-proxies to the compose
+stack over Tailscale.
 
 ```
-Internet ──▶ VPS nginx (TLS, print.rish.pw) ──Tailscale──▶ tortuga:8080 (compose proxy) ──▶ web
+Internet ──▶ VPS nginx (TLS, print.rish.pw) ──Tailscale──▶ homelab:8080 (compose proxy) ──▶ web
 ```
 
 ## 1. Prerequisites on the host
@@ -31,7 +31,7 @@ Fill in **all** secrets:
     The container receives the correct single-`$` value.
 - `WHATSAPP_NUMBER` — international format, digits only (e.g. `919876543210`)
 - `APP_ORIGIN` — `https://print.rish.pw`
-- `PROXY_BIND` — tortuga's **Tailscale IP** (e.g. `100.x.y.z`). The compose
+- `PROXY_BIND` — the homelab host's **Tailscale IP** (e.g. `100.x.y.z`). The compose
   proxy publishes port 8080 on this address only; it defaults to `127.0.0.1`
   (loopback), which is safe but unreachable from the VPS. Never use `0.0.0.0` —
   the stack must not be exposed on public interfaces.
@@ -58,7 +58,7 @@ curl -s http://${PROXY_BIND:-localhost}:8080/api/health   # {"ok":true,"db":true
 
 ## 4. The VPS nginx server block (lives OUTSIDE this repo)
 
-Add a server block on the VPS host that proxies to tortuga's tailnet IP:
+Add a server block on the VPS host that proxies to the homelab host's tailnet IP:
 
 ```nginx
 server {
@@ -71,7 +71,7 @@ server {
     proxy_read_timeout 120s;
 
     location / {
-        proxy_pass http://<TORTUGA_TAILNET_IP>:8080;
+        proxy_pass http://<HOMELAB_TAILNET_IP>:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

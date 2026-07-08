@@ -67,6 +67,6 @@ export const env = {
     return required("SHIPROCKET_PASSWORD");
   },
   get shiprocketPickupPincode() {
-    return process.env.SHIPROCKET_PICKUP_PINCODE ?? "781007";
+    return process.env.SHIPROCKET_PICKUP_PINCODE ?? "781001";
   },
 };
