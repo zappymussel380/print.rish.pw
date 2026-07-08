@@ -8,7 +8,7 @@ export interface UploadedModelDto {
   sizeBytes: number;
   bboxMm: BoundingBoxMm;
   volumeCm3: number;
-  triangleCount: number;
+  triangleCount?: number;
   fitsBed: boolean;
 }
 

@@ -60,6 +60,7 @@ interface QuoteState {
   markReady: (key: string, server: UploadedModelDto) => void;
   markError: (key: string, error: string) => void;
   updateConfig: (key: string, patch: Partial<ModelConfig>) => void;
+  restoreModels: (models: UploadedModelDto[]) => void;
   remove: (key: string) => void;
   clear: () => void;
 
@@ -103,6 +104,24 @@ export const useQuoteStore = create<QuoteState>((set) => ({
     set((s) => ({
       models: s.models.map((m) => (m.key === key ? { ...m, config: { ...m.config, ...patch } } : m)),
     })),
+
+  restoreModels: (models) =>
+    set((s) => {
+      const existing = new Set(s.models.map((m) => m.server?.id).filter((id): id is string => !!id));
+      const restored: QuoteModel[] = models
+        .filter((server) => !existing.has(server.id))
+        .map((server) => ({
+          key: server.id,
+          fileName: server.originalName,
+          sizeBytes: server.sizeBytes,
+          status: "ready",
+          progress: 1,
+          server,
+          config: { ...DEFAULT_MODEL_CONFIG },
+        }));
+      if (restored.length === 0) return s;
+      return { models: [...s.models, ...restored], shipping: null };
+    }),
 
   remove: (key) => set((s) => ({ models: s.models.filter((m) => m.key !== key) })),
 

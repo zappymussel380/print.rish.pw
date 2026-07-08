@@ -1,23 +1,81 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
+import { CATALOG, type BoundingBoxMm } from "@print/shared";
 import { assertBodySize, jsonError } from "@/lib/api-util";
 import { assertSameOrigin } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
 import { removeQuietly } from "@/lib/storage";
+import type { UploadedModelDto } from "@/lib/upload-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type RestorableModelRow = {
+  id: string;
+  originalName: string;
+  format: string;
+  sizeBytes: number;
+  bboxXMm: number | null;
+  bboxYMm: number | null;
+  bboxZMm: number | null;
+  volumeCm3: number | null;
+};
+
+function fitsBed(bboxMm: BoundingBoxMm): boolean {
+  const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
+  const dims = [bboxMm.x, bboxMm.y, bboxMm.z].sort((a, b) => a - b);
+  const bedSorted = [...bed].sort((a, b) => a - b);
+  return dims.every((d, i) => d <= bedSorted[i]!);
+}
+
+function serializeModel(model: RestorableModelRow): UploadedModelDto {
+  const bboxMm = {
+    x: model.bboxXMm ?? 0,
+    y: model.bboxYMm ?? 0,
+    z: model.bboxZMm ?? 0,
+  };
+
+  return {
+    id: model.id,
+    originalName: model.originalName,
+    format: model.format,
+    sizeBytes: model.sizeBytes,
+    bboxMm,
+    volumeCm3: model.volumeCm3 ?? 0,
+    fitsBed: fitsBed(bboxMm),
+  };
+}
 
 /** How many *unattached* models the current quote session holds — uploads not
  *  yet part of a submitted quotation. The client quote store is not persisted,
  *  so after a reload the on-screen quote is empty while these rows persist and
  *  keep counting against MAX_MODELS_PER_SESSION; the quote page uses this to
- *  offer a cleanup. Quoted models are excluded so this count matches exactly the
- *  set DELETE can remove (and the upload cap counts) — otherwise the banner
- *  would report orphans the "Clear them" action can never clear. */
-export async function GET() {
+ *  offer a restore/cleanup choice. Quoted models are excluded so this count
+ *  matches exactly the set DELETE can remove (and the upload cap counts) —
+ *  otherwise the banner would report models the clear action can never clear. */
+export async function GET(request: NextRequest) {
+  const includeModels = request.nextUrl.searchParams.get("include") === "models";
   const sessionId = await getQuoteSessionId();
-  if (!sessionId) return NextResponse.json({ count: 0 });
+  if (!sessionId) return NextResponse.json(includeModels ? { count: 0, models: [] } : { count: 0 });
+
+  if (includeModels) {
+    const models = await prisma.uploadedModel.findMany({
+      where: { sessionId, items: { none: {} } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        originalName: true,
+        format: true,
+        sizeBytes: true,
+        bboxXMm: true,
+        bboxYMm: true,
+        bboxZMm: true,
+        volumeCm3: true,
+      },
+    });
+    return NextResponse.json({ count: models.length, models: models.map(serializeModel) });
+  }
+
   const count = await prisma.uploadedModel.count({
     where: { sessionId, items: { none: {} } },
   });

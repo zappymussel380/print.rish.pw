@@ -1,26 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Trash2, X } from "lucide-react";
+import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useQuoteStore } from "@/lib/quote-store";
+import type { UploadedModelDto } from "@/lib/upload-client";
 
 /** The quote store is not persisted, so a page reload leaves the on-screen quote
  *  empty while the server session still holds the uploaded models — silently
- *  filling the per-session cap. When more models exist server-side than are on
- *  screen, offer to clear the stranded ones. */
+ *  filling the per-session cap. When models exist server-side but not on screen,
+ *  offer to restore them into the quote or clear the queue. */
 export function SessionCleanupBanner() {
-  const onScreen = useQuoteStore((s) => s.models.length);
-  const [serverCount, setServerCount] = useState<number | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const models = useQuoteStore((s) => s.models);
+  const restoreModels = useQuoteStore((s) => s.restoreModels);
+  const [serverModels, setServerModels] = useState<UploadedModelDto[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const refresh = async () => {
     try {
-      const res = await fetch("/api/models", { headers: { "X-Requested-With": "XMLHttpRequest" } });
-      const data = (await res.json()) as { count?: number };
-      setServerCount(typeof data.count === "number" ? data.count : 0);
+      const res = await fetch("/api/models?include=models", {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      const data = (await res.json()) as { models?: UploadedModelDto[] };
+      setServerModels(Array.isArray(data.models) ? data.models : []);
     } catch {
-      setServerCount(0);
+      setServerModels([]);
+    } finally {
+      setLoaded(true);
     }
   };
 
@@ -28,8 +35,10 @@ export function SessionCleanupBanner() {
     void refresh();
   }, []);
 
-  const orphans = serverCount != null ? serverCount - onScreen : 0;
-  if (dismissed || orphans <= 0) return null;
+  const visibleServerIds = new Set(models.map((m) => m.server?.id).filter((id): id is string => !!id));
+  const queuedModels = serverModels.filter((model) => !visibleServerIds.has(model.id));
+  const queuedCount = queuedModels.length;
+  if (!loaded || queuedCount <= 0) return null;
 
   const clear = async () => {
     setClearing(true);
@@ -52,31 +61,54 @@ export function SessionCleanupBanner() {
     }
   };
 
+  const reload = () => {
+    setRestoring(true);
+    try {
+      restoreModels(queuedModels);
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   return (
     <div className="tile mb-6 flex flex-wrap items-center justify-between gap-3 border-[color-mix(in_srgb,var(--accent)_45%,var(--line))] p-4">
       <p className="text-sm text-muted">
-        You have <span className="font-[650] text-text">{orphans}</span> earlier{" "}
-        {orphans === 1 ? "upload" : "uploads"} from a previous session using up your quote (max 20).
+        You have <span className="font-[650] text-text">{queuedCount}</span>{" "}
+        {queuedCount === 1 ? "uploaded model" : "uploaded models"} saved in this browser. Reload{" "}
+        {queuedCount === 1 ? "it" : "them"} into the quote or clear the queue.
       </p>
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={clear} disabled={clearing} className="btn-pill text-sm">
-          {clearing ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={reload}
+          disabled={restoring || clearing}
+          className="btn-pill whitespace-nowrap text-sm"
+        >
+          {restoring ? (
             <>
-              <Loader2 strokeWidth={2} className="size-4 animate-spin" /> Clearing…
+              <Loader2 strokeWidth={2} className="size-4 animate-spin" /> Reloading...
             </>
           ) : (
             <>
-              <Trash2 strokeWidth={1.8} className="size-4" /> Clear them
+              <RefreshCw strokeWidth={1.8} className="size-4" /> Reload models
             </>
           )}
         </button>
         <button
           type="button"
-          onClick={() => setDismissed(true)}
-          aria-label="Dismiss"
-          className="rounded-md p-2 text-faint transition-colors hover:text-accent"
+          onClick={clear}
+          disabled={clearing || restoring}
+          className="btn-ghost whitespace-nowrap text-sm"
         >
-          <X strokeWidth={1.8} className="size-4" />
+          {clearing ? (
+            <>
+              <Loader2 strokeWidth={2} className="size-4 animate-spin" /> Clearing...
+            </>
+          ) : (
+            <>
+              <Trash2 strokeWidth={1.8} className="size-4" /> Clear queue
+            </>
+          )}
         </button>
       </div>
     </div>

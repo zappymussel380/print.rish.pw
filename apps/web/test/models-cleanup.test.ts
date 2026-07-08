@@ -24,6 +24,13 @@ interface Row {
   storedPath: string;
   thumbPath: string | null;
   attached: boolean; // true = referenced by a submitted quotation (has items)
+  originalName?: string;
+  format?: string;
+  sizeBytes?: number;
+  bboxXMm?: number | null;
+  bboxYMm?: number | null;
+  bboxZMm?: number | null;
+  volumeCm3?: number | null;
 }
 
 const SESSION = "sess-1";
@@ -80,6 +87,11 @@ const req = (body: unknown, throws = false): NextRequest =>
       if (throws) throw new Error("no body");
       return body;
     },
+  }) as unknown as NextRequest;
+
+const getReq = (url: string): NextRequest =>
+  ({
+    nextUrl: new URL(url),
   }) as unknown as NextRequest;
 
 beforeEach(() => {
@@ -173,8 +185,72 @@ describe("GET /api/models — session model count", () => {
       { id: "E", sessionId: "sess-2", storedPath: "/u/E.stl", thumbPath: null, attached: false }, // other session
     ];
 
-    const res = await GET();
+    const res = await GET(getReq("http://localhost/api/models"));
 
     expect(await res.json()).toEqual({ count: 2 });
+  });
+
+  it("can return restorable metadata for only this session's unattached models", async () => {
+    mocks.state.table = [
+      {
+        id: "A",
+        sessionId: "sess-1",
+        storedPath: "/u/A.stl",
+        thumbPath: null,
+        attached: false,
+        originalName: "bracket.stl",
+        format: "stl",
+        sizeBytes: 1234,
+        bboxXMm: 10,
+        bboxYMm: 20,
+        bboxZMm: 30,
+        volumeCm3: 4.25,
+      },
+      {
+        id: "B",
+        sessionId: "sess-1",
+        storedPath: "/u/B.stl",
+        thumbPath: null,
+        attached: true,
+        originalName: "quoted.stl",
+        format: "stl",
+        sizeBytes: 4321,
+        bboxXMm: 20,
+        bboxYMm: 20,
+        bboxZMm: 20,
+        volumeCm3: 8,
+      },
+      {
+        id: "C",
+        sessionId: "sess-2",
+        storedPath: "/u/C.stl",
+        thumbPath: null,
+        attached: false,
+        originalName: "other-session.stl",
+        format: "stl",
+        sizeBytes: 999,
+        bboxXMm: 1,
+        bboxYMm: 1,
+        bboxZMm: 1,
+        volumeCm3: 1,
+      },
+    ];
+
+    const res = await GET(getReq("http://localhost/api/models?include=models"));
+
+    expect(await res.json()).toEqual({
+      count: 1,
+      models: [
+        {
+          id: "A",
+          originalName: "bracket.stl",
+          format: "stl",
+          sizeBytes: 1234,
+          bboxMm: { x: 10, y: 20, z: 30 },
+          volumeCm3: 4.25,
+          fitsBed: true,
+        },
+      ],
+    });
   });
 });
