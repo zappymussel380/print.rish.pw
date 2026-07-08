@@ -69,7 +69,7 @@ export function ContactForm() {
         body: JSON.stringify(form),
       });
       if (!res.ok) {
-        let message = "Couldn't send that — please try again.";
+        let message = "Couldn't send that. Please try again.";
         try {
           const body = (await res.json()) as { error?: { message?: string } };
           if (body.error?.message) message = body.error.message;
@@ -85,7 +85,7 @@ export function ContactForm() {
       setEmailNote("");
       setSuggestions([]);
     } catch {
-      setError("Network error — please try again.");
+      setError("Network error. Please try again.");
       setStatus("error");
     }
   };
@@ -93,7 +93,7 @@ export function ContactForm() {
   if (status === "sent") {
     return (
       <div className="tile p-6 text-center sm:col-span-2">
-        <p className="text-lg font-[650]">Sent — thanks!</p>
+        <p className="text-lg font-[650]">Sent. Thanks.</p>
         <p className="mt-2 text-sm text-muted">
           We&apos;ll reply to your email soon. For anything urgent, WhatsApp is fastest.
         </p>
@@ -114,7 +114,7 @@ export function ContactForm() {
     <form onSubmit={onSubmit} className="tile p-6 sm:col-span-2" noValidate>
       <h2 className="text-lg font-[650]">Send a message</h2>
       <p className="mt-1.5 text-sm leading-6 text-muted">
-        Prefer email? Fill this in and it lands straight in our inbox.
+        Share the details here and it lands straight in our inbox.
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -197,7 +197,7 @@ export function ContactForm() {
           onChange={set("message")}
           required
           maxLength={4000}
-          placeholder="Tell us about your part, quantities, deadlines — no need to be formal."
+          placeholder="Tell us about your part, quantities, deadlines. No need to be formal."
           className="input-base resize-y"
         />
       </Field>
