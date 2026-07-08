@@ -8,6 +8,12 @@ import { ModelParseError } from "./types";
  *  expanding past this is hostile or unparseable in reasonable time anyway
  *  (it would blow the XML parser's own MAX_XML_BYTES cap next). */
 export const MAX_ENTRY_BYTES = 128 * 1024 * 1024;
+export const MAX_EXTRACTED_BYTES = 128 * 1024 * 1024;
+
+export interface ExtractedZipEntry {
+  name: string;
+  data: Buffer;
+}
 
 /**
  * Safely extract entries from an untrusted zip using fflate's streaming
@@ -15,23 +21,34 @@ export const MAX_ENTRY_BYTES = 128 * 1024 * 1024;
  * Returns the concatenated bytes of the first entry whose name matches.
  */
 export function extractZipEntry(buf: Buffer, match: (name: string) => boolean): Buffer | null {
-  let result: Buffer | null = null;
+  return extractZipEntries(buf, match)[0]?.data ?? null;
+}
+
+/**
+ * Extract every matching entry, enforcing both per-entry and total decompressed
+ * byte ceilings. The total cap matters for Bambu/MakerWorld 3MF projects,
+ * where geometry can be split across several 3D/*.model parts.
+ */
+export function extractZipEntries(buf: Buffer, match: (name: string) => boolean): ExtractedZipEntry[] {
+  const results: ExtractedZipEntry[] = [];
   let bombed = false;
+  let extractedTotal = 0;
 
   const unzip = new Unzip((file) => {
-    if (result !== null || bombed || !match(file.name)) return;
+    if (bombed || !match(file.name)) return;
     const chunks: Uint8Array[] = [];
     let total = 0;
     file.ondata = (err, chunk, final) => {
       if (err) throw new ModelParseError(`Corrupt zip entry ${file.name}`);
       total += chunk.length;
-      if (total > MAX_ENTRY_BYTES) {
+      extractedTotal += chunk.length;
+      if (total > MAX_ENTRY_BYTES || extractedTotal > MAX_EXTRACTED_BYTES) {
         bombed = true;
         file.terminate();
         return;
       }
       chunks.push(chunk);
-      if (final) result = Buffer.concat(chunks);
+      if (final) results.push({ name: file.name, data: Buffer.concat(chunks) });
     };
     file.start();
   });
@@ -46,7 +63,7 @@ export function extractZipEntry(buf: Buffer, match: (name: string) => boolean): 
   if (bombed) {
     throw new ModelParseError("Compressed entry expands beyond the allowed size", "ZIP_BOMB");
   }
-  return result;
+  return results;
 }
 
 export function isZip(buf: Buffer): boolean {

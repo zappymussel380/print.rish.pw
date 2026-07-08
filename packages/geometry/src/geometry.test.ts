@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { ModelParseError, parseModel } from "./index";
 import { MAX_XML_BYTES, parseXml } from "./xml";
@@ -31,6 +32,45 @@ describe("parseModel", () => {
     } catch (err) {
       expect((err as ModelParseError).code).toBe("ZIP_BOMB");
     }
+  });
+
+  it("parses split 3MF projects with geometry outside the main model part", () => {
+    const mainModel = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources>
+          <object id="1" type="model">
+            <components><component objectid="100"/></components>
+          </object>
+        </resources>
+        <build><item objectid="1"/></build>
+      </model>`;
+    const objectModel = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources>
+          <object id="100" type="model">
+            <mesh>
+              <vertices>
+                <vertex x="0" y="0" z="0"/>
+                <vertex x="20" y="0" z="0"/>
+                <vertex x="0" y="20" z="0"/>
+              </vertices>
+              <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+            </mesh>
+          </object>
+        </resources>
+      </model>`;
+    const archive = Buffer.from(
+      zipSync({
+        "[Content_Types].xml": strToU8("<Types/>"),
+        "3D/3dmodel.model": strToU8(mainModel),
+        "3D/Objects/object_1.model": strToU8(objectModel),
+      }),
+    );
+
+    const model = parseModel(archive, "3mf");
+
+    expect(model.triangleCount).toBe(1);
+    expect(model.bboxMm).toEqual({ x: 20, y: 20, z: 0 });
   });
 
   it("rejects garbage bytes for every format", () => {

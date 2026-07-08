@@ -2,20 +2,57 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { finalizeModel } from "./math";
 import { MAX_TRIANGLES, ModelParseError, type ParsedModel } from "./types";
 import { parseXml } from "./xml";
-import { extractZipEntry, isZip } from "./zip";
+import { extractZipEntries, isZip } from "./zip";
 
 /**
- * 3MF parser: unzips 3D/3dmodel.model and reads mesh vertices/triangles.
+ * 3MF parser: unzips model XML parts and reads mesh vertices/triangles.
  * Handles multiple <object> meshes and <item> transforms (row-major 4x3
  * matrices per the 3MF core spec). Component references are resolved one
- * level deep, which covers slicer-exported files.
+ * level deep, which covers slicer-exported files. Bambu/MakerWorld 3MF
+ * projects can split geometry into additional 3D/*.model parts, so all model
+ * XML entries are scanned instead of only 3D/3dmodel.model.
  */
 export function parse3mf(buf: Buffer): ParsedModel {
   if (!isZip(buf)) throw new ModelParseError("Not a 3MF file (missing zip signature)");
-  const modelXml = extractZipEntry(buf, (name) => name.toLowerCase().endsWith("3dmodel.model"));
-  if (!modelXml) throw new ModelParseError("3MF is missing 3D/3dmodel.model");
+  const modelEntries = extractZipEntries(buf, isModelEntry).sort((a, b) => {
+    const aMain = a.name.toLowerCase().endsWith("3dmodel.model");
+    const bMain = b.name.toLowerCase().endsWith("3dmodel.model");
+    return Number(bMain) - Number(aMain);
+  });
+  if (modelEntries.length === 0) throw new ModelParseError("3MF is missing model XML");
 
-  const doc = parseXml(modelXml.toString("utf8"), "3MF model");
+  const parts: Float32Array[] = [];
+  let meshCount = 0;
+  for (const entry of modelEntries) {
+    const parsed = parseModelXml(entry.data.toString("utf8"), entry.name);
+    meshCount += parsed.meshCount;
+    parts.push(...parsed.parts);
+  }
+
+  if (meshCount === 0) throw new ModelParseError("3MF contains no mesh geometry", "EMPTY");
+
+  const total = parts.reduce((sum, p) => sum + p.length, 0);
+  if (total / 9 > MAX_TRIANGLES) {
+    throw new ModelParseError(`3MF exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
+  }
+  if (total === 0) throw new ModelParseError("3MF contains no buildable mesh geometry", "EMPTY");
+
+  const positions = new Float32Array(total);
+  let offset = 0;
+  for (const p of parts) {
+    positions.set(p, offset);
+    offset += p.length;
+  }
+  return finalizeModel(positions);
+}
+
+function isModelEntry(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.startsWith("3d/") && lower.endsWith(".model");
+}
+
+function parseModelXml(xml: string, name: string): { meshCount: number; parts: Float32Array[] } {
+  const doc = parseXml(xml, `3MF model ${name}`);
   const root = doc.documentElement;
   if (!root) throw new ModelParseError("3MF model has no root element");
   const meshesById = new Map<string, Float32Array>();
@@ -40,7 +77,7 @@ export function parse3mf(buf: Buffer): ParsedModel {
     }
   }
 
-  if (meshesById.size === 0) throw new ModelParseError("3MF contains no mesh geometry", "EMPTY");
+  if (meshesById.size === 0) return { meshCount: 0, parts: [] };
 
   const build = firstElement(root, "build");
   const parts: Float32Array[] = [];
@@ -61,17 +98,7 @@ export function parse3mf(buf: Buffer): ParsedModel {
     }
   }
 
-  const total = parts.reduce((sum, p) => sum + p.length, 0);
-  if (total / 9 > MAX_TRIANGLES) {
-    throw new ModelParseError(`3MF exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
-  }
-  const positions = new Float32Array(total);
-  let offset = 0;
-  for (const p of parts) {
-    positions.set(p, offset);
-    offset += p.length;
-  }
-  return finalizeModel(positions);
+  return { meshCount: meshesById.size, parts };
 }
 
 function resolveObject(
