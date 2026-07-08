@@ -27,6 +27,9 @@ async function writeJobProcess(workDir: string, settings: SliceSettings): Promis
 
   base.name = "job-process";
   base.sparse_infill_density = `${settings.infillPct}%`;
+  // The flattened profiles do not carry a bed selection, and Orca defaults to
+  // Cool Plate. PETG is invalid on Cool Plate, so pin the actual A1 build plate.
+  base.curr_bed_type = "Textured PEI Plate";
 
   if (settings.supports === "off") {
     base.enable_support = "0";
@@ -46,14 +49,21 @@ interface RunResult {
   stderrTail: string;
 }
 
-function runOrca(args: string[]): Promise<RunResult> {
+function runOrca(args: string[], cwd: string): Promise<RunResult> {
   return new Promise((resolvePromise) => {
     const child = spawn("xvfb-run", ["-a", config.orcaBin, ...args], {
+      cwd,
       // New process group so the timeout can kill Orca and any children.
       detached: true,
+      // Minimal, explicit environment — never `...process.env`: the worker's
+      // own env holds DB/Redis credentials, and Orca parses untrusted uploads,
+      // so a slicer exploit must find nothing to exfiltrate. Everything Orca
+      // needs beyond this (datadir, profiles, output dir) travels as CLI args.
       env: {
-        ...process.env,
+        PATH: process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         HOME: process.env.HOME ?? "/tmp/orca-home",
+        LANG: process.env.LANG ?? "en_US.UTF-8",
+        LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
         XDG_RUNTIME_DIR: config.xdgRuntimeDir,
       },
     });
@@ -117,8 +127,10 @@ export async function runSlice(
     workDir,
     "--debug",
     "1",
+    "--logfile",
+    join(workDir, "orca.log"),
     storedPath,
-  ]);
+  ], workDir);
 
   if (run.timedOut) {
     return fail("TIMEOUT", `Slicing exceeded ${Math.round(config.sliceTimeoutMs / 1000)}s`, run);

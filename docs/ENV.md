@@ -8,7 +8,8 @@ Secrets have **no defaults** and fail loudly at first use.
 | Variable | Required | Default | Notes |
 | --- | --- | --- | --- |
 | `APP_ORIGIN` | yes (prod) | `http://localhost:3000` | Public origin; used for CSRF origin checks and links. |
-| `PROXY_BIND` | yes (prod) | `127.0.0.1` | Host address the compose proxy binds `8080` to. Set to the host's **Tailscale IP** in production; never `0.0.0.0`. |
+| `PROXY_BIND` | yes (prod) | `127.0.0.1` | Host address the compose proxy binds `8080` to. Set to the private address reached by the public reverse proxy; never `0.0.0.0`. |
+| `TRUSTED_PROXY_CIDR` | yes (prod) | `127.0.0.1` | Source allowed to assert the real client IP via `X-Real-IP` (VPS, subnet router, or NPM LXC address). Rate limiting depends on it. |
 | `DATABASE_URL` | yes | — | PostgreSQL connection string. |
 | `REDIS_URL` | — | `redis://localhost:6379` | Redis connection string. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | yes (compose) | — | Wired into the Postgres container and `DATABASE_URL`. |
@@ -56,3 +57,6 @@ Secrets have **no defaults** and fail loudly at first use.
 
 - **web**: everything except the worker-only knobs.
 - **worker**: `DATABASE_URL`, `REDIS_URL`, `UPLOAD_DIR`, and the worker section.
+  The compose file passes the worker **only** these (no `env_file`): it spawns
+  OrcaSlicer on untrusted uploads, so secrets like `SESSION_SECRET` or API keys
+  must never be present in its environment.

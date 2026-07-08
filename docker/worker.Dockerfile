@@ -53,7 +53,9 @@ COPY --from=orca /opt/orca /opt/orca
 # Orca writes config/caches on startup; give it a writable, throwaway home.
 ENV HOME=/tmp/orca-home \
     ORCA_DATADIR=/tmp/orca-data
-RUN mkdir -p /tmp/orca-home /tmp/orca-data /data/uploads
+RUN useradd -m -u 1001 worker \
+    && mkdir -p /tmp/orca-home /tmp/orca-data /tmp/xdg /tmp/slice-jobs /data/uploads \
+    && chown -R worker:worker /tmp/orca-home /tmp/orca-data /tmp/xdg /tmp/slice-jobs /data/uploads
 
 WORKDIR /app
 
@@ -70,6 +72,8 @@ RUN pnpm install --frozen-lockfile --filter "@print/worker..."
 COPY packages ./packages
 COPY apps/worker ./apps/worker
 RUN pnpm --filter @print/db generate
+
+USER worker
 
 # Long-running BullMQ consumer (tsx runs the TS entrypoint directly).
 CMD ["pnpm", "--filter", "@print/worker", "start"]

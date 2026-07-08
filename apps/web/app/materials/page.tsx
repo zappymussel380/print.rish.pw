@@ -49,7 +49,27 @@ export default function MaterialsPage() {
         lede="Both print beautifully on the Bambu Lab A1 in black or white. The right choice depends on where the part lives and what it has to survive."
       />
 
-      <div className="mx-auto mt-12 max-w-4xl overflow-x-auto">
+      <div className="mx-auto mt-10 max-w-4xl md:hidden">
+        <div className="border-y border-line">
+          {rows.map((row) => (
+            <article key={row.label} className="border-b border-line py-5 last:border-b-0">
+              <h2 className="text-sm font-[700] text-text">{row.label}</h2>
+              <div className="mt-4 grid gap-4 min-[520px]:grid-cols-2">
+                <section className="min-w-0">
+                  <h3 className="chip chip-accent w-fit">PLA</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted">{row.pla}</p>
+                </section>
+                <section className="min-w-0 border-t border-line pt-4 min-[520px]:border-t-0 min-[520px]:border-l min-[520px]:pt-0 min-[520px]:pl-4">
+                  <h3 className="chip chip-accent w-fit">PETG</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted">{row.petg}</p>
+                </section>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="mx-auto mt-12 hidden max-w-4xl overflow-x-auto md:block">
         <table className="w-full min-w-[36rem] border-collapse text-sm">
           <caption className="sr-only">Comparison of PLA and PETG properties</caption>
           <thead>

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
-import { jsonError } from "@/lib/api-util";
+import { assertBodySize, jsonError } from "@/lib/api-util";
 import { assertSameOrigin } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
 import { removeQuietly } from "@/lib/storage";
@@ -39,6 +39,10 @@ export async function DELETE(request: NextRequest) {
   if (!assertSameOrigin(request)) return jsonError(403, "CSRF", "Cross-origin request rejected");
   const sessionId = await getQuoteSessionId();
   if (!sessionId) return NextResponse.json({ cleared: 0 });
+
+  // A keep-list of at most maxModelsPerSession UUIDs — anything bigger is abuse.
+  const tooLarge = assertBodySize(request, 16 * 1024);
+  if (tooLarge) return tooLarge;
 
   // Parse the preserve-list defensively: a missing/invalid body means "keep
   // nothing" (the cleanup-after-reload case, where the client has no models).

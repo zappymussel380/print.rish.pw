@@ -6,7 +6,7 @@ import {
   sliceJobId,
   sliceSettingsSchema,
 } from "@print/shared";
-import { guardMutation, jsonError } from "@/lib/api-util";
+import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
 import { getSliceQueue } from "@/lib/queue";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
 
   const sessionId = await getQuoteSessionId();
   if (!sessionId) return jsonError(401, "NO_SESSION", "No quote session");
+
+  // One modelId + one settings object — anything bigger is abuse.
+  const tooLarge = assertBodySize(request, 4 * 1024);
+  if (tooLarge) return tooLarge;
 
   let payload: unknown;
   try {
@@ -57,13 +61,16 @@ export async function POST(request: NextRequest) {
   if (existing) {
     // A previously failed slice is retried on explicit re-request.
     if (existing.status !== "FAILED") {
+      if (existing.status === "QUEUED" || existing.status === "RUNNING") {
+        await enqueue(existing.id, model, key, settings, { ensureLiveJob: true });
+      }
       return NextResponse.json(serializeSlice(existing));
     }
     await prisma.sliceResult.update({
       where: { id: existing.id },
       data: { status: "QUEUED", errorCode: null, errorMessage: null, completedAt: null },
     });
-    await enqueue(existing.id, model, key, settings);
+    await enqueue(existing.id, model, key, settings, { replaceExistingJob: true });
     return NextResponse.json(
       serializeSlice({ ...existing, status: "QUEUED", errorCode: null, errorMessage: null }),
       { status: 202 },
@@ -102,8 +109,25 @@ async function enqueue(
   model: { id: string; fileHash: string; storedPath: string; format: string },
   key: string,
   settings: SliceJobData["settings"],
+  options: { replaceExistingJob?: boolean; ensureLiveJob?: boolean } = {},
 ) {
-  await getSliceQueue().add(
+  const queue = getSliceQueue();
+  const jobId = sliceJobId(model.fileHash, key);
+
+  if (options.replaceExistingJob) {
+    await queue.remove(jobId).catch(() => {});
+  } else if (options.ensureLiveJob) {
+    const existingJob = await queue.getJob(jobId);
+    if (existingJob) {
+      const state = await existingJob.getState();
+      if (["active", "delayed", "prioritized", "waiting", "waiting-children"].includes(state)) {
+        return;
+      }
+      await queue.remove(jobId).catch(() => {});
+    }
+  }
+
+  await queue.add(
     "slice",
     {
       sliceResultId,
@@ -114,6 +138,6 @@ async function enqueue(
       format: model.format,
       settings,
     },
-    { jobId: sliceJobId(model.fileHash, key) },
+    { jobId },
   );
 }

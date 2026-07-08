@@ -22,13 +22,13 @@
 }
 
 html[data-theme="light"] {
-  --bg: #fbfaf7;
-  --surface: #ffffff;
-  --line: #dfdad2;
-  --accent: #ff5555;
-  --text: #111111;
-  --muted: #66615b;
-  --faint: #aaa29a;
+  --bg: #f2f0ec;
+  --surface: #faf8f4;
+  --line: #d7d0c8;
+  --accent: #c23a3a;
+  --text: #17130f;
+  --muted: #5f574f;
+  --faint: #948b82;
   color-scheme: light;
 }
 

@@ -20,8 +20,14 @@ services:
       # host's Tailscale IP so the VPS nginx can reach it over the tailnet —
       # never 0.0.0.0 (see docs/DEPLOYMENT.md).
       - "${PROXY_BIND:-127.0.0.1}:8080:8080"
+    environment:
+      # Only this source may assert the real client IP via X-Real-IP (the
+      # forwarder the VPS reaches us through). Default trusts nobody.
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-127.0.0.1}
     volumes:
-      - ./docker/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/proxy/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   web:
@@ -46,15 +52,30 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   worker:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
-    env_file: .env
+    # Deliberately NOT env_file: the worker spawns OrcaSlicer on untrusted
+    # uploads, so its environment carries only what it reads (see
+    # apps/worker/src/config.ts) — never SESSION_SECRET, the admin hash, or
+    # API keys. A compromised slicer must have nothing to steal.
     environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
       UPLOAD_DIR: /data/uploads
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      SLICE_TIMEOUT_SECONDS: ${SLICE_TIMEOUT_SECONDS:-180}
+      THUMB_SIZE: ${THUMB_SIZE:-512}
+      UPLOAD_RETENTION_HOURS: ${UPLOAD_RETENTION_HOURS:-48}
+      FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,6 +95,12 @@ services:
         limits:
           cpus: "4"
           memory: 4g
+    # Belt-and-braces for the untrusted-input process: no setuid escalation,
+    # no kernel capabilities (Node + xvfb + Orca need none).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   postgres:

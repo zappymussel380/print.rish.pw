@@ -6,10 +6,13 @@ import { serializeSlice } from "@/lib/slice-serialize";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /** Poll a slice by its result-row id. The id is an unguessable uuid handed to
  *  the client by POST /api/slices; the stats it exposes are non-sensitive. */
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+  if (!UUID_RE.test(id)) return jsonError(404, "NOT_FOUND", "Unknown slice");
   const row = await prisma.sliceResult.findUnique({ where: { id } });
   if (!row) return jsonError(404, "NOT_FOUND", "Unknown slice");
   return NextResponse.json(serializeSlice(row));

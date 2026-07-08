@@ -3,7 +3,10 @@
 # generated at build time matches the runtime platform.
 
 FROM node:20-slim AS base
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
 # ---------- deps: install with the lockfile, manifests only for caching ----------
@@ -30,7 +33,7 @@ ENV NODE_ENV=production \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl wget ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && npm i -g prisma@6.2.1 \
+    && npm i -g prisma@6.19.3 \
     && useradd -m -u 1001 nextjs
 
 # Next standalone bundle (monorepo layout: server.js lives at apps/web/server.js).

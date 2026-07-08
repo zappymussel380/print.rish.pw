@@ -18,5 +18,8 @@ packages/db/generated/
 .env.*
 !.env.example
 
+# Host-specific topology/runbook (docs/DEPLOYMENT.md is the public guide)
+/DEPLOYMENT.md
+
 # OS / editor
 .DS_Store

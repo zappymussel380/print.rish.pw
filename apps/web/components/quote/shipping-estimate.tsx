@@ -33,12 +33,9 @@ export function ShippingEstimate() {
   const [resultKey, setResultKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!breakdown) return null;
-
   const valid = /^\d{6}$/.test(pincode);
-  const quoteKey = `${breakdown.totals.grams}:${breakdown.totalPaise}`;
-  const currentKey = `${pincode}:${quoteKey}`;
-  const showResult = status === "done" && result && resultKey === currentKey;
+  const quoteKey = breakdown ? `${breakdown.totals.grams}:${breakdown.totalPaise}` : "";
+  const currentKey = breakdown ? `${pincode}:${quoteKey}` : "";
 
   // Always-current pincode+quote signature, read by the async handler so a
   // response for a pincode/quote the user has since changed is discarded rather
@@ -46,6 +43,10 @@ export function ShippingEstimate() {
   // exact — an effect would lag a frame behind the fetch it needs to gate.
   const sigRef = useRef(currentKey);
   sigRef.current = currentKey;
+
+  if (!breakdown) return null;
+
+  const showResult = status === "done" && result && resultKey === currentKey;
 
   const items = models
     .filter((m) => m.status === "ready" && m.server)

@@ -75,6 +75,7 @@ const { DELETE, GET } = await import("@/app/api/models/route");
  *  `throws` reproduces an absent/invalid body. */
 const req = (body: unknown, throws = false): NextRequest =>
   ({
+    headers: new Headers(),
     json: async () => {
       if (throws) throw new Error("no body");
       return body;

@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextResponse, type NextRequest } from "next/server";
-import { guardMutation, jsonError } from "@/lib/api-util";
+import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { RATE_LIMITS } from "@/lib/security";
 import { createAdminSession } from "@/lib/session";
@@ -8,9 +8,15 @@ import { createAdminSession } from "@/lib/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// A password in a JSON wrapper — anything bigger is abuse.
+const MAX_BODY_BYTES = 4 * 1024;
+
 export async function POST(request: NextRequest) {
   const guard = await guardMutation(request, "adminLogin", RATE_LIMITS.adminLogin);
   if (guard) return guard;
+
+  const tooLarge = assertBodySize(request, MAX_BODY_BYTES);
+  if (tooLarge) return tooLarge;
 
   let body: unknown;
   try {
