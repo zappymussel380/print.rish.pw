@@ -9,6 +9,7 @@ import {
 } from "@print/shared";
 import { assertBodySize, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
+import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { assertSameOrigin, clientIp, rateLimit, RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
 import {
@@ -67,19 +68,24 @@ async function rebuildTotals(
   // Parse + dedupe first (no DB): a quote never has two identical lines, and
   // this caps the number of lookups at the distinct line count regardless of
   // how many duplicates a caller stuffs in.
-  const lines = new Map<string, ReturnType<typeof modelConfigSchema.parse> & { modelId: string }>();
+  const lines: (ReturnType<typeof modelConfigSchema.parse> & { modelId: string })[] = [];
   for (const raw of items) {
     const modelId = (raw as { modelId?: unknown })?.modelId;
     const config = modelConfigSchema.safeParse((raw as { config?: unknown })?.config);
     if (typeof modelId !== "string" || !config.success) return null;
-    lines.set(`${modelId}::${settingsKey(config.data)}`, { ...config.data, modelId });
+    lines.push({ ...config.data, modelId });
   }
 
   const inputs: QuoteLineInput[] = [];
-  for (const line of lines.values()) {
-    const { modelId, ...config } = line;
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const { modelId, ...rawConfig } = line;
     const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
     if (!model) return null;
+    const config = normalizeModelConfigLocks(rawConfig, model);
+    const lineKey = `${modelId}::${settingsKey(config)}`;
+    if (seen.has(lineKey)) continue;
+    seen.add(lineKey);
 
     const slice = await prisma.sliceResult.findUnique({
       where: {

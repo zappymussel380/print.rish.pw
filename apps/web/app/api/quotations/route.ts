@@ -15,6 +15,7 @@ import {
 import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { renderQuotationPdf } from "@/lib/pdf/quotation-pdf";
 import { nextQuotationNumber } from "@/lib/quotation-number";
 import { RATE_LIMITS } from "@/lib/security";
@@ -95,18 +96,20 @@ export async function POST(request: NextRequest) {
     if (typeof modelId !== "string" || !config.success) {
       return jsonError(422, "BAD_ITEM", "A model in your quote has invalid settings");
     }
-    const lineKey = `${modelId}::${settingsKey(config.data)}`;
+
+    const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
+    if (!model) return jsonError(404, "MODEL_NOT_FOUND", "A model in your quote was not found");
+
+    const normalizedConfig = normalizeModelConfigLocks(config.data, model);
+    const lineKey = `${modelId}::${settingsKey(normalizedConfig)}`;
     if (seenLines.has(lineKey)) {
       return jsonError(422, "DUPLICATE_ITEM", "A model appears twice in your quote — use quantity instead");
     }
     seenLines.add(lineKey);
 
-    const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
-    if (!model) return jsonError(404, "MODEL_NOT_FOUND", "A model in your quote was not found");
-
     const slice = await prisma.sliceResult.findUnique({
       where: {
-        fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: settingsKey(config.data) },
+        fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: settingsKey(normalizedConfig) },
       },
     });
     if (!slice || slice.status !== "DONE" || slice.filamentGrams == null) {
@@ -117,7 +120,7 @@ export async function POST(request: NextRequest) {
       modelId: model.id,
       sliceResultId: slice.id,
       fileName: model.originalName,
-      config: config.data,
+      config: normalizedConfig,
       stats: {
         filamentGrams: Number(slice.filamentGrams),
         filamentMm: slice.filamentMm != null ? Number(slice.filamentMm) : 0,

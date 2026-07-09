@@ -7,6 +7,7 @@ import {
   sliceSettingsSchema,
 } from "@print/shared";
 import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
+import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { getSliceQueue } from "@/lib/queue";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
@@ -45,13 +46,12 @@ export async function POST(request: NextRequest) {
   if (typeof modelId !== "string" || !parsed.success) {
     return jsonError(422, "BAD_REQUEST", "Provide modelId and valid slice settings");
   }
-  const settings = parsed.data;
-
   // Ownership: the model must belong to the caller's session.
   const model = await prisma.uploadedModel.findFirst({
     where: { id: modelId, sessionId },
   });
   if (!model) return jsonError(404, "NOT_FOUND", "Model not found in this session");
+  const settings = normalizeModelConfigLocks(parsed.data, model);
 
   const key = settingsKey(settings);
 

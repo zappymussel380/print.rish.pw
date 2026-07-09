@@ -5,9 +5,15 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import busboy from "busboy";
 import { NextResponse, type NextRequest } from "next/server";
-import { prisma } from "@print/db";
-import { ModelParseError, parseModel, renderThumbnail } from "@print/geometry";
-import { CATALOG, formatFromFilename, sanitizeOriginalName } from "@print/shared";
+import { Prisma, prisma } from "@print/db";
+import {
+  extract3mfPlates,
+  ModelParseError,
+  parseModel,
+  renderThumbnail,
+  type ParsedModel,
+} from "@print/geometry";
+import { CATALOG, formatFromFilename, sanitizeOriginalName, type ModelConfig } from "@print/shared";
 import { guardMutation, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { RATE_LIMITS } from "@/lib/security";
@@ -15,7 +21,6 @@ import { getOrCreateQuoteSessionId } from "@/lib/session";
 import {
   ensureStorageDirs,
   modelPath,
-  moveIntoPlace,
   removeQuietly,
   thumbPath,
   tmpUploadPath,
@@ -39,6 +44,19 @@ interface StreamedFile {
   sizeBytes: number;
   sha256: string;
   truncated: boolean;
+}
+
+interface UploadedModelResponse {
+  id: string;
+  originalName: string;
+  format: string;
+  sizeBytes: number;
+  bboxMm: ParsedModel["bboxMm"];
+  volumeCm3: number;
+  triangleCount: number;
+  fitsBed: boolean;
+  defaultConfig?: Partial<ModelConfig>;
+  lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
 }
 
 /** Stream exactly one multipart file field to disk, hashing as it flows. */
@@ -98,6 +116,103 @@ async function streamUpload(request: NextRequest): Promise<StreamedFile | null> 
   return { tmpPath, originalName, sizeBytes, sha256: hash.digest("hex"), truncated };
 }
 
+function sha256(buf: Buffer): string {
+  return createHash("sha256").update(buf).digest("hex");
+}
+
+function fitsBed(parsed: ParsedModel): boolean {
+  const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
+  // Compare sorted dimensions so a part that fits when rotated still passes.
+  const dims = [parsed.bboxMm.x, parsed.bboxMm.y, parsed.bboxMm.z].sort((a, b) => a - b);
+  const bedSorted = [...bed].sort((a, b) => a - b);
+  return dims.every((d, i) => d <= bedSorted[i]!);
+}
+
+function plateOriginalName(originalName: string, index: number): string {
+  const stem = originalName.replace(/\.[^.]+$/, "");
+  return sanitizeOriginalName(`${stem} - plate ${String(index).padStart(2, "0")}.stl`);
+}
+
+async function persistUploadedModel(input: {
+  sessionId: string;
+  originalName: string;
+  format: string;
+  contents: Buffer;
+  parsed: ParsedModel;
+  fileHash: string;
+  defaultConfig?: Partial<ModelConfig>;
+  lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
+}): Promise<UploadedModelResponse> {
+  let id: string | null = null;
+  let finalPath: string | null = null;
+
+  try {
+    const model = await prisma.uploadedModel.create({
+      data: {
+        sessionId: input.sessionId,
+        originalName: input.originalName,
+        storedPath: "", // set below once the id exists
+        fileHash: input.fileHash,
+        sizeBytes: input.contents.length,
+        format: input.format,
+        bboxXMm: input.parsed.bboxMm.x,
+        bboxYMm: input.parsed.bboxMm.y,
+        bboxZMm: input.parsed.bboxMm.z,
+        volumeCm3: input.parsed.volumeCm3,
+        ...(input.defaultConfig
+          ? { defaultConfig: input.defaultConfig as Prisma.InputJsonValue }
+          : {}),
+        ...(input.lockedConfig ? { lockedConfig: input.lockedConfig as Prisma.InputJsonValue } : {}),
+      },
+    });
+    id = model.id;
+
+    finalPath = modelPath(model.id, input.format);
+    await writeFile(finalPath, input.contents, { mode: 0o600 });
+    // Persist storedPath immediately — the file now exists on disk, so the DB
+    // must point at it before anything else can fail, or retention (which skips
+    // rows with an empty storedPath) could never reclaim an orphaned file.
+    await prisma.uploadedModel.update({
+      where: { id: model.id },
+      data: { storedPath: finalPath },
+    });
+
+    // Render the preview thumbnail now, while the geometry is already parsed.
+    // Done here (not only in the slicer) so every upload has a preview even when
+    // its slice is served from cache and no worker job runs. Best-effort and
+    // strictly after the critical persist above — a thumbnail is a nicety and
+    // must never fail an upload or strand its file. Skipped for huge meshes
+    // (see MAX_INLINE_THUMB_TRIANGLES) — the worker renders those on first slice.
+    if (input.parsed.triangleCount <= MAX_INLINE_THUMB_TRIANGLES) {
+      try {
+        await ensureStorageDirs();
+        const tp = thumbPath(model.id);
+        await writeFile(tp, renderThumbnail(input.parsed.positions, THUMB_SIZE));
+        await prisma.uploadedModel.update({ where: { id: model.id }, data: { thumbPath: tp } });
+      } catch {
+        // ignore — the worker still renders one on first slice as a fallback
+      }
+    }
+
+    return {
+      id: model.id,
+      originalName: input.originalName,
+      format: input.format,
+      sizeBytes: input.contents.length,
+      bboxMm: input.parsed.bboxMm,
+      volumeCm3: Number(input.parsed.volumeCm3.toFixed(3)),
+      triangleCount: input.parsed.triangleCount,
+      fitsBed: fitsBed(input.parsed),
+      defaultConfig: input.defaultConfig,
+      lockedConfig: input.lockedConfig,
+    };
+  } catch (err) {
+    await removeQuietly(finalPath);
+    if (id) await prisma.uploadedModel.delete({ where: { id } }).catch(() => {});
+    throw err;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const guard = await guardMutation(request, "upload", RATE_LIMITS.upload);
   if (guard) return guard;
@@ -145,11 +260,72 @@ export async function POST(request: NextRequest) {
       return jsonError(422, "EMPTY_FILE", "The uploaded file is empty or incomplete");
     }
 
+    const contents = await readFile(file.tmpPath);
+
+    // Bambu/Orca project 3MFs can contain several printable plates. Treat each
+    // plate as a separate clean STL-backed model so the customer sees the same
+    // printable units the slicer project intended, and so Orca never has to
+    // ingest stale or incompatible project-level 3MF settings.
+    if (format === "3mf") {
+      let plates;
+      try {
+        plates = extract3mfPlates(contents);
+      } catch (err) {
+        if (err instanceof ModelParseError) {
+          return jsonError(422, `INVALID_MODEL_${err.code}`, err.message);
+        }
+        throw err;
+      }
+
+      if (plates.length > 1) {
+        if (existing + plates.length > env.maxModelsPerSession) {
+          return jsonError(
+            422,
+            "TOO_MANY_MODELS",
+            `This 3MF contains ${plates.length} plates, but this quote only has room for ${
+              env.maxModelsPerSession - existing
+            } more model(s)`,
+          );
+        }
+
+        const created: UploadedModelResponse[] = [];
+        try {
+          for (const plate of plates) {
+            created.push(
+              await persistUploadedModel({
+                sessionId,
+                originalName: plateOriginalName(originalName, plate.index),
+                format: "stl",
+                contents: plate.stl,
+                parsed: plate.model,
+                fileHash: sha256(plate.stl),
+                defaultConfig: { supports: plate.configuredSupports ? "auto" : "off" },
+                lockedConfig: { supports: true },
+              }),
+            );
+          }
+        } catch (err) {
+          await Promise.all(
+            created.map((model) =>
+              Promise.all([
+                prisma.uploadedModel.delete({ where: { id: model.id } }).catch(() => undefined),
+                removeQuietly(modelPath(model.id, model.format)),
+                removeQuietly(thumbPath(model.id)),
+              ]),
+            ),
+          );
+          throw err;
+        }
+
+        return NextResponse.json({ model: created[0], models: created }, { status: 201 });
+      }
+    }
+
     // Full structural validation: if the geometry parser accepts it, it is a
     // real model of the declared format — far stronger than magic bytes alone.
-    let parsed;
+    let parsed: ParsedModel;
     try {
-      parsed = parseModel(await readFile(file.tmpPath), format);
+      parsed = parseModel(contents, format);
     } catch (err) {
       if (err instanceof ModelParseError) {
         return jsonError(422, `INVALID_MODEL_${err.code}`, err.message);
@@ -157,66 +333,19 @@ export async function POST(request: NextRequest) {
       throw err;
     }
 
-    const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
-    // Compare sorted dimensions so a part that fits when rotated still passes.
-    const dims = [parsed.bboxMm.x, parsed.bboxMm.y, parsed.bboxMm.z].sort((a, b) => a - b);
-    const bedSorted = [...bed].sort((a, b) => a - b);
-    const fitsBed = dims.every((d, i) => d <= bedSorted[i]!);
-
-    const model = await prisma.uploadedModel.create({
-      data: {
-        sessionId,
-        originalName,
-        storedPath: "", // set below once the id exists
-        fileHash: file.sha256,
-        sizeBytes: file.sizeBytes,
-        format,
-        bboxXMm: parsed.bboxMm.x,
-        bboxYMm: parsed.bboxMm.y,
-        bboxZMm: parsed.bboxMm.z,
-        volumeCm3: parsed.volumeCm3,
-      },
+    const model = await persistUploadedModel({
+      sessionId,
+      originalName,
+      format,
+      contents,
+      parsed,
+      fileHash: file.sha256,
     });
-
-    const finalPath = modelPath(model.id, format);
-    await moveIntoPlace(file.tmpPath, finalPath);
-    // Persist storedPath immediately — the file now exists on disk, so the DB
-    // must point at it before anything else can fail, or retention (which skips
-    // rows with an empty storedPath) could never reclaim an orphaned file.
-    await prisma.uploadedModel.update({
-      where: { id: model.id },
-      data: { storedPath: finalPath },
-    });
-
-    // Render the preview thumbnail now, while the geometry is already parsed.
-    // Done here (not only in the slicer) so every upload has a preview even when
-    // its slice is served from cache and no worker job runs. Best-effort and
-    // strictly after the critical persist above — a thumbnail is a nicety and
-    // must never fail an upload or strand its file. Skipped for huge meshes
-    // (see MAX_INLINE_THUMB_TRIANGLES) — the worker renders those on first slice.
-    if (parsed.triangleCount <= MAX_INLINE_THUMB_TRIANGLES) {
-      try {
-        await ensureStorageDirs();
-        const tp = thumbPath(model.id);
-        await writeFile(tp, renderThumbnail(parsed.positions, THUMB_SIZE));
-        await prisma.uploadedModel.update({ where: { id: model.id }, data: { thumbPath: tp } });
-      } catch {
-        // ignore — the worker still renders one on first slice as a fallback
-      }
-    }
 
     return NextResponse.json(
       {
-        model: {
-          id: model.id,
-          originalName,
-          format,
-          sizeBytes: file.sizeBytes,
-          bboxMm: parsed.bboxMm,
-          volumeCm3: Number(parsed.volumeCm3.toFixed(3)),
-          triangleCount: parsed.triangleCount,
-          fitsBed,
-        },
+        model,
+        models: [model],
       },
       { status: 201 },
     );

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
-import { CATALOG, type BoundingBoxMm } from "@print/shared";
+import { CATALOG, modelConfigSchema, type BoundingBoxMm, type ModelConfig } from "@print/shared";
 import { assertBodySize, jsonError } from "@/lib/api-util";
 import { assertSameOrigin } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
@@ -19,6 +19,8 @@ type RestorableModelRow = {
   bboxYMm: number | null;
   bboxZMm: number | null;
   volumeCm3: number | null;
+  defaultConfig: unknown;
+  lockedConfig: unknown;
 };
 
 function fitsBed(bboxMm: BoundingBoxMm): boolean {
@@ -43,7 +45,25 @@ function serializeModel(model: RestorableModelRow): UploadedModelDto {
     bboxMm,
     volumeCm3: model.volumeCm3 ?? 0,
     fitsBed: fitsBed(bboxMm),
+    defaultConfig: parseDefaultConfig(model.defaultConfig),
+    lockedConfig: parseLockedConfig(model.lockedConfig),
   };
+}
+
+function parseDefaultConfig(value: unknown): Partial<ModelConfig> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const parsed = modelConfigSchema.partial().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function parseLockedConfig(value: unknown): Partial<Record<keyof ModelConfig, true>> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const locks: Partial<Record<keyof ModelConfig, true>> = {};
+  const record = value as Record<string, unknown>;
+  for (const key of ["material", "colour", "layerHeightUm", "infillPct", "supports", "quantity"] as const) {
+    if (record[key] === true) locks[key] = true;
+  }
+  return Object.keys(locks).length > 0 ? locks : undefined;
 }
 
 /** How many *unattached* models the current quote session holds — uploads not
@@ -71,6 +91,8 @@ export async function GET(request: NextRequest) {
         bboxYMm: true,
         bboxZMm: true,
         volumeCm3: true,
+        defaultConfig: true,
+        lockedConfig: true,
       },
     });
     return NextResponse.json({ count: models.length, models: models.map(serializeModel) });

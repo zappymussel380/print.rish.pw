@@ -1,4 +1,4 @@
-import type { BoundingBoxMm, MaterialId } from "@print/shared";
+import type { BoundingBoxMm, MaterialId, ModelConfig } from "@print/shared";
 
 /** Shape returned by POST /api/uploads on success. */
 export interface UploadedModelDto {
@@ -10,6 +10,13 @@ export interface UploadedModelDto {
   volumeCm3: number;
   triangleCount?: number;
   fitsBed: boolean;
+  defaultConfig?: Partial<ModelConfig>;
+  lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
+}
+
+interface UploadResponse {
+  model?: UploadedModelDto;
+  models?: UploadedModelDto[];
 }
 
 export interface UploadError {
@@ -32,14 +39,14 @@ export function defaultMaterialColour(): { material: MaterialId; colour: "black"
 
 /**
  * Upload a single file with real progress events. Uses XHR (not fetch) because
- * only XHR exposes `upload.onprogress`. Resolves with the created model, or
- * rejects with a structured {code, message} that the UI can surface.
+ * only XHR exposes `upload.onprogress`. Resolves with every created model; a
+ * multi-plate 3MF can intentionally expand into several model rows.
  */
 export function uploadModel(
   file: File,
   onProgress: (fraction: number) => void,
   signal?: AbortSignal,
-): Promise<UploadedModelDto> {
+): Promise<UploadedModelDto[]> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const form = new FormData();
@@ -61,8 +68,19 @@ export function uploadModel(
       } catch {
         /* non-JSON error page */
       }
-      if (xhr.status >= 200 && xhr.status < 300 && body && (body as { model?: unknown }).model) {
-        resolve((body as { model: UploadedModelDto }).model);
+      if (xhr.status >= 200 && xhr.status < 300 && body) {
+        const success = body as UploadResponse;
+        if (Array.isArray(success.models) && success.models.length > 0) {
+          resolve(success.models);
+          return;
+        }
+        if (success.model) {
+          resolve([success.model]);
+          return;
+        }
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        reject({ code: "UPLOAD_FAILED", message: "Upload succeeded but returned no models" });
         return;
       }
       const err = body as { error?: UploadError } | null;

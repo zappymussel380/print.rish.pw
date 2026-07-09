@@ -41,7 +41,8 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
   const [dragging, setDragging] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicatePrompt[]>([]);
-  const { models, addUploading, setProgress, markReady, markError, updateConfig } = useQuoteStore();
+  const { models, addUploading, setProgress, markReadyMany, markError, updateConfig } =
+    useQuoteStore();
 
   // Upload a set of files, honouring the per-quote model limit at call time.
   const startUploads = useCallback(
@@ -62,8 +63,8 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
 
       await runPooled(tagged, MAX_PARALLEL, async ({ file, key }) => {
         try {
-          const model = await uploadModel(file, (frac) => setProgress(key, frac));
-          markReady(key, model);
+          const uploadedModels = await uploadModel(file, (frac) => setProgress(key, frac));
+          markReadyMany(key, uploadedModels);
         } catch (err) {
           const message =
             err && typeof err === "object" && "message" in err
@@ -73,7 +74,7 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
         }
       });
     },
-    [addUploading, markError, markReady, maxModels, setProgress],
+    [addUploading, markError, markReadyMany, maxModels, setProgress],
   );
 
   const accept = useCallback(

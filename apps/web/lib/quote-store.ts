@@ -58,6 +58,7 @@ interface QuoteState {
   addUploading: (key: string, fileName: string, sizeBytes: number) => void;
   setProgress: (key: string, progress: number) => void;
   markReady: (key: string, server: UploadedModelDto) => void;
+  markReadyMany: (key: string, servers: UploadedModelDto[]) => void;
   markError: (key: string, error: string) => void;
   updateConfig: (key: string, patch: Partial<ModelConfig>) => void;
   restoreModels: (models: UploadedModelDto[]) => void;
@@ -90,10 +91,40 @@ export const useQuoteStore = create<QuoteState>((set) => ({
     set((s) => ({
       models: s.models.map((m) =>
         m.key === key
-          ? { ...m, key: server.id, status: "ready", progress: 1, server, error: undefined }
+          ? {
+              ...m,
+              key: server.id,
+              status: "ready",
+              progress: 1,
+              server,
+              error: undefined,
+              config: { ...m.config, ...server.defaultConfig },
+            }
           : m,
       ),
     })),
+
+  markReadyMany: (key, servers) =>
+    set((s) => {
+      if (servers.length === 0) return s;
+      const index = s.models.findIndex((m) => m.key === key);
+      if (index === -1) return s;
+
+      const current = s.models[index]!;
+      const ready = servers.map((server) => ({
+        key: server.id,
+        fileName: server.originalName,
+        sizeBytes: server.sizeBytes,
+        status: "ready" as const,
+        progress: 1,
+        server,
+        error: undefined,
+        config: { ...current.config, ...server.defaultConfig },
+      }));
+      const models = [...s.models];
+      models.splice(index, 1, ...ready);
+      return { models, shipping: null };
+    }),
 
   markError: (key, error) =>
     set((s) => ({
@@ -102,7 +133,9 @@ export const useQuoteStore = create<QuoteState>((set) => ({
 
   updateConfig: (key, patch) =>
     set((s) => ({
-      models: s.models.map((m) => (m.key === key ? { ...m, config: { ...m.config, ...patch } } : m)),
+      models: s.models.map((m) =>
+        m.key === key ? { ...m, config: { ...m.config, ...filterUnlocked(m, patch) } } : m,
+      ),
     })),
 
   restoreModels: (models) =>
@@ -117,7 +150,7 @@ export const useQuoteStore = create<QuoteState>((set) => ({
           status: "ready",
           progress: 1,
           server,
-          config: { ...DEFAULT_MODEL_CONFIG },
+          config: { ...DEFAULT_MODEL_CONFIG, ...server.defaultConfig },
         }));
       if (restored.length === 0) return s;
       return { models: [...s.models, ...restored], shipping: null };
@@ -132,3 +165,13 @@ export const useQuoteStore = create<QuoteState>((set) => ({
 
   setShipping: (shipping) => set({ shipping }),
 }));
+
+function filterUnlocked(model: QuoteModel, patch: Partial<ModelConfig>): Partial<ModelConfig> {
+  const locked = model.server?.lockedConfig;
+  if (!locked) return patch;
+  const next = { ...patch };
+  for (const key of Object.keys(locked) as (keyof ModelConfig)[]) {
+    delete next[key];
+  }
+  return next;
+}

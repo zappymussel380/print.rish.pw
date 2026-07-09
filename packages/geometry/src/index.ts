@@ -5,6 +5,7 @@ import { parse3mf } from "./threemf";
 import { ModelParseError, type ParsedModel } from "./types";
 
 export { looksLikeAsciiStl, looksLikeBinaryStl } from "./stl";
+export { extract3mfPlates, PREARRANGED_PLATE_STL_HEADER } from "./threemf";
 export { isZip } from "./zip";
 export { renderThumbnail } from "./thumbnail";
 export { MAX_TRIANGLES, ModelParseError } from "./types";

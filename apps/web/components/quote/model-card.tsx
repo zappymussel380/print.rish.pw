@@ -154,7 +154,11 @@ export function ModelCard({ model }: { model: QuoteModel }) {
               <SliceStatsRow slice={slice} line={line} />
 
               <div className="mt-5 border-t border-line pt-5">
-                <SettingsPanel modelKey={model.key} config={model.config} />
+                <SettingsPanel
+                  modelKey={model.key}
+                  config={model.config}
+                  lockedConfig={server.lockedConfig}
+                />
               </div>
             </>
           )}

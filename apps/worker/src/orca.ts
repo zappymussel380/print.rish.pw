@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
+import { PREARRANGED_PLATE_STL_HEADER } from "@print/geometry";
 import type { SliceSettings } from "@print/shared";
 import { MACHINE_PROFILE, config, filamentProfile, processProfile } from "./config.js";
 
@@ -46,6 +47,7 @@ async function writeJobProcess(workDir: string, settings: SliceSettings): Promis
 interface RunResult {
   code: number | null;
   timedOut: boolean;
+  stdoutTail: string;
   stderrTail: string;
 }
 
@@ -68,12 +70,16 @@ function runOrca(args: string[], cwd: string): Promise<RunResult> {
       },
     });
 
+    let stdout = "";
     let stderr = "";
+    child.stdout.on("data", (b: Buffer) => {
+      stdout += b.toString();
+      if (stdout.length > 8000) stdout = stdout.slice(-8000);
+    });
     child.stderr.on("data", (b: Buffer) => {
       stderr += b.toString();
       if (stderr.length > 8000) stderr = stderr.slice(-8000);
     });
-    child.stdout.on("data", () => {});
 
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -87,7 +93,12 @@ function runOrca(args: string[], cwd: string): Promise<RunResult> {
 
     const finish = (code: number | null) => {
       clearTimeout(timer);
-      resolvePromise({ code, timedOut, stderrTail: stderr.slice(-1200) });
+      resolvePromise({
+        code,
+        timedOut,
+        stdoutTail: stdout.slice(-1200),
+        stderrTail: stderr.slice(-1200),
+      });
     };
     child.on("error", () => finish(-1));
     child.on("close", (code) => finish(code));
@@ -107,8 +118,9 @@ export async function runSlice(
   const jobProcess = await writeJobProcess(workDir, settings);
   const machine = join(config.profilesDir, MACHINE_PROFILE);
   const filament = join(config.profilesDir, filamentProfile(settings.material));
+  const prearrangedPlate = await isPrearrangedPlateStl(storedPath);
 
-  const run = await runOrca([
+  const args = [
     "--datadir",
     config.orcaDataDir,
     "--load-settings",
@@ -116,9 +128,9 @@ export async function runSlice(
     "--load-filaments",
     filament,
     "--orient",
-    "1",
+    prearrangedPlate ? "0" : "1",
     "--arrange",
-    "1",
+    prearrangedPlate ? "0" : "1",
     "--slice",
     "0",
     "--export-3mf",
@@ -129,8 +141,11 @@ export async function runSlice(
     "1",
     "--logfile",
     join(workDir, "orca.log"),
-    storedPath,
-  ], workDir);
+  ];
+  if (prearrangedPlate) args.push("--ensure-on-bed");
+  args.push(storedPath);
+
+  const run = await runOrca(args, workDir);
 
   if (run.timedOut) {
     return fail("TIMEOUT", `Slicing exceeded ${Math.round(config.sliceTimeoutMs / 1000)}s`, run);
@@ -140,20 +155,101 @@ export async function runSlice(
   try {
     archive = await readFile(join(workDir, "out.3mf"));
   } catch {
-    return fail("NO_OUTPUT", "Slicer produced no output", run);
+    const detail = await describeMissingOutput(workDir, run);
+    return fail(detail.code, detail.message, run, detail.rawMeta);
   }
 
   return parseSliceInfo(archive, run);
 }
 
-function fail(code: string, message: string, run: RunResult): SliceOutcome {
+async function isPrearrangedPlateStl(storedPath: string): Promise<boolean> {
+  if (!storedPath.toLowerCase().endsWith(".stl")) return false;
+  const header = Buffer.alloc(80);
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    handle = await open(storedPath, "r");
+    await handle.read(header, 0, header.length, 0);
+    return header.toString("ascii").startsWith(PREARRANGED_PLATE_STL_HEADER);
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+function fail(
+  code: string,
+  message: string,
+  run: RunResult,
+  rawMeta: Record<string, unknown> = {},
+): SliceOutcome {
   return {
     ok: false,
     slicerVersion: config.slicerVersion,
     errorCode: code,
     errorMessage: message,
-    rawMeta: { returnCode: run.code, stderrTail: run.stderrTail },
+    rawMeta: {
+      returnCode: run.code,
+      stdoutTail: run.stdoutTail,
+      stderrTail: run.stderrTail,
+      ...rawMeta,
+    },
   };
+}
+
+async function describeMissingOutput(
+  workDir: string,
+  run: RunResult,
+): Promise<{ code: string; message: string; rawMeta?: Record<string, unknown> }> {
+  const result = await readOrcaResult(workDir);
+  const errorString =
+    result && typeof result.error_string === "string" ? result.error_string.trim() : "";
+  const stdoutDetail = usefulStdoutDetail(run.stdoutTail);
+
+  if (errorString) {
+    return {
+      code: "SLICER_REJECTED_MODEL",
+      message: stdoutDetail ? `${sentence(errorString)} ${stdoutDetail}` : sentence(errorString),
+      rawMeta: { orcaResult: result },
+    };
+  }
+  if (stdoutDetail) {
+    return {
+      code: "SLICER_NO_OUTPUT",
+      message: `Slicer produced no output. ${stdoutDetail}`,
+      rawMeta: result ? { orcaResult: result } : undefined,
+    };
+  }
+  return {
+    code: "NO_OUTPUT",
+    message: "Slicer produced no output",
+    rawMeta: result ? { orcaResult: result } : undefined,
+  };
+}
+
+async function readOrcaResult(workDir: string): Promise<Record<string, unknown> | null> {
+  try {
+    return JSON.parse(await readFile(join(workDir, "result.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return null;
+  }
+}
+
+function usefulStdoutDetail(stdout: string): string {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const paramHeader = lines.findIndex((line) => line.includes("Param values"));
+  if (paramHeader >= 0 && lines[paramHeader + 1]) return lines[paramHeader + 1]!;
+  return "";
+}
+
+function sentence(message: string): string {
+  return /[.!?]$/.test(message) ? message : `${message}.`;
 }
 
 const attr = (xml: string, re: RegExp): string | undefined => xml.match(re)?.[1];

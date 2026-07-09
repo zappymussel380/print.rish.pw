@@ -20,9 +20,18 @@ const SUPPORT_LABEL: Record<(typeof SUPPORT_MODES)[number], string> = {
   always: "Always",
 };
 
-export function SettingsPanel({ modelKey, config }: { modelKey: string; config: ModelConfig }) {
+export function SettingsPanel({
+  modelKey,
+  config,
+  lockedConfig,
+}: {
+  modelKey: string;
+  config: ModelConfig;
+  lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
+}) {
   const update = useQuoteStore((s) => s.updateConfig);
   const set = (patch: Partial<ModelConfig>) => update(modelKey, patch);
+  const supportLocked = lockedConfig?.supports === true;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -69,6 +78,7 @@ export function SettingsPanel({ modelKey, config }: { modelKey: string; config: 
         <Segmented
           value={config.supports}
           options={SUPPORT_MODES.map((s) => ({ value: s, label: SUPPORT_LABEL[s] }))}
+          disabledValues={supportLocked ? SUPPORT_MODES.filter((s) => s !== config.supports) : []}
           onChange={(v) => set({ supports: v })}
         />
       </Field>
@@ -228,24 +238,28 @@ function InfoTip({ label, children }: { label: string; children: React.ReactNode
 function Segmented<T extends string | number>({
   value,
   options,
+  disabledValues = [],
   onChange,
 }: {
   value: T;
   options: { value: T; label: string }[];
+  disabledValues?: readonly T[];
   onChange: (v: T) => void;
 }) {
   return (
     <div className="inline-flex w-full rounded-full border border-line p-0.5" role="group">
       {options.map((o) => {
         const active = o.value === value;
+        const disabled = disabledValues.includes(o.value);
         return (
           <button
             key={String(o.value)}
             type="button"
             aria-pressed={active}
+            disabled={disabled}
             onClick={() => onChange(o.value)}
-            className={`flex-1 rounded-full px-3 py-1.5 text-sm font-[600] transition-colors ${
-              active ? "text-bg" : "text-muted hover:text-text"
+            className={`flex-1 rounded-full px-3 py-1.5 text-sm font-[600] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+              active ? "text-bg" : "text-muted hover:text-text disabled:hover:text-muted"
             }`}
             style={active ? { background: "var(--accent)" } : undefined}
           >

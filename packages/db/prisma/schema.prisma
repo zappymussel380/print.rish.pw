@@ -63,6 +63,12 @@ model UploadedModel {
   bboxZMm      Float?
   volumeCm3    Float?
   thumbPath    String?
+  /// Optional server-provided UI defaults inferred from source files, e.g.
+  /// Bambu/Orca 3MF plate support settings.
+  defaultConfig Json?
+  /// Optional locked config fields; the server normalizes these before
+  /// slicing/pricing so source-file constraints beat client input.
+  lockedConfig  Json?
   createdAt    DateTime @default(now())
 
   items QuotationItem[]
