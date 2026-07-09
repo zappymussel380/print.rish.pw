@@ -11,6 +11,7 @@ export interface UploadedModelDto {
   triangleCount?: number;
   fitsBed: boolean;
   defaultConfig?: Partial<ModelConfig>;
+  sourceConfig?: Partial<ModelConfig>;
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
 }
 

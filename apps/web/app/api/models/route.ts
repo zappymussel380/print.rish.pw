@@ -20,6 +20,7 @@ type RestorableModelRow = {
   bboxZMm: number | null;
   volumeCm3: number | null;
   defaultConfig: unknown;
+  sourceConfig: unknown;
   lockedConfig: unknown;
 };
 
@@ -46,6 +47,7 @@ function serializeModel(model: RestorableModelRow): UploadedModelDto {
     volumeCm3: model.volumeCm3 ?? 0,
     fitsBed: fitsBed(bboxMm),
     defaultConfig: parseDefaultConfig(model.defaultConfig),
+    sourceConfig: parseDefaultConfig(model.sourceConfig),
     lockedConfig: parseLockedConfig(model.lockedConfig),
   };
 }
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
         bboxZMm: true,
         volumeCm3: true,
         defaultConfig: true,
+        sourceConfig: true,
         lockedConfig: true,
       },
     });

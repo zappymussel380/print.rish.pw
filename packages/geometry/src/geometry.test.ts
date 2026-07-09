@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { extract3mfPlates, ModelParseError, parseModel } from "./index";
+import { extract3mfPlates, extract3mfSourceConfig, ModelParseError, parseModel } from "./index";
 import { MAX_XML_BYTES, parseXml } from "./xml";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "..", "fixtures", name));
@@ -114,7 +114,11 @@ describe("parseModel", () => {
       </model>`;
     const settings = `<?xml version="1.0" encoding="UTF-8"?>
       <config>
-        <object id="2"><metadata key="enable_support" value="1"/></object>
+        <object id="1"><metadata key="extruder" value="1"/></object>
+        <object id="2">
+          <metadata key="enable_support" value="1"/>
+          <metadata key="extruder" value="1"/>
+        </object>
         <plate>
           <metadata key="plater_id" value="1"/>
           <model_instance><metadata key="object_id" value="1"/></model_instance>
@@ -124,6 +128,12 @@ describe("parseModel", () => {
           <model_instance><metadata key="object_id" value="2"/></model_instance>
         </plate>
       </config>`;
+    const projectSettings = JSON.stringify({
+      filament_type: ["PETG"],
+      layer_height: "0.16",
+      sparse_infill_density: "25%",
+      enable_support: "0",
+    });
     const archive = Buffer.from(
       zipSync({
         "[Content_Types].xml": strToU8("<Types/>"),
@@ -131,15 +141,27 @@ describe("parseModel", () => {
         "3D/Objects/object_1.model": strToU8(objectModel(10)),
         "3D/Objects/object_2.model": strToU8(objectModel(20)),
         "Metadata/model_settings.config": strToU8(settings),
+        "Metadata/project_settings.config": strToU8(projectSettings),
       }),
     );
 
     const full = parseModel(archive, "3mf");
     const plates = extract3mfPlates(archive);
+    const source = extract3mfSourceConfig(archive);
 
     expect(full.bboxMm.x).toBeCloseTo(320, 3);
     expect(plates).toHaveLength(2);
     expect(plates.map((plate) => plate.configuredSupports)).toEqual([false, true]);
+    expect(plates.map((plate) => plate.sourceConfig)).toEqual([
+      { material: "PETG", layerHeightUm: 160, infillPct: 25, supports: "off" },
+      { material: "PETG", layerHeightUm: 160, infillPct: 25, supports: "auto" },
+    ]);
+    expect(source).toEqual({
+      material: "PETG",
+      layerHeightUm: 160,
+      infillPct: 25,
+      supports: "auto",
+    });
     for (const plate of plates) {
       expect(plate.model.bboxMm).toEqual({ x: 20, y: 20, z: 20 });
       expect(parseModel(plate.stl, "stl").bboxMm).toEqual({ x: 20, y: 20, z: 20 });

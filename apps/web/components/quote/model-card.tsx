@@ -157,6 +157,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
                 <SettingsPanel
                   modelKey={model.key}
                   config={model.config}
+                  sourceConfig={server.sourceConfig}
                   lockedConfig={server.lockedConfig}
                 />
               </div>

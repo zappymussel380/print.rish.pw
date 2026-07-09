@@ -23,10 +23,12 @@ const SUPPORT_LABEL: Record<(typeof SUPPORT_MODES)[number], string> = {
 export function SettingsPanel({
   modelKey,
   config,
+  sourceConfig,
   lockedConfig,
 }: {
   modelKey: string;
   config: ModelConfig;
+  sourceConfig?: Partial<ModelConfig>;
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
 }) {
   const update = useQuoteStore((s) => s.updateConfig);
@@ -38,6 +40,7 @@ export function SettingsPanel({
       <Field
         label="Material"
         info="PLA is stiff and easy to print — ideal for prototypes, models and display pieces. PETG is tougher and more heat- and moisture-resistant — better for functional or outdoor parts."
+        notice={sourceNotice("material", config, sourceConfig)}
       >
         <Segmented
           value={config.material}
@@ -63,6 +66,7 @@ export function SettingsPanel({
       <Field
         label="Layer height"
         info="The thickness of each printed layer. 0.12 mm gives the finest detail but prints slowest; 0.20 mm (the default) is the fastest and most economical, with more visible layer lines; 0.16 mm sits in between."
+        notice={sourceNotice("layerHeightUm", config, sourceConfig)}
       >
         <Segmented
           value={config.layerHeightUm}
@@ -73,7 +77,18 @@ export function SettingsPanel({
 
       <Field
         label="Supports"
-        info="Temporary scaffolding printed under steep overhangs so they don't droop or fail. Turning supports off can lower the price, but parts with overhangs may fail to print without them. Leave this on Auto — it adds supports only where the model actually needs them."
+        info={
+          <>
+            Temporary scaffolding printed under steep overhangs so they don't droop or fail.
+            Turning supports off can lower the price, but parts with overhangs may fail to print
+            without them. Leave this on Auto because it adds supports only where the model actually
+            needs them.
+            {supportLocked
+              ? " Support mode is locked because this 3MF plate included support instructions. We keep it as imported so the generated print matches the file's intended setup."
+              : ""}
+          </>
+        }
+        notice={sourceNotice("supports", config, sourceConfig)}
       >
         <Segmented
           value={config.supports}
@@ -83,7 +98,7 @@ export function SettingsPanel({
         />
       </Field>
 
-      <Field label={`Infill · ${config.infillPct}%`}>
+      <Field label={`Infill · ${config.infillPct}%`} notice={sourceNotice("infillPct", config, sourceConfig)}>
         <input
           type="range"
           min={INFILL_MIN_PCT}
@@ -113,10 +128,12 @@ export function SettingsPanel({
 function Field({
   label,
   info,
+  notice,
   children,
 }: {
   label: string;
   info?: React.ReactNode;
+  notice?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -126,8 +143,35 @@ function Field({
         {info ? <InfoTip label={label}>{info}</InfoTip> : null}
       </span>
       {children}
+      {notice ? (
+        <span className="mt-2 block rounded-md border border-accent/35 bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-3 py-2 text-xs leading-5 text-muted">
+          {notice}
+        </span>
+      ) : null}
     </label>
   );
+}
+
+function sourceNotice(
+  key: "material" | "layerHeightUm" | "infillPct" | "supports",
+  config: ModelConfig,
+  sourceConfig?: Partial<ModelConfig>,
+): string | undefined {
+  const sourceValue = sourceConfig?.[key];
+  if (sourceValue === undefined || config[key] === sourceValue) return undefined;
+  return `Changed from the 3MF profile (${sourceValueLabel(key, sourceValue)}). This may print differently than the uploaded file intended.`;
+}
+
+function sourceValueLabel(
+  key: "material" | "layerHeightUm" | "infillPct" | "supports",
+  value: NonNullable<Partial<ModelConfig>[typeof key]>,
+): string {
+  if (key === "layerHeightUm" && typeof value === "number") return `${(value / 1000).toFixed(2)}mm`;
+  if (key === "infillPct" && typeof value === "number") return `${value}%`;
+  if (key === "supports" && typeof value === "string") {
+    return value in SUPPORT_LABEL ? SUPPORT_LABEL[value as keyof typeof SUPPORT_LABEL] : value;
+  }
+  return String(value);
 }
 
 /** A tap/click info affordance next to a setting label. Opens a small popover

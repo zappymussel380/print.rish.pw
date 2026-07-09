@@ -8,12 +8,24 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma, prisma } from "@print/db";
 import {
   extract3mfPlates,
+  extract3mfSourceConfig,
   ModelParseError,
   parseModel,
   renderThumbnail,
+  type ThreeMfSourceConfig,
   type ParsedModel,
 } from "@print/geometry";
-import { CATALOG, formatFromFilename, sanitizeOriginalName, type ModelConfig } from "@print/shared";
+import {
+  CATALOG,
+  INFILL_MAX_PCT,
+  INFILL_MIN_PCT,
+  LAYER_HEIGHTS_UM,
+  MATERIAL_IDS,
+  SUPPORT_MODES,
+  formatFromFilename,
+  sanitizeOriginalName,
+  type ModelConfig,
+} from "@print/shared";
 import { guardMutation, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { RATE_LIMITS } from "@/lib/security";
@@ -56,6 +68,7 @@ interface UploadedModelResponse {
   triangleCount: number;
   fitsBed: boolean;
   defaultConfig?: Partial<ModelConfig>;
+  sourceConfig?: Partial<ModelConfig>;
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
 }
 
@@ -141,6 +154,7 @@ async function persistUploadedModel(input: {
   parsed: ParsedModel;
   fileHash: string;
   defaultConfig?: Partial<ModelConfig>;
+  sourceConfig?: Partial<ModelConfig>;
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
 }): Promise<UploadedModelResponse> {
   let id: string | null = null;
@@ -162,6 +176,7 @@ async function persistUploadedModel(input: {
         ...(input.defaultConfig
           ? { defaultConfig: input.defaultConfig as Prisma.InputJsonValue }
           : {}),
+        ...(input.sourceConfig ? { sourceConfig: input.sourceConfig as Prisma.InputJsonValue } : {}),
         ...(input.lockedConfig ? { lockedConfig: input.lockedConfig as Prisma.InputJsonValue } : {}),
       },
     });
@@ -204,12 +219,50 @@ async function persistUploadedModel(input: {
       triangleCount: input.parsed.triangleCount,
       fitsBed: fitsBed(input.parsed),
       defaultConfig: input.defaultConfig,
+      sourceConfig: input.sourceConfig,
       lockedConfig: input.lockedConfig,
     };
   } catch (err) {
     await removeQuietly(finalPath);
     if (id) await prisma.uploadedModel.delete({ where: { id } }).catch(() => {});
     throw err;
+  }
+}
+
+function normalize3mfSourceConfig(raw: ThreeMfSourceConfig | null | undefined): Partial<ModelConfig> | undefined {
+  if (!raw) return undefined;
+
+  const source: Partial<ModelConfig> = {};
+  if (raw.material && (MATERIAL_IDS as readonly string[]).includes(raw.material)) {
+    source.material = raw.material as ModelConfig["material"];
+  }
+  if (
+    typeof raw.layerHeightUm === "number" &&
+    (LAYER_HEIGHTS_UM as readonly number[]).includes(raw.layerHeightUm)
+  ) {
+    source.layerHeightUm = raw.layerHeightUm as ModelConfig["layerHeightUm"];
+  }
+  const infillPct = raw.infillPct;
+  if (
+    Number.isInteger(infillPct) &&
+    infillPct !== undefined &&
+    infillPct >= INFILL_MIN_PCT &&
+    infillPct <= INFILL_MAX_PCT
+  ) {
+    source.infillPct = infillPct;
+  }
+  if (raw.supports && (SUPPORT_MODES as readonly string[]).includes(raw.supports)) {
+    source.supports = raw.supports as ModelConfig["supports"];
+  }
+
+  return Object.keys(source).length > 0 ? source : undefined;
+}
+
+function read3mfSourceConfig(contents: Buffer): Partial<ModelConfig> | undefined {
+  try {
+    return normalize3mfSourceConfig(extract3mfSourceConfig(contents));
+  } catch {
+    return undefined;
   }
 }
 
@@ -291,6 +344,9 @@ export async function POST(request: NextRequest) {
         const created: UploadedModelResponse[] = [];
         try {
           for (const plate of plates) {
+            const sourceConfig =
+              normalize3mfSourceConfig(plate.sourceConfig) ??
+              ({ supports: plate.configuredSupports ? "auto" : "off" } satisfies Partial<ModelConfig>);
             created.push(
               await persistUploadedModel({
                 sessionId,
@@ -299,7 +355,8 @@ export async function POST(request: NextRequest) {
                 contents: plate.stl,
                 parsed: plate.model,
                 fileHash: sha256(plate.stl),
-                defaultConfig: { supports: plate.configuredSupports ? "auto" : "off" },
+                defaultConfig: sourceConfig,
+                sourceConfig,
                 lockedConfig: { supports: true },
               }),
             );
@@ -340,6 +397,12 @@ export async function POST(request: NextRequest) {
       contents,
       parsed,
       fileHash: file.sha256,
+      ...(format === "3mf"
+        ? (() => {
+            const sourceConfig = read3mfSourceConfig(contents);
+            return sourceConfig ? { defaultConfig: sourceConfig, sourceConfig } : {};
+          })()
+        : {}),
     });
 
     return NextResponse.json(

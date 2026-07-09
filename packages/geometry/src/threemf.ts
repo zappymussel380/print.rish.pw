@@ -42,6 +42,7 @@ interface PlateDef {
   name: string;
   objectIds: string[];
   configuredSupports: boolean;
+  sourceConfig: ThreeMfSourceConfig;
 }
 
 interface ThreeMfProject {
@@ -50,14 +51,23 @@ interface ThreeMfProject {
   entriesByName: Map<string, ModelDocument>;
   meshCount: number;
   modelSettingsXml: string | null;
+  projectSettings: Record<string, unknown> | null;
 }
 
 export interface Extracted3mfPlate {
   index: number;
   name: string;
   configuredSupports: boolean;
+  sourceConfig: ThreeMfSourceConfig;
   model: ParsedModel;
   stl: Buffer;
+}
+
+export interface ThreeMfSourceConfig {
+  material?: string;
+  layerHeightUm?: number;
+  infillPct?: number;
+  supports?: "auto" | "off";
 }
 
 /**
@@ -81,7 +91,7 @@ export function extract3mfPlates(buf: Buffer): Extracted3mfPlate[] {
   const project = load3mfProject(buf);
   if (!project.modelSettingsXml) return [];
 
-  const plates = parsePlateSettings(project.modelSettingsXml);
+  const plates = parsePlateSettings(project.modelSettingsXml, project.projectSettings);
   if (plates.length <= 1) return [];
 
   const buildByObjectId = new Map<string, BuildItem[]>();
@@ -110,6 +120,7 @@ export function extract3mfPlates(buf: Buffer): Extracted3mfPlate[] {
       index: plate.index,
       name: plate.name,
       configuredSupports: plate.configuredSupports,
+      sourceConfig: plate.sourceConfig,
       model,
       stl: serializeBinaryStl(
         model.positions,
@@ -119,6 +130,21 @@ export function extract3mfPlates(buf: Buffer): Extracted3mfPlate[] {
   }
 
   return extracted;
+}
+
+/** Extract source print settings from Bambu/Orca-style 3MF project metadata. */
+export function extract3mfSourceConfig(buf: Buffer): ThreeMfSourceConfig | null {
+  const project = load3mfProject(buf);
+  const source = projectSourceConfig(project.projectSettings);
+
+  if (project.modelSettingsXml) {
+    const plateSettings = parsePlateSettings(project.modelSettingsXml, project.projectSettings);
+    const materials = uniqueDefined(plateSettings.map((plate) => plate.sourceConfig.material));
+    if (materials.length === 1) source.material = materials[0]!;
+    source.supports = plateSettings.some((plate) => plate.configuredSupports) ? "auto" : "off";
+  }
+
+  return Object.keys(source).length > 0 ? source : null;
 }
 
 function load3mfProject(buf: Buffer): ThreeMfProject {
@@ -143,6 +169,10 @@ function load3mfProject(buf: Buffer): ThreeMfProject {
     buf,
     (name) => name.toLowerCase() === "metadata/model_settings.config",
   );
+  const projectSettings = extractZipEntry(
+    buf,
+    (name) => name.toLowerCase() === "metadata/project_settings.config",
+  );
 
   return {
     main,
@@ -150,6 +180,7 @@ function load3mfProject(buf: Buffer): ThreeMfProject {
     entriesByName,
     meshCount,
     modelSettingsXml: settings ? settings.toString("utf8") : null,
+    projectSettings: projectSettings ? parseProjectSettings(projectSettings.toString("utf8")) : null,
   };
 }
 
@@ -197,17 +228,26 @@ function parseModelDocument(name: string, xml: string): ModelDocument {
   return { name, objects, buildItems };
 }
 
-function parsePlateSettings(xml: string): PlateDef[] {
+function parsePlateSettings(
+  xml: string,
+  projectSettings: Record<string, unknown> | null,
+): PlateDef[] {
   const doc = parseXml(xml, "3MF model settings");
   const root = doc.documentElement;
   if (!root) return [];
 
-  const supportedObjects = new Set(
-    childElements(root, "object")
-      .filter((object) => metadataValue(object, "enable_support") === "1")
-      .map((object) => object.getAttribute("id") ?? "")
-      .filter(Boolean),
-  );
+  const objectSettings = new Map<string, { extruder?: string; supports: boolean }>();
+  for (const object of childElements(root, "object")) {
+    const id = object.getAttribute("id") ?? "";
+    if (!id) continue;
+    objectSettings.set(id, {
+      extruder: metadataValue(object, "extruder") ?? undefined,
+      supports: metadataValue(object, "enable_support") === "1",
+    });
+  }
+
+  const projectSource = projectSourceConfig(projectSettings);
+  const globalSupports = projectSupports(projectSettings);
 
   return elements(root, "plate")
     .map((plate, i) => {
@@ -217,14 +257,130 @@ function parsePlateSettings(xml: string): PlateDef[] {
         .map((instance) => metadataValue(instance, "object_id"))
         .filter((id): id is string => !!id);
 
+      const configuredSupports =
+        globalSupports === "auto" || objectIds.some((id) => objectSettings.get(id)?.supports);
+      const supportMode: ThreeMfSourceConfig["supports"] = configuredSupports ? "auto" : "off";
       return {
         index,
         name: explicitName || `Plate ${index}`,
         objectIds,
-        configuredSupports: objectIds.some((id) => supportedObjects.has(id)),
+        configuredSupports,
+        sourceConfig: {
+          ...projectSource,
+          material: plateMaterial(objectIds, objectSettings, projectSettings) ?? projectSource.material,
+          supports: supportMode,
+        },
       };
     })
     .filter((plate) => plate.objectIds.length > 0);
+}
+
+function parseProjectSettings(json: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function projectSourceConfig(settings: Record<string, unknown> | null): ThreeMfSourceConfig {
+  if (!settings) return {};
+  const source: ThreeMfSourceConfig = {};
+
+  const material = projectMaterial(settings);
+  if (material) source.material = material;
+
+  const layerHeightUm = layerHeight(settings.layer_height);
+  if (layerHeightUm != null) source.layerHeightUm = layerHeightUm;
+
+  const infillPct = percent(settings.sparse_infill_density);
+  if (infillPct != null) source.infillPct = infillPct;
+
+  const supports = projectSupports(settings);
+  if (supports) source.supports = supports;
+
+  return source;
+}
+
+function projectSupports(settings: Record<string, unknown> | null): "auto" | "off" | undefined {
+  const value = settings?.enable_support;
+  if (value === "1" || value === 1 || value === true) return "auto";
+  if (value === "0" || value === 0 || value === false) return "off";
+  return undefined;
+}
+
+function projectMaterial(settings: Record<string, unknown>): string | undefined {
+  const filamentTypes = stringArray(settings.filament_type)
+    .map(normalizeMaterial)
+    .filter((value): value is string => !!value);
+  const unique = uniqueDefined(filamentTypes);
+  return unique.length === 1 ? unique[0] : undefined;
+}
+
+function plateMaterial(
+  objectIds: string[],
+  objectSettings: Map<string, { extruder?: string }>,
+  projectSettings: Record<string, unknown> | null,
+): string | undefined {
+  if (!projectSettings) return undefined;
+
+  const materials = objectIds
+    .map((id) => materialForExtruder(objectSettings.get(id)?.extruder, projectSettings))
+    .filter((value): value is string => !!value);
+  const unique = uniqueDefined(materials);
+  return unique.length === 1 ? unique[0] : undefined;
+}
+
+function materialForExtruder(
+  extruder: string | undefined,
+  settings: Record<string, unknown>,
+): string | undefined {
+  const filamentTypes = stringArray(settings.filament_type);
+  const index = Number(extruder) - 1;
+  if (!Number.isInteger(index) || index < 0 || index >= filamentTypes.length) return undefined;
+  return normalizeMaterial(filamentTypes[index]);
+}
+
+function normalizeMaterial(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const upper = value.trim().toUpperCase();
+  if (upper.includes("PETG")) return "PETG";
+  if (upper.includes("PLA")) return "PLA";
+  return undefined;
+}
+
+function layerHeight(value: unknown): number | undefined {
+  const mm = numberValue(value);
+  if (mm == null || mm <= 0) return undefined;
+  return Math.round(mm * 1000);
+}
+
+function percent(value: unknown): number | undefined {
+  if (typeof value === "string") {
+    const parsed = Number(value.trim().replace(/%$/, ""));
+    return Number.isFinite(parsed) ? Math.round(parsed) : undefined;
+  }
+  const parsed = numberValue(value);
+  return parsed == null ? undefined : Math.round(parsed);
+}
+
+function numberValue(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "string") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
+  return typeof value === "string" ? [value] : [];
+}
+
+function uniqueDefined<T>(values: readonly (T | undefined)[]): T[] {
+  return [...new Set(values.filter((value): value is T => value !== undefined))];
 }
 
 function resolveBuildItem(project: ThreeMfProject, item: BuildItem): Float32Array[] {

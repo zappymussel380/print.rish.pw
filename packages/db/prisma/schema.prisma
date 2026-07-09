@@ -66,6 +66,9 @@ model UploadedModel {
   /// Optional server-provided UI defaults inferred from source files, e.g.
   /// Bambu/Orca 3MF plate support settings.
   defaultConfig Json?
+  /// Original slicer settings read from source files. Used to explain when
+  /// customer changes may differ from the uploaded file's intended print.
+  sourceConfig  Json?
   /// Optional locked config fields; the server normalizes these before
   /// slicing/pricing so source-file constraints beat client input.
   lockedConfig  Json?
