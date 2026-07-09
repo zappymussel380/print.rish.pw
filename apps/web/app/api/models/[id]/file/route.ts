@@ -16,6 +16,11 @@ const MIME_BY_FORMAT: Record<string, string> = {
   amf: "application/x-amf",
 };
 
+function contentDispositionFilename(name: string): string {
+  const fallback = name.replace(/[^\x20-\x7e]|["\\]/g, "_") || "model";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
 /** Serve model bytes to the 3D viewer (session owner) or the admin. */
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -39,7 +44,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     headers: {
       "Content-Type": MIME_BY_FORMAT[model.format] ?? "application/octet-stream",
       "Content-Length": String(size),
-      "Content-Disposition": `attachment; filename="${model.id}.${model.format}"`,
+      "Content-Disposition": contentDispositionFilename(model.originalName),
       "Cache-Control": "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",
     },

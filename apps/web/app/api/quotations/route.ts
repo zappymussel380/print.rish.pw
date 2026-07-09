@@ -23,6 +23,7 @@ import { getQuoteSessionId } from "@/lib/session";
 import { verifyEstimateToken } from "@/lib/shipping";
 import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
 import { ensureStorageDirs, pdfPath } from "@/lib/storage";
+import { notifyNewQuotation } from "@/lib/telegram";
 import { buildWhatsAppUrl } from "@print/shared";
 
 export const runtime = "nodejs";
@@ -272,6 +273,36 @@ export async function POST(request: NextRequest) {
     { number: created.number, items: entries.length, totalPaise: grandTotalPaise, shippingPaise },
     "quotation created",
   );
+
+  await notifyNewQuotation({
+    number: created.number,
+    customer: {
+      name: customer.data.name,
+      email: customer.data.email,
+      phone: customer.data.phone,
+      city: customer.data.city,
+      notes: customer.data.notes,
+    },
+    lines: breakdown.lines.map((line, i) => {
+      const entry = entries[i]!;
+      return {
+        modelId: entry.modelId,
+        fileName: entry.fileName,
+        material: line.config.material,
+        colour: line.config.colour,
+        layerHeightUm: line.config.layerHeightUm,
+        infillPct: line.config.infillPct,
+        supports: line.config.supports,
+        quantity: line.config.quantity,
+        totalGrams: line.totalGrams,
+        totalPrintSeconds: line.totalPrintSeconds,
+        subtotalPaise: line.subtotalPaise,
+      };
+    }),
+    totalPaise: grandTotalPaise,
+    shippingPaise,
+    shippingPincode,
+  });
 
   const materialsSummary = summariseItems(
     entries.map((e) => ({ material: e.config.material, colour: e.config.colour, quantity: e.config.quantity })),

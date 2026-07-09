@@ -58,6 +58,20 @@ export const env = {
   get contactFrom() {
     return process.env.CONTACT_FROM ?? "print.rish.pw <contact@rish.pw>";
   },
+  // Optional Telegram order notifications. Empty values disable notifications
+  // without affecting checkout.
+  get telegramBotToken() {
+    return process.env.TELEGRAM_BOT_TOKEN ?? "";
+  },
+  get telegramChatId() {
+    return process.env.TELEGRAM_CHAT_ID ?? "";
+  },
+  get telegramMessageThreadId() {
+    const raw = process.env.TELEGRAM_MESSAGE_THREAD_ID;
+    if (!raw) return undefined;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  },
   // Shiprocket rate calculator. Credentials are secrets (no defaults) so a
   // misconfigured deploy returns NOT_CONFIGURED instead of silently failing.
   get shiprocketEmail() {
