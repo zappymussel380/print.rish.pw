@@ -23,13 +23,13 @@ export const metadata: Metadata = {
     "Upload STL, 3MF, OBJ or AMF models and get an instant, transparent 3D-printing quotation. PLA and PETG on a Bambu Lab A1, priced from real slicing data.",
 };
 
-// Applies the persisted theme before first paint; identical key ("rish-theme")
-// and attribute (data-theme) to the main rish.pw site.
-const themeInit = `(function(){try{var t=localStorage.getItem("rish-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`;
+// Applies explicit theme overrides before first paint. With no saved override,
+// CSS follows the browser's preferred color scheme.
+const themeInit = `(function(){try{var t=localStorage.getItem("rish-theme");var d=document.documentElement;if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}else{d.removeAttribute("data-theme");}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans bg-bg text-text min-h-dvh flex flex-col`}>
         <Script id="theme-init" strategy="beforeInteractive">
           {themeInit}

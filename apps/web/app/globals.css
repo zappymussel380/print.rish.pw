@@ -1,24 +1,36 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
- * Design tokens — ported verbatim from rish.pw (index.html).
- * Dark is the default; light is toggled via html[data-theme="light"] and
- * persisted in localStorage under "rish-theme" (same mechanism as the main
- * site). The accent is identical in both themes.
+ * Design tokens — ported from rish.pw (index.html).
+ * With no data-theme override, the page follows the browser color scheme.
+ * Explicit light/dark choices are persisted under "rish-theme".
  * ------------------------------------------------------------------------- */
 :root {
-  --bg: #050505;
-  --surface: #0c0c0c;
-  --line: #252525;
-  --accent: #ff5555;
-  --text: #eeeeee;
-  --muted: #9a9a9a;
-  --faint: #555555;
-  color-scheme: dark;
+  --bg: #f2f0ec;
+  --surface: #faf8f4;
+  --line: #d7d0c8;
+  --accent: #c23a3a;
+  --text: #17130f;
+  --muted: #5f574f;
+  --faint: #948b82;
+  color-scheme: light;
 
   /* Signature easing curves from the main site. */
   --ease-expo: cubic-bezier(0.19, 1, 0.22, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #050505;
+    --surface: #0c0c0c;
+    --line: #252525;
+    --accent: #ff5555;
+    --text: #eeeeee;
+    --muted: #9a9a9a;
+    --faint: #555555;
+    color-scheme: dark;
+  }
 }
 
 html[data-theme="light"] {
@@ -30,6 +42,17 @@ html[data-theme="light"] {
   --muted: #5f574f;
   --faint: #948b82;
   color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --bg: #050505;
+  --surface: #0c0c0c;
+  --line: #252525;
+  --accent: #ff5555;
+  --text: #eeeeee;
+  --muted: #9a9a9a;
+  --faint: #555555;
+  color-scheme: dark;
 }
 
 @theme inline {
