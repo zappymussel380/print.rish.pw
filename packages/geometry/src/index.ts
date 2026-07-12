@@ -5,11 +5,17 @@ import { parse3mf } from "./threemf";
 import { ModelParseError, type ParsedModel } from "./types";
 
 export { looksLikeAsciiStl, looksLikeBinaryStl } from "./stl";
-export { extract3mfPlates, extract3mfSourceConfig, PREARRANGED_PLATE_STL_HEADER } from "./threemf";
-export type { ThreeMfSourceConfig } from "./threemf";
-export { isZip } from "./zip";
+export {
+  extract3mfPlates,
+  extract3mfSourceConfig,
+  inspect3mfUpload,
+  MAX_3MF_PLATES,
+  PREARRANGED_PLATE_STL_HEADER,
+} from "./threemf";
+export type { ThreeMfSourceConfig, ThreeMfUploadInspection } from "./threemf";
+export { extractZipEntry, isZip } from "./zip";
 export { renderThumbnail } from "./thumbnail";
-export { MAX_TRIANGLES, ModelParseError } from "./types";
+export { MAX_TEXT_MODEL_BYTES, MAX_TRIANGLES, MAX_VERTICES, ModelParseError } from "./types";
 export type { ParsedModel } from "./types";
 
 /** Parse an uploaded model file into a triangle soup + bbox + volume. */

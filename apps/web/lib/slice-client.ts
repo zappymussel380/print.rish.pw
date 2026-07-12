@@ -1,8 +1,9 @@
-import type { SliceJobStage, SliceSettings, SliceStats } from "@print/shared";
+import type { SliceJobStage, SliceProgress, SliceSettings, SliceStats } from "@print/shared";
 
 export interface SliceStatusDto {
   sliceId: string;
   status: SliceJobStage;
+  progress: SliceProgress;
   result: SliceStats | null;
   error: { code: string; message: string } | null;
 }
@@ -41,7 +42,13 @@ async function readDto(res: Response): Promise<SliceStatusDto> {
     } catch {
       /* non-JSON */
     }
-    return { sliceId: "", status: "failed", result: null, error: { code, message } };
+    return {
+      sliceId: "",
+      status: "failed",
+      progress: { percent: 0, stage: "failed", message: "Slicing failed" },
+      result: null,
+      error: { code, message },
+    };
   }
   return (await res.json()) as SliceStatusDto;
 }

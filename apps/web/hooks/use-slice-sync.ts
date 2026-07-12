@@ -36,20 +36,33 @@ export function useSliceSync(model: QuoteModel): void {
     timers.current.abort = abort;
 
     const start = async () => {
-      setSlice(cacheKey, { status: "queued" });
+      setSlice(cacheKey, {
+        status: "queued",
+        progress: { percent: 0, stage: "queued", message: "Waiting for a slicer" },
+      });
       try {
         let dto = await requestSlice(modelId, model.config, abort.signal);
         while (dto.status !== "done" && dto.status !== "failed") {
           if (!dto.sliceId) break;
-          setSlice(cacheKey, { status: dto.status, sliceId: dto.sliceId });
+          setSlice(cacheKey, {
+            status: dto.status,
+            sliceId: dto.sliceId,
+            progress: dto.progress,
+          });
           await sleep(POLL_MS, abort.signal);
           dto = await pollSlice(dto.sliceId, abort.signal);
         }
         if (dto.status === "done" && dto.result) {
-          setSlice(cacheKey, { status: "done", sliceId: dto.sliceId, result: dto.result });
+          setSlice(cacheKey, {
+            status: "done",
+            sliceId: dto.sliceId,
+            progress: dto.progress,
+            result: dto.result,
+          });
         } else {
           setSlice(cacheKey, {
             status: "failed",
+            progress: dto.progress,
             error: dto.error ?? { code: "SLICE_FAILED", message: "Slicing failed" },
           });
         }
@@ -57,6 +70,7 @@ export function useSliceSync(model: QuoteModel): void {
         if (abort.signal.aborted) return;
         setSlice(cacheKey, {
           status: "failed",
+          progress: { percent: 0, stage: "failed", message: "Connection lost" },
           error: { code: "NETWORK", message: err instanceof Error ? err.message : "Slice error" },
         });
       }

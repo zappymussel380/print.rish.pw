@@ -15,6 +15,7 @@ export class ModelParseError extends Error {
       | "EMPTY"
       | "MALFORMED"
       | "TOO_MANY_TRIANGLES"
+      | "TOO_COMPLEX"
       | "ZIP_BOMB"
       | "UNSUPPORTED_FORMAT" = "MALFORMED",
   ) {
@@ -23,6 +24,14 @@ export class ModelParseError extends Error {
   }
 }
 
-/** Hard cap: a 100 MB binary STL is ~2M triangles; anything beyond 8M is
- *  either malformed or hostile. */
-export const MAX_TRIANGLES = 8_000_000;
+/** Complexity cap independent of transport size. Four million triangles already
+ * require roughly 144 MiB for the normalized triangle soup; allowing the full
+ * 300 MiB upload ceiling to dictate allocations would make memory exhaustion
+ * trivial with a syntactically valid file. */
+export const MAX_TRIANGLES = 4_000_000;
+export const MAX_VERTICES = 1_000_000;
+
+/** Text formats create a decoded string plus parser-side arrays. Keep their
+ * ceiling below the binary upload ceiling so one request cannot multiply into
+ * several hundred MiB of live JavaScript objects. */
+export const MAX_TEXT_MODEL_BYTES = 32 * 1024 * 1024;

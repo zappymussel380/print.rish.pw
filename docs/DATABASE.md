@@ -1,64 +1,80 @@
 # Database
 
-PostgreSQL via Prisma. The schema lives in
+PostgreSQL is accessed through Prisma. The schema is
 [`packages/db/prisma/schema.prisma`](../packages/db/prisma/schema.prisma); the
-client is generated into `packages/db/generated/client` (git-ignored) and
-re-exported from `@print/db`.
+generated client is re-exported by `@print/db`.
 
-## Money & units
+## Money and units
 
-- **All money is integer paise** (₹1 = 100 paise). No floats.
-- Slice statistics (`filamentGrams`, `printSeconds`, …) are **per single unit**;
-  quantity is applied by the pricing engine, never stored pre-multiplied.
+- Money is integer paise (₹1 = 100 paise).
+- Slice statistics are per single unit; quantity is applied only by pricing.
+- Issued quotations freeze the catalog/breakdown in `pricingSnapshot`.
 
 ## Models
 
 | Model | Purpose |
 | --- | --- |
-| `UploadedModel` | An uploaded file: session owner, `fileHash` (sha256), bbox, volume, `storedPath`, `thumbPath`. |
-| `SliceResult` | Slice cache, unique on `(fileHash, settingsKey)`. Holds slicer weight/time/support, status, `rawMeta`, error fields. |
-| `Quotation` | A submitted quote: unique `number`, denormalised customer fields, `pricingSnapshot` (audit), `accessToken`, status. |
-| `QuotationItem` | One line: settings, quantity, per-line paise, per-unit grams/seconds, links to model + slice. |
-| `StatusHistory` | Every status transition. |
-| `QuotationCounter` | Per-year sequence for quotation numbers. |
+| `UploadedModel` | Session-owned upload metadata and server-derived file paths. `submittedAt` is atomically claimed once during checkout to prevent replay. |
+| `SliceResult` | Versioned/format-bound slice cache, progress, bounded slicer statistics, and error state. |
+| `Quotation` | Number, status, denormalized customer PII, frozen pricing, PDF pointer, SHA-256 access verifier, and capability expiry. |
+| `QuotationItem` | Issued line settings/prices and links to its model/slice. |
+| `StatusHistory` | Status transitions and admin note. |
+| `QuotationCounter` | Transactional per-year number sequence. |
 
-Enums: `MaterialId` (PLA/PETG), `SupportMode` (AUTO/OFF/ALWAYS),
-`QuotationStatus` (PENDING→…→DELIVERED/CANCELLED), `SliceStatus`.
+Customer access tokens are never stored for new or migrated rows. `accessToken`
+contains `sha256:<hex>` and `accessTokenExpiresAt` bounds verification to 30
+days. The raw 256-bit capability is returned once to the browser.
 
-## The cache key
+## Slice cache identity
 
-`SliceResult` is unique on `(fileHash, settingsKey)` where
-`settingsKey = "<material>:<layerHeightUm>:<infillPct>:<supports>"` — a readable
-string (not a hash) that deliberately **excludes colour and quantity** because
-they don't affect slicing. Identical files at identical settings reuse one slice
-across sessions and duplicate uploads.
+`SliceResult` remains unique on `(fileHash, settingsKey)`, but `settingsKey` is
+the full artifact identity:
 
-## Migrations
-
-```bash
-# development: create + apply a migration from schema changes
-pnpm --filter @print/db migrate:dev --name <change>
-
-# production: apply pending migrations (run automatically on web start-up)
-pnpm --filter @print/db migrate:deploy
+```text
+<pipeline-version>:<format>:<material>:<layer-height-um>:<infill-pct>:<supports>
 ```
 
-The web container's entrypoint runs `prisma migrate deploy` before booting, so a
-`docker compose up` always lands on the latest schema.
+Format prevents valid cross-format/polyglot bytes from sharing a result.
+Pipeline version invalidates results after Orca or machine/process/filament
+profile changes. Colour and quantity remain excluded because they do not affect
+toolpaths.
 
-## Regenerating the client
+## Migrations and privileges
+
+Development:
 
 ```bash
+DATABASE_URL=postgresql://print:print@localhost:5433/print \
+  pnpm --filter @print/db migrate:dev --name <change>
 pnpm --filter @print/db generate
 ```
 
-The client output path is set via `output` in the schema so the generated code +
-query engine live inside the traced workspace — this is what makes Prisma work
-reliably inside the Next.js standalone build. `binaryTargets` includes
-`debian-openssl-3.0.x` to match the container runtime.
+Production does not migrate from the web process. Compose runs the same image
+in one-shot `migrate` mode with `MIGRATION_DATABASE_URL`, then provisions two
+distinct runtime roles:
 
-## Customer table (deferred)
+- web: DML on application tables, no schema/DDL privileges
+- worker: selected model/slice/quotation read/update/delete grants only
 
-There is intentionally no `Customer` table yet — customer fields are denormalised
-onto `Quotation`. Promote to a table when accounts/repeat-customer features
-arrive; nothing else needs to change until then.
+Public database/schema creation is revoked. Web and worker start only after the
+migration service exits successfully. Every deployment reapplies grants so a
+new table is inaccessible until the provisioning allowlist is deliberately
+updated.
+
+```bash
+docker compose run --rm migrate
+```
+
+Review SQL before deploying. The role-provisioning task refuses shared roles,
+short/placeholder passwords, inherited roles, or runtime roles that own
+database objects.
+
+The generated Prisma engine target `debian-openssl-3.0.x` matches the Node 24
+Debian web image and Ubuntu worker runtime.
+
+## PII
+
+Customer fields are denormalized on `Quotation`; there is no account/customer
+table. Rows and PDFs currently have no automatic maximum retention. Define an
+operational deletion policy before production use and treat dumps as sensitive
+PII.

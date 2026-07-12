@@ -17,7 +17,7 @@ export default function QuotePage() {
         title="Upload. Slice. Price."
         lede="Drop in your models and we'll slice every one with a real Bambu Lab A1 profile. You'll see exact filament, print time and price — then tweak settings and watch the quote update."
       />
-      <QuoteBuilder maxModels={env.maxModelsPerSession} />
+      <QuoteBuilder maxModels={env.maxModelsPerSession} maxUploadMb={env.maxUploadMb} />
     </div>
   );
 }

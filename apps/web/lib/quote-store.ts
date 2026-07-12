@@ -5,6 +5,7 @@ import {
   DEFAULT_MODEL_CONFIG,
   type ModelConfig,
   type SliceJobStage,
+  type SliceProgress,
   type SliceStats,
 } from "@print/shared";
 import type { UploadedModelDto } from "./upload-client";
@@ -28,6 +29,7 @@ export interface QuoteModel {
  *  back to a prior setting reprices instantly. */
 export interface SliceState {
   status: SliceJobStage;
+  progress?: SliceProgress;
   sliceId?: string;
   result?: SliceStats;
   error?: { code: string; message: string };

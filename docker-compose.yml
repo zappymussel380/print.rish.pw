@@ -10,7 +10,7 @@ name: print
 
 services:
   proxy:
-    image: nginx:alpine
+    image: nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa
     depends_on:
       web:
         condition: service_healthy
@@ -26,26 +26,89 @@ services:
       TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-127.0.0.1}
     volumes:
       - ./docker/proxy/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    networks:
+      - edge
+    read_only: true
+    tmpfs:
+      - /etc/nginx/conf.d:rw,nosuid,nodev,noexec,size=1m
+      - /var/cache/nginx:rw,nosuid,nodev,noexec,size=16m
+      - /var/run:rw,nosuid,nodev,noexec,size=1m
+    pids_limit: 128
+    mem_limit: 256m
+    memswap_limit: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256m
+          pids: 128
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     restart: unless-stopped
 
   web:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
-    env_file: .env
     environment:
+      # Explicit allowlist: never pass the migration-owner/worker credentials,
+      # Postgres/Redis server passwords, or unrelated host settings here.
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       UPLOAD_DIR: /data/uploads
       PDF_DIR: /data/pdfs
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH}
+      WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+      GOOGLE_MAPS_EMBED_URL: ${GOOGLE_MAPS_EMBED_URL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_TO: ${MAIL_TO:-}
+      CONTACT_FROM: "${CONTACT_FROM:-print.rish.pw <contact@rish.pw>}"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_MESSAGE_THREAD_ID: ${TELEGRAM_MESSAGE_THREAD_ID:-}
+      SHIPROCKET_EMAIL: ${SHIPROCKET_EMAIL:-}
+      SHIPROCKET_PASSWORD: ${SHIPROCKET_PASSWORD:-}
+      SHIPROCKET_PICKUP_PINCODE: ${SHIPROCKET_PICKUP_PINCODE:-781001}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-300}
+      MAX_SESSION_UPLOAD_MB: ${MAX_SESSION_UPLOAD_MB:-900}
+      UPLOAD_WINDOW_MB: ${UPLOAD_WINDOW_MB:-900}
+      DOWNLOAD_WINDOW_MB: ${DOWNLOAD_WINDOW_MB:-1200}
+      STORAGE_RESERVE_MB: ${STORAGE_RESERVE_MB:-2048}
+      MAX_MODELS_PER_SESSION: ${MAX_MODELS_PER_SESSION:-20}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:
       - uploads:/data/uploads
       - pdfs:/data/pdfs
+    networks:
+      - edge
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=256m,mode=1777
+    pids_limit: 256
+    mem_limit: 2g
+    memswap_limit: 2g
+    init: true
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+          pids: 256
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 15s
@@ -58,31 +121,86 @@ services:
       - ALL
     restart: unless-stopped
 
+  # Runs with the schema-owner credential, then exits. Long-running services
+  # receive separate roles whose table grants are provisioned by this task.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    command: ["migrate"]
+    environment:
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL}
+      WEB_DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?Set WORKER_DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777
+    pids_limit: 128
+    mem_limit: 512m
+    memswap_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+          pids: 128
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+
   worker:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
     # Deliberately NOT env_file: the worker spawns OrcaSlicer on untrusted
-    # uploads, so its environment carries only what it reads (see
-    # apps/worker/src/config.ts) — never SESSION_SECRET, the admin hash, or
-    # API keys. A compromised slicer must have nothing to steal.
+    # uploads, so its environment carries only what the trusted orchestrator
+    # reads (see apps/worker/src/config.ts) - never SESSION_SECRET, the admin
+    # hash, or API keys. Orca runs under a different uid with a cleared
+    # environment and cannot read the orchestrator's /proc environment.
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
+      DATABASE_URL: ${WORKER_DATABASE_URL:?Set WORKER_DATABASE_URL}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
       UPLOAD_DIR: /data/uploads
+      PDF_DIR: /data/pdfs
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       SLICE_TIMEOUT_SECONDS: ${SLICE_TIMEOUT_SECONDS:-180}
       THUMB_SIZE: ${THUMB_SIZE:-512}
       UPLOAD_RETENTION_HOURS: ${UPLOAD_RETENTION_HOURS:-48}
       FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS:-30}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SLICER_UID: 1002
+      SLICER_GID: 3000
+      STORAGE_UID: 1001
+      STORAGE_GID: 1001
+      MAX_UPLOAD_MB: 300
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:
       - uploads:/data/uploads
+      - pdfs:/data/pdfs
+    networks:
+      - backend
+    user: "0:0"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=3g,mode=1777
+    pids_limit: 256
+    mem_limit: 4g
+    memswap_limit: 4g
+    ulimits:
+      core: 0
+    init: true
     healthcheck:
       # The worker refreshes worker:heartbeat (TTL 30s) while alive.
       test: ["CMD-SHELL", "[ \"$(redis-cli -h redis exists worker:heartbeat)\" = \"1\" ]"]
@@ -95,43 +213,94 @@ services:
         limits:
           cpus: "4"
           memory: 4g
-    # Belt-and-braces for the untrusted-input process: no setuid escalation,
-    # no kernel capabilities (Node + xvfb + Orca need none).
+          pids: 256
+    # The trusted orchestrator gets only the capabilities needed to maintain
+    # storage ownership, reap escaped child processes, and switch each Orca job
+    # to a private uid/gid. setpriv removes every child capability before the
+    # native parser starts.
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETGID
+      - SETPCAP
+      - SETUID
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    pids_limit: 256
+    mem_limit: 2g
+    memswap_limit: 2g
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+          pids: 256
+    security_opt:
+      - no-new-privileges:true
 
   redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     volumes:
       - redisdata:/data
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli ping >/dev/null"]
       interval: 10s
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    pids_limit: 128
+    mem_limit: 512m
+    memswap_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+          pids: 128
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
 
 volumes:
   pgdata:
   redisdata:
   uploads:
   pdfs:
+
+networks:
+  edge:
+  backend:
+    internal: true

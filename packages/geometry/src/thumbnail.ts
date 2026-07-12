@@ -5,7 +5,7 @@ import { encodePng } from "./png";
  *  the Orca CLI does not emit a plate thumbnail and headless-GL is fragile.
  *
  *  This runs inline on the web upload route's event loop and the parser accepts
- *  meshes up to MAX_TRIANGLES (8M), so the work is bounded two ways to keep one
+ *  meshes up to MAX_TRIANGLES (4M), so the work is bounded two ways to keep one
  *  upload from pinning the CPU and stalling concurrent requests: `maxTriangles`
  *  stride-samples the triangles visited (bounding per-triangle setup), and an
  *  internal pixel-work budget caps total rasterisation (bounding the case of a

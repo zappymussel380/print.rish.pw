@@ -171,6 +171,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
 
 function UploadProgress({ progress }: { progress: number }) {
   const pct = Math.round(progress * 100);
+  const label = pct >= 100 ? "Checking model" : "Uploading";
   return (
     <div className="mt-4">
       <div
@@ -182,7 +183,9 @@ function UploadProgress({ progress }: { progress: number }) {
       >
         <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
       </div>
-      <p className="mt-1.5 text-xs text-muted">Uploading… {pct}%</p>
+      <p className="mt-1.5 text-xs text-muted">
+        {label}: <span className="tabular-nums">{pct}%</span>
+      </p>
     </div>
   );
 }
@@ -194,7 +197,7 @@ function SliceStatsRow({
   slice: ReturnType<typeof useQuoteStore.getState>["slices"][string] | undefined;
   line: ReturnType<typeof priceLine> | null;
 }) {
-  const pending = !slice || slice.status === "queued" || slice.status === "slicing";
+  const pending = !slice || !["done", "failed"].includes(slice.status);
   const failed = slice?.status === "failed";
 
   return (
@@ -209,15 +212,45 @@ function SliceStatsRow({
         {failed ? "—" : line ? formatPaise(line.subtotalPaise) : <Skel />}
       </Stat>
       {pending && !failed && (
-        <p className="col-span-3 -mt-1 flex items-center gap-1.5 text-xs text-muted">
-          <Loader2 strokeWidth={1.65} className="h-3.5 w-3.5 animate-spin" /> Slicing with OrcaSlicer…
-        </p>
+        <SliceProgress progress={slice?.progress} />
       )}
       {failed && (
         <p className="col-span-3 -mt-1 text-xs text-accent">
-          {slice?.error?.message ?? "Slicing failed — adjust settings and try again."}
+          {slice?.error?.message ?? "Slicing failed. Adjust settings and try again."}
         </p>
       )}
+    </div>
+  );
+}
+
+function SliceProgress({
+  progress,
+}: {
+  progress: ReturnType<typeof useQuoteStore.getState>["slices"][string]["progress"];
+}) {
+  const percent = Math.min(99, Math.max(0, progress?.percent ?? 0));
+  const message = progress?.message ?? "Waiting for a slicer";
+  return (
+    <div className="col-span-3 -mt-1" aria-live="polite">
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs text-muted">
+        <span className="min-w-0 truncate" title={message}>
+          {message}
+        </span>
+        <span className="shrink-0 font-mono tabular-nums text-text">{percent}%</span>
+      </div>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--line)_60%,transparent)]"
+        role="progressbar"
+        aria-label={`Slicing: ${message}`}
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className="h-full rounded-full bg-accent transition-[width] duration-300 motion-reduce:transition-none"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }

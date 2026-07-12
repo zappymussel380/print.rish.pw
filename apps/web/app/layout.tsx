@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { headers } from "next/headers";
 import Script from "next/script";
 import type { ReactNode } from "react";
 import { SiteFooter } from "@/components/shell/site-footer";
@@ -27,11 +28,12 @@ export const metadata: Metadata = {
 // CSS follows the browser's preferred color scheme.
 const themeInit = `(function(){try{var t=localStorage.getItem("rish-theme");var d=document.documentElement;if(t==="light"||t==="dark"){d.setAttribute("data-theme",t);}else{d.removeAttribute("data-theme");}}catch(e){}})();`;
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans bg-bg text-text min-h-dvh flex flex-col`}>
-        <Script id="theme-init" strategy="beforeInteractive">
+        <Script id="theme-init" strategy="beforeInteractive" nonce={nonce}>
           {themeInit}
         </Script>
         <a

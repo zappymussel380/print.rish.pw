@@ -64,6 +64,22 @@ export interface BoundingBoxMm {
 export const sliceJobStages = ["queued", "slicing", "parsing", "done", "failed"] as const;
 export type SliceJobStage = (typeof sliceJobStages)[number];
 
+export const sliceProgressStages = [
+  "queued",
+  "preparing",
+  "slicing",
+  "finalizing",
+  "complete",
+  "failed",
+] as const;
+export type SliceProgressStage = (typeof sliceProgressStages)[number];
+
+export interface SliceProgress {
+  percent: number;
+  stage: SliceProgressStage;
+  message: string;
+}
+
 export const customerSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(254),

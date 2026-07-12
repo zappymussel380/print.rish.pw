@@ -12,7 +12,7 @@ import {
   uploadModel,
 } from "@/lib/upload-client";
 
-const MAX_PARALLEL = 3;
+const MAX_PARALLEL = 2;
 
 /** A file that matches one already in the quote (same name + size), awaiting
  *  the user's call: bump the existing quantity, or upload a separate copy. */
@@ -36,7 +36,7 @@ async function runPooled<T>(items: T[], limit: number, task: (item: T) => Promis
   await Promise.all(workers);
 }
 
-export function Dropzone({ maxModels }: { maxModels: number }) {
+export function Dropzone({ maxModels, maxUploadMb }: { maxModels: number; maxUploadMb: number }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -82,9 +82,11 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
       const files = Array.from(fileList);
       const ok: File[] = [];
       const bad: string[] = [];
+      const maxUploadBytes = maxUploadMb * 1024 * 1024;
       for (const f of files) {
-        if (hasAcceptedExtension(f.name)) ok.push(f);
-        else bad.push(f.name);
+        if (!hasAcceptedExtension(f.name)) bad.push(`${f.name}: unsupported format`);
+        else if (f.size > maxUploadBytes) bad.push(`${f.name}: larger than ${maxUploadMb} MB`);
+        else ok.push(f);
       }
       setRejected(bad);
 
@@ -106,7 +108,7 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
 
       await startUploads(fresh);
     },
-    [startUploads],
+    [maxUploadMb, startUploads],
   );
 
   const bumpQuantity = useCallback(
@@ -209,8 +211,8 @@ export function Dropzone({ maxModels }: { maxModels: number }) {
       </div>
 
       <p className="mt-3 text-center text-xs text-faint">
-        Accepted: {ACCEPTED_EXTENSIONS.join(", ")} · up to {maxModels} files · quantities up to{" "}
-        {MAX_QUANTITY} per model
+        Accepted: {ACCEPTED_EXTENSIONS.join(", ")} · {maxUploadMb} MB per file · up to {maxModels}{" "}
+        files · quantities up to {MAX_QUANTITY} per model
       </p>
 
       {duplicates.length > 0 && (

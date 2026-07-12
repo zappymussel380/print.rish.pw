@@ -1,9 +1,9 @@
 import type { Document, Element } from "@xmldom/xmldom";
 import { finalizeModel } from "./math";
 import { serializeBinaryStl } from "./stl";
-import { MAX_TRIANGLES, ModelParseError, type ParsedModel } from "./types";
-import { parseXml } from "./xml";
-import { extractZipEntries, extractZipEntry, isZip } from "./zip";
+import { MAX_TRIANGLES, MAX_VERTICES, ModelParseError, type ParsedModel } from "./types";
+import { MAX_XML_BYTES, parseXmlBuffer } from "./xml";
+import { extractZipEntries, isZip } from "./zip";
 
 export const PREARRANGED_PLATE_STL_HEADER = "print.rish.pw prearranged plate";
 
@@ -50,9 +50,22 @@ interface ThreeMfProject {
   entries: ModelDocument[];
   entriesByName: Map<string, ModelDocument>;
   meshCount: number;
-  modelSettingsXml: string | null;
+  modelSettings: Buffer | null;
   projectSettings: Record<string, unknown> | null;
 }
+
+interface GeometryBudget {
+  triangles: number;
+  vertices: number;
+}
+
+interface ResolveBudget extends GeometryBudget {
+  references: number;
+}
+
+const MAX_COMPONENT_REFERENCES = 50_000;
+const MAX_COMPONENT_DEPTH = 128;
+export const MAX_3MF_PLATES = 20;
 
 export interface Extracted3mfPlate {
   index: number;
@@ -70,16 +83,26 @@ export interface ThreeMfSourceConfig {
   supports?: "auto" | "off";
 }
 
+export interface ThreeMfUploadInspection {
+  model: ParsedModel | null;
+  plates: Extracted3mfPlate[];
+  sourceConfig: ThreeMfSourceConfig | null;
+}
+
 /**
  * 3MF parser: unzips model XML parts and reads mesh vertices/triangles.
  * Handles Bambu/Orca-style split 3MF projects where 3D/3dmodel.model contains
  * build items and cross-file component references into 3D/Objects/*.model.
  */
 export function parse3mf(buf: Buffer): ParsedModel {
-  const project = load3mfProject(buf);
+  return modelFromProject(load3mfProject(buf));
+}
+
+function modelFromProject(project: ThreeMfProject): ParsedModel {
+  const budget: ResolveBudget = { triangles: 0, vertices: 0, references: 0 };
   const parts =
     project.main.buildItems.length > 0
-      ? project.main.buildItems.flatMap((item) => resolveBuildItem(project, item))
+      ? project.main.buildItems.flatMap((item) => resolveBuildItem(project, item, budget))
       : allMeshParts(project);
 
   if (project.meshCount === 0) throw new ModelParseError("3MF contains no mesh geometry", "EMPTY");
@@ -88,10 +111,13 @@ export function parse3mf(buf: Buffer): ParsedModel {
 
 /** Extract Bambu/Orca multi-plate projects into clean, per-plate STL payloads. */
 export function extract3mfPlates(buf: Buffer): Extracted3mfPlate[] {
-  const project = load3mfProject(buf);
-  if (!project.modelSettingsXml) return [];
+  return platesFromProject(load3mfProject(buf));
+}
 
-  const plates = parsePlateSettings(project.modelSettingsXml, project.projectSettings);
+function platesFromProject(project: ThreeMfProject): Extracted3mfPlate[] {
+  if (!project.modelSettings) return [];
+
+  const plates = parsePlateSettings(project.modelSettings, project.projectSettings);
   if (plates.length <= 1) return [];
 
   const buildByObjectId = new Map<string, BuildItem[]>();
@@ -102,14 +128,17 @@ export function extract3mfPlates(buf: Buffer): Extracted3mfPlate[] {
   }
 
   const extracted: Extracted3mfPlate[] = [];
+  // One shared budget is critical: otherwise many plate records can each
+  // reference the same legal-size mesh and multiply it into unbounded output.
+  const budget: ResolveBudget = { triangles: 0, vertices: 0, references: 0 };
   for (const plate of plates) {
     const parts: Float32Array[] = [];
     for (const objectId of plate.objectIds) {
       const items = buildByObjectId.get(objectId);
       if (items?.length) {
-        for (const item of items) parts.push(...resolveBuildItem(project, item));
+        for (const item of items) parts.push(...resolveBuildItem(project, item, budget));
       } else {
-        parts.push(...resolveObject(project, project.main, objectId, null, new Set()));
+        parts.push(...resolveObject(project, project.main, objectId, null, new Set(), budget));
       }
     }
     if (parts.length === 0) continue;
@@ -134,11 +163,14 @@ export function extract3mfPlates(buf: Buffer): Extracted3mfPlate[] {
 
 /** Extract source print settings from Bambu/Orca-style 3MF project metadata. */
 export function extract3mfSourceConfig(buf: Buffer): ThreeMfSourceConfig | null {
-  const project = load3mfProject(buf);
+  return sourceConfigFromProject(load3mfProject(buf));
+}
+
+function sourceConfigFromProject(project: ThreeMfProject): ThreeMfSourceConfig | null {
   const source = projectSourceConfig(project.projectSettings);
 
-  if (project.modelSettingsXml) {
-    const plateSettings = parsePlateSettings(project.modelSettingsXml, project.projectSettings);
+  if (project.modelSettings) {
+    const plateSettings = parsePlateSettings(project.modelSettings, project.projectSettings);
     const materials = uniqueDefined(plateSettings.map((plate) => plate.sourceConfig.material));
     if (materials.length === 1) source.material = materials[0]!;
     source.supports = plateSettings.some((plate) => plate.configuredSupports) ? "auto" : "off";
@@ -147,17 +179,60 @@ export function extract3mfSourceConfig(buf: Buffer): ThreeMfSourceConfig | null 
   return Object.keys(source).length > 0 ? source : null;
 }
 
+/** Upload-specific inspection that parses a 3MF archive once. The previous
+ * upload path independently loaded the same zip up to three times (plate scan,
+ * geometry, source settings), multiplying CPU and memory on the request path. */
+export function inspect3mfUpload(buf: Buffer): ThreeMfUploadInspection {
+  const project = load3mfProject(buf);
+  const plates = platesFromProject(project);
+  return {
+    plates,
+    model: plates.length > 1 ? null : modelFromProject(project),
+    sourceConfig: sourceConfigFromProject(project),
+  };
+}
+
 function load3mfProject(buf: Buffer): ThreeMfProject {
   if (!isZip(buf)) throw new ModelParseError("Not a 3MF file (missing zip signature)");
-  const modelEntries = extractZipEntries(buf, isModelEntry).sort((a, b) => {
+  const modelSettingsName = "metadata/model_settings.config";
+  const projectSettingsName = "metadata/project_settings.config";
+  const seen = new Set<string>();
+  // One archive traversal and one aggregate budget for every entry we consume.
+  // Repeated extraction previously reset the 64 MiB allowance three times.
+  const packageEntries = extractZipEntries(
+    buf,
+    (name) => {
+      const normalized = normalizePackagePath(name);
+      const relevant =
+        isModelEntry(normalized) ||
+        normalized === modelSettingsName ||
+        normalized === projectSettingsName;
+      if (!relevant) return false;
+      if (seen.has(normalized)) {
+        throw new ModelParseError(`3MF contains duplicate entry ${normalized}`, "MALFORMED");
+      }
+      seen.add(normalized);
+      return true;
+    },
+    {
+      maxEntryBytes: (name) => {
+        const normalized = normalizePackagePath(name);
+        if (normalized === projectSettingsName) return 512 * 1024;
+        if (normalized === modelSettingsName) return 2 * 1024 * 1024;
+        return MAX_XML_BYTES;
+      },
+    },
+  );
+  const modelEntries = packageEntries.filter((entry) => isModelEntry(entry.name)).sort((a, b) => {
     const aMain = a.name.toLowerCase().endsWith("3dmodel.model");
     const bMain = b.name.toLowerCase().endsWith("3dmodel.model");
     return Number(bMain) - Number(aMain);
   });
   if (modelEntries.length === 0) throw new ModelParseError("3MF is missing model XML");
 
+  const geometryBudget: GeometryBudget = { triangles: 0, vertices: 0 };
   const entries = modelEntries.map((entry) =>
-    parseModelDocument(entry.name, entry.data.toString("utf8")),
+    parseModelDocument(entry.name, entry.data, geometryBudget),
   );
   const main = entries.find((entry) => entry.name.toLowerCase().endsWith("3dmodel.model")) ?? entries[0]!;
   const entriesByName = new Map(entries.map((entry) => [normalizePackagePath(entry.name), entry]));
@@ -165,22 +240,20 @@ function load3mfProject(buf: Buffer): ThreeMfProject {
     for (const object of entry.objects.values()) if (object.kind === "mesh") sum++;
     return sum;
   }, 0);
-  const settings = extractZipEntry(
-    buf,
-    (name) => name.toLowerCase() === "metadata/model_settings.config",
-  );
-  const projectSettings = extractZipEntry(
-    buf,
-    (name) => name.toLowerCase() === "metadata/project_settings.config",
-  );
+  const settings = packageEntries.find(
+    (entry) => normalizePackagePath(entry.name) === modelSettingsName,
+  )?.data;
+  const projectSettings = packageEntries.find(
+    (entry) => normalizePackagePath(entry.name) === projectSettingsName,
+  )?.data;
 
   return {
     main,
     entries,
     entriesByName,
     meshCount,
-    modelSettingsXml: settings ? settings.toString("utf8") : null,
-    projectSettings: projectSettings ? parseProjectSettings(projectSettings.toString("utf8")) : null,
+    modelSettings: settings ?? null,
+    projectSettings: projectSettings ? parseProjectSettings(projectSettings) : null,
   };
 }
 
@@ -189,8 +262,8 @@ function isModelEntry(name: string): boolean {
   return lower.startsWith("3d/") && lower.endsWith(".model");
 }
 
-function parseModelDocument(name: string, xml: string): ModelDocument {
-  const doc = parseXml(xml, `3MF model ${name}`);
+function parseModelDocument(name: string, xml: Buffer, budget: GeometryBudget): ModelDocument {
+  const doc = parseXmlBuffer(xml, `3MF model ${name}`);
   const root = doc.documentElement;
   if (!root) throw new ModelParseError("3MF model has no root element");
 
@@ -199,7 +272,7 @@ function parseModelDocument(name: string, xml: string): ModelDocument {
     const id = object.getAttribute("id") ?? "";
     const mesh = firstElement(object, "mesh");
     if (mesh) {
-      objects.set(id, { kind: "mesh", mesh: meshToTriangles(mesh) });
+      objects.set(id, { kind: "mesh", mesh: meshToTriangles(mesh, budget) });
       continue;
     }
 
@@ -229,10 +302,10 @@ function parseModelDocument(name: string, xml: string): ModelDocument {
 }
 
 function parsePlateSettings(
-  xml: string,
+  xml: Buffer,
   projectSettings: Record<string, unknown> | null,
 ): PlateDef[] {
-  const doc = parseXml(xml, "3MF model settings");
+  const doc = parseXmlBuffer(xml, "3MF model settings");
   const root = doc.documentElement;
   if (!root) return [];
 
@@ -249,7 +322,12 @@ function parsePlateSettings(
   const projectSource = projectSourceConfig(projectSettings);
   const globalSupports = projectSupports(projectSettings);
 
-  return elements(root, "plate")
+  const plateElements = elements(root, "plate");
+  if (plateElements.length > MAX_3MF_PLATES) {
+    throw new ModelParseError(`3MF exceeds ${MAX_3MF_PLATES} printable plates`, "TOO_COMPLEX");
+  }
+
+  return plateElements
     .map((plate, i) => {
       const index = Number(metadataValue(plate, "plater_id")) || i + 1;
       const explicitName = metadataValue(plate, "plater_name")?.trim();
@@ -275,14 +353,42 @@ function parsePlateSettings(
     .filter((plate) => plate.objectIds.length > 0);
 }
 
-function parseProjectSettings(json: string): Record<string, unknown> | null {
+function parseProjectSettings(buffer: Buffer): Record<string, unknown> | null {
   try {
+    const json = buffer.toString("utf8");
+    preflightJson(json);
     const parsed = JSON.parse(json) as unknown;
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
   } catch {
     return null;
+  }
+}
+
+function preflightJson(json: string): void {
+  let depth = 0;
+  let structures = 0;
+  let inString = false;
+  let escaped = false;
+  for (const char of json) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{" || char === "[") {
+      depth += 1;
+      structures += 1;
+      if (depth > 64 || structures > 50_000) {
+        throw new ModelParseError("3MF project settings are too complex", "TOO_COMPLEX");
+      }
+    } else if (char === "}" || char === "]") {
+      depth = Math.max(0, depth - 1);
+    }
   }
 }
 
@@ -383,9 +489,13 @@ function uniqueDefined<T>(values: readonly (T | undefined)[]): T[] {
   return [...new Set(values.filter((value): value is T => value !== undefined))];
 }
 
-function resolveBuildItem(project: ThreeMfProject, item: BuildItem): Float32Array[] {
+function resolveBuildItem(
+  project: ThreeMfProject,
+  item: BuildItem,
+  budget: ResolveBudget,
+): Float32Array[] {
   if (!item.printable) return [];
-  return resolveObject(project, project.main, item.objectId, item.transform, new Set());
+  return resolveObject(project, project.main, item.objectId, item.transform, new Set(), budget);
 }
 
 function resolveObject(
@@ -394,7 +504,19 @@ function resolveObject(
   id: string,
   transform: number[] | null,
   seen: Set<string>,
+  budget: ResolveBudget,
+  depth = 0,
 ): Float32Array[] {
+  if (depth > MAX_COMPONENT_DEPTH) {
+    throw new ModelParseError("3MF component nesting is too deep", "TOO_COMPLEX");
+  }
+  budget.references += 1;
+  if (budget.references > MAX_COMPONENT_REFERENCES) {
+    throw new ModelParseError(
+      `3MF exceeds ${MAX_COMPONENT_REFERENCES} component references`,
+      "TOO_COMPLEX",
+    );
+  }
   const targetEntry = entry.objects.has(id) ? entry : findUniqueEntryWithObject(project, id);
   if (!targetEntry) return [];
 
@@ -405,7 +527,13 @@ function resolveObject(
 
   const object = targetEntry.objects.get(id);
   if (!object) return [];
-  if (object.kind === "mesh") return [applyTransform(object.mesh, transform)];
+  if (object.kind === "mesh") {
+    budget.triangles += object.mesh.length / 9;
+    if (budget.triangles > MAX_TRIANGLES) {
+      throw new ModelParseError(`3MF exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
+    }
+    return [applyTransform(object.mesh, transform)];
+  }
 
   const parts: Float32Array[] = [];
   for (const component of object.components) {
@@ -420,6 +548,8 @@ function resolveObject(
         component.id,
         combine(component.transform, transform),
         nextSeen,
+        budget,
+        depth + 1,
       ),
     );
   }
@@ -484,7 +614,7 @@ function normalizeToOrigin(positions: Float32Array): Float32Array {
   return out;
 }
 
-function meshToTriangles(mesh: Element): Float32Array {
+function meshToTriangles(mesh: Element, budget: GeometryBudget): Float32Array {
   const verticesEl = firstElement(mesh, "vertices");
   const trianglesEl = firstElement(mesh, "triangles");
   if (!verticesEl || !trianglesEl) throw new ModelParseError("3MF mesh missing vertices/triangles");
@@ -496,9 +626,14 @@ function meshToTriangles(mesh: Element): Float32Array {
       Number(v.getAttribute("y")),
       Number(v.getAttribute("z")),
     );
+    budget.vertices += 1;
+    if (budget.vertices > MAX_VERTICES) {
+      throw new ModelParseError(`3MF exceeds ${MAX_VERTICES} vertices`, "TOO_COMPLEX");
+    }
   }
   const tris = elements(trianglesEl, "triangle");
-  if (tris.length > MAX_TRIANGLES) {
+  budget.triangles += tris.length;
+  if (budget.triangles > MAX_TRIANGLES) {
     throw new ModelParseError(`3MF exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
   }
   const positions = new Float32Array(tris.length * 9);

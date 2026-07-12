@@ -2,11 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma, prisma } from "@print/db";
 import {
   type SliceJobData,
+  sliceArtifactKey,
   settingsKey,
   sliceJobId,
   sliceSettingsSchema,
 } from "@print/shared";
-import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
+import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { getSliceQueue } from "@/lib/queue";
 import { RATE_LIMITS } from "@/lib/security";
@@ -31,15 +32,9 @@ export async function POST(request: NextRequest) {
   if (!sessionId) return jsonError(401, "NO_SESSION", "No quote session");
 
   // One modelId + one settings object — anything bigger is abuse.
-  const tooLarge = assertBodySize(request, 4 * 1024);
-  if (tooLarge) return tooLarge;
-
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    return jsonError(400, "BAD_JSON", "Request body must be JSON");
-  }
+  const parsedBody = await readJsonBody(request, 4 * 1024);
+  if (!parsedBody.ok) return parsedBody.response;
+  const payload = parsedBody.value;
 
   const parsed = sliceSettingsSchema.safeParse((payload as { settings?: unknown })?.settings);
   const modelId = (payload as { modelId?: unknown })?.modelId;
@@ -53,7 +48,7 @@ export async function POST(request: NextRequest) {
   if (!model) return jsonError(404, "NOT_FOUND", "Model not found in this session");
   const settings = normalizeModelConfigLocks(parsed.data, model);
 
-  const key = settingsKey(settings);
+  const key = sliceArtifactKey(model.format as "stl" | "3mf" | "obj" | "amf", settings);
 
   const existing = await prisma.sliceResult.findUnique({
     where: { fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: key } },
@@ -68,11 +63,29 @@ export async function POST(request: NextRequest) {
     }
     await prisma.sliceResult.update({
       where: { id: existing.id },
-      data: { status: "QUEUED", errorCode: null, errorMessage: null, completedAt: null },
+      data: {
+        status: "QUEUED",
+        progressPct: 0,
+        progressStage: "queued",
+        progressMessage: "Waiting for a slicer",
+        progressUpdatedAt: new Date(),
+        errorCode: null,
+        errorMessage: null,
+        completedAt: null,
+      },
     });
     await enqueue(existing.id, model, key, settings, { replaceExistingJob: true });
     return NextResponse.json(
-      serializeSlice({ ...existing, status: "QUEUED", errorCode: null, errorMessage: null }),
+      serializeSlice({
+        ...existing,
+        status: "QUEUED",
+        progressPct: 0,
+        progressStage: "queued",
+        progressMessage: "Waiting for a slicer",
+        progressUpdatedAt: new Date(),
+        errorCode: null,
+        errorMessage: null,
+      }),
       { status: 202 },
     );
   }
@@ -134,8 +147,6 @@ async function enqueue(
       modelId: model.id,
       fileHash: model.fileHash,
       settingsKey: key,
-      storedPath: model.storedPath,
-      format: model.format,
       settings,
     },
     { jobId },

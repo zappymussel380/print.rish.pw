@@ -1,7 +1,7 @@
 import type { Element } from "@xmldom/xmldom";
 import { finalizeModel } from "./math";
-import { MAX_TRIANGLES, ModelParseError, type ParsedModel } from "./types";
-import { parseXml } from "./xml";
+import { MAX_TRIANGLES, MAX_VERTICES, ModelParseError, type ParsedModel } from "./types";
+import { parseXmlBuffer } from "./xml";
 import { extractZipEntry, isZip } from "./zip";
 
 /** AMF units → millimetres. */
@@ -27,7 +27,7 @@ export function parseAmf(buf: Buffer): ParsedModel {
     xml = entry;
   }
 
-  const doc = parseXml(xml.toString("utf8"), "AMF");
+  const doc = parseXmlBuffer(xml, "AMF");
   const root = doc.documentElement;
   if (!root || root.localName !== "amf") {
     throw new ModelParseError("Not an AMF file (missing <amf> root)");
@@ -49,6 +49,9 @@ export function parseAmf(buf: Buffer): ParsedModel {
         Number(textOf(c, "y")) * scale,
         Number(textOf(c, "z")) * scale,
       );
+      if (coords.length / 3 > MAX_VERTICES) {
+        throw new ModelParseError(`AMF exceeds ${MAX_VERTICES} vertices`, "TOO_COMPLEX");
+      }
     }
     const vertexCount = coords.length / 3;
 

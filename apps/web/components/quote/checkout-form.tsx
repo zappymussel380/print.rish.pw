@@ -123,7 +123,10 @@ export function CheckoutForm() {
         shipping?.token,
       );
       clear();
-      router.push(`/quotation/${result.number}?token=${result.accessToken}`);
+      // Keep the bearer in the URL fragment: fragments are never sent in HTTP
+      // requests, proxy logs, or Referer headers. The server also set a scoped
+      // HttpOnly access cookie on the submission response.
+      router.push(`/quotation/${result.number}#token=${result.accessToken}`);
     } catch (err) {
       setError(err as CheckoutError);
       setSubmitting(false);

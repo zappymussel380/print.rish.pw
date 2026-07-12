@@ -1,6 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { prisma } from "@print/db";
 import {
@@ -11,6 +10,11 @@ import {
   summariseItems,
 } from "@print/shared";
 import { WhatsAppLaunch } from "@/components/quote/whatsapp-launch";
+import {
+  ClearQuotationAccessFragment,
+  QuotationAccessBridge,
+} from "@/components/quote/quotation-access-bridge";
+import { getQuotationAccessCookie, quotationAccessMatches } from "@/lib/quotation-access";
 import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
 
 export const metadata: Metadata = {
@@ -30,12 +34,6 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-function tokenMatches(a: string, b: string): boolean {
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ba.length === bb.length && timingSafeEqual(ba, bb);
-}
-
 export default async function ConfirmationPage({
   params,
   searchParams,
@@ -45,27 +43,28 @@ export default async function ConfirmationPage({
 }) {
   const { number } = await params;
   const { token } = await searchParams;
+  // Backward compatibility for previously issued query-string links: move the
+  // capability into a fragment immediately. It will not be sent on subsequent
+  // requests or as a Referer.
+  if (token) redirect(`/quotation/${encodeURIComponent(number)}#token=${encodeURIComponent(token)}`);
 
-  const quotation = await prisma.quotation.findUnique({
+  const access = await prisma.quotation.findUnique({
+    where: { number },
+    select: { accessToken: true, accessTokenExpiresAt: true },
+  });
+  const cookieToken = await getQuotationAccessCookie(number);
+
+  if (
+    !access ||
+    !quotationAccessMatches(cookieToken, access.accessToken, access.accessTokenExpiresAt)
+  ) {
+    return <QuotationAccessBridge number={number} />;
+  }
+
+  const quotation = await prisma.quotation.findUniqueOrThrow({
     where: { number },
     include: { items: true },
   });
-
-  if (!quotation || !token || !tokenMatches(token, quotation.accessToken)) {
-    return (
-      <div className="mx-auto max-w-lg px-5 py-24 text-center">
-        <p className="eyebrow">Not found</p>
-        <h1 className="display-title mt-3 text-4xl">Can&apos;t open this quotation</h1>
-        <p className="mt-5 text-muted">
-          This link is invalid or has expired. If you just submitted a quote, use the exact link you
-          were given.
-        </p>
-        <Link href="/quote" className="btn-pill mt-8">
-          Start a new quote
-        </Link>
-      </div>
-    );
-  }
 
   const materialsSummary = summariseItems(
     quotation.items.map((i) => ({ material: i.material, colour: i.colour, quantity: i.quantity })),
@@ -83,10 +82,11 @@ export default async function ConfirmationPage({
       })
     : whatsappChatUrl();
 
-  const pdfUrl = `/api/quotations/${quotation.number}/pdf?token=${token}`;
+  const pdfUrl = `/api/quotations/${quotation.number}/pdf`;
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-16 sm:py-20">
+      <ClearQuotationAccessFragment />
       <p className="eyebrow">Quotation confirmed</p>
       <h1 className="display-title mt-3">You&apos;re all set</h1>
       <p className="mt-5 max-w-xl text-[0.95rem] leading-7 text-muted">
@@ -154,7 +154,7 @@ export default async function ConfirmationPage({
       </div>
 
       <p className="mt-6 text-xs text-faint">
-        Keep this link to reopen your quotation and PDF. This is an estimate, not a tax invoice.
+        This browser can reopen the quotation for 30 days. This is an estimate, not a tax invoice.
       </p>
     </div>
   );

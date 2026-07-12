@@ -10,10 +10,11 @@ import { env } from "./env";
  * client-side beyond the identifier/role.
  */
 
-const QUOTE_COOKIE = "qsid";
-const ADMIN_COOKIE = "admin_session";
 const QUOTE_TTL_SECONDS = 48 * 3600;
 const ADMIN_TTL_SECONDS = 12 * 3600;
+const TOKEN_ISSUER = "print.rish.pw";
+const QUOTE_AUDIENCE = "quote-session";
+const ADMIN_AUDIENCE = "admin-session";
 
 const secretKey = () => new TextEncoder().encode(env.sessionSecret);
 
@@ -21,25 +22,50 @@ const secretKey = () => new TextEncoder().encode(env.sessionSecret);
 // from APP_ORIGIN's scheme). This keeps sessions working when the app is reached
 // over plain HTTP — e.g. a LAN IP for testing — while staying Secure in
 // production behind the TLS-terminating proxy (APP_ORIGIN=https://…).
-const cookieBase = {
-  httpOnly: true,
-  sameSite: "strict",
-  secure: env.appOrigin.startsWith("https://"),
-  path: "/",
-} as const;
+function secureCookies(): boolean {
+  return env.appOrigin.startsWith("https://");
+}
 
-async function sign(payload: Record<string, unknown>, ttlSeconds: number): Promise<string> {
+function quoteCookieName(): string {
+  return secureCookies() ? "__Host-qsid" : "qsid";
+}
+
+function adminCookieName(): string {
+  return secureCookies() ? "__Host-admin_session" : "admin_session";
+}
+
+function cookieBase() {
+  return {
+    httpOnly: true,
+    sameSite: "strict" as const,
+    secure: secureCookies(),
+    path: "/",
+    priority: "high" as const,
+  };
+}
+
+async function sign(
+  payload: Record<string, unknown>,
+  ttlSeconds: number,
+  audience: string,
+): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(TOKEN_ISSUER)
+    .setAudience(audience)
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + ttlSeconds)
     .sign(secretKey());
 }
 
-async function verify<T>(token: string | undefined): Promise<T | null> {
+async function verify<T>(token: string | undefined, audience: string): Promise<T | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secretKey());
+    const { payload } = await jwtVerify(token, secretKey(), {
+      algorithms: ["HS256"],
+      issuer: TOKEN_ISSUER,
+      audience,
+    });
     return payload as T;
   } catch {
     return null;
@@ -52,7 +78,7 @@ async function verify<T>(token: string | undefined): Promise<T | null> {
 
 export async function getQuoteSessionId(): Promise<string | null> {
   const store = await cookies();
-  const payload = await verify<{ sid?: string }>(store.get(QUOTE_COOKIE)?.value);
+  const payload = await verify<{ sid?: string }>(store.get(quoteCookieName())?.value, QUOTE_AUDIENCE);
   return payload?.sid ?? null;
 }
 
@@ -62,9 +88,9 @@ export async function getOrCreateQuoteSessionId(): Promise<string> {
   const existing = await getQuoteSessionId();
   if (existing) return existing;
   const sid = crypto.randomUUID();
-  const token = await sign({ sid }, QUOTE_TTL_SECONDS);
+  const token = await sign({ sid }, QUOTE_TTL_SECONDS, QUOTE_AUDIENCE);
   const store = await cookies();
-  store.set(QUOTE_COOKIE, token, { ...cookieBase, maxAge: QUOTE_TTL_SECONDS });
+  store.set(quoteCookieName(), token, { ...cookieBase(), maxAge: QUOTE_TTL_SECONDS });
   return sid;
 }
 
@@ -74,25 +100,23 @@ export async function getOrCreateQuoteSessionId(): Promise<string> {
 
 export async function isAdmin(): Promise<boolean> {
   const store = await cookies();
-  const payload = await verify<{ role?: string }>(store.get(ADMIN_COOKIE)?.value);
+  const payload = await verify<{ role?: string }>(store.get(adminCookieName())?.value, ADMIN_AUDIENCE);
   return payload?.role === "admin";
 }
 
 export async function createAdminSession(): Promise<void> {
-  const token = await sign({ role: "admin" }, ADMIN_TTL_SECONDS);
+  const token = await sign({ role: "admin" }, ADMIN_TTL_SECONDS, ADMIN_AUDIENCE);
   const store = await cookies();
-  store.set(ADMIN_COOKIE, token, { ...cookieBase, maxAge: ADMIN_TTL_SECONDS });
+  store.set(adminCookieName(), token, { ...cookieBase(), maxAge: ADMIN_TTL_SECONDS });
 }
 
 export async function destroyAdminSession(): Promise<void> {
   const store = await cookies();
-  store.delete(ADMIN_COOKIE);
+  store.delete(adminCookieName());
 }
 
 /** For middleware use (no next/headers cookies() there). */
 export async function verifyAdminToken(token: string | undefined): Promise<boolean> {
-  const payload = await verify<{ role?: string }>(token);
+  const payload = await verify<{ role?: string }>(token, ADMIN_AUDIENCE);
   return payload?.role === "admin";
 }
-
-export const ADMIN_COOKIE_NAME = ADMIN_COOKIE;

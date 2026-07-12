@@ -21,3 +21,13 @@ export const logger = pino({
     censor: "[redacted]",
   },
 });
+
+/** Keep operational error context without allowing upstream URLs/query values,
+ * control characters, or large reflected strings into logs. */
+export function safeErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/[\x00-\x1f\x7f]/g, " ")
+    .slice(0, 300);
+}

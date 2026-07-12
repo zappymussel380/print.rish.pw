@@ -1,153 +1,196 @@
 # Deployment
 
-Production runs as a Docker Compose stack on a homelab host. A public reverse
-proxy terminates TLS for `print.rish.pw` and reverse-proxies to the compose
-stack over a private route.
+Production is a Docker Compose stack behind one public reverse proxy. The edge
+terminates TLS and reaches compose port 8080 only over a private/LAN/Tailscale
+route.
 
+```text
+Internet -> public reverse proxy (TLS) -> private route -> compose nginx:8080 -> web
+                                                        -> internal Postgres/Redis/worker
 ```
-Internet -> public reverse proxy (TLS, print.rish.pw) -> private route -> homelab:8080 (compose proxy) -> web
-```
 
-## 1. Prerequisites on the host
+## 1. Prerequisites
 
-- Docker + Docker Compose v2
+- Docker Engine and Docker Compose v2
 - This repository checked out
-- DNS A/AAAA for `print.rish.pw` pointing at the public reverse proxy
-- A TLS cert on the public reverse proxy
+- DNS pointing at the public reverse proxy
+- A valid TLS certificate at that proxy
+- Encrypted off-host backup storage
 
-## 2. Configure `.env`
+Node is not required on the production host unless generating the admin hash
+outside a container. Development/tooling requires Node.js 24 or newer.
+
+## 2. Configure secrets
 
 ```bash
 cp .env.example .env
+chmod 0600 .env
 ```
 
-Fill in **all** secrets:
-
-- `SESSION_SECRET` — `openssl rand -hex 32`
-- `POSTGRES_PASSWORD` — a long random string (also update `DATABASE_URL`)
-- `ADMIN_PASSWORD_HASH` — `pnpm --filter @print/web hash-password '<password>'`
-  - ⚠️ **Docker Compose interpolates `.env`.** bcrypt hashes contain `$`, so
-    **double every `$` to `$$`** in this file (e.g. `$2a$12$…` → `$$2a$$12$$…`).
-    The container receives the correct single-`$` value.
-- `WHATSAPP_NUMBER` — international format, digits only (e.g. `919876543210`)
-- `APP_ORIGIN` — `https://print.rish.pw`
-- `PROXY_BIND` — the homelab host address the public reverse proxy can reach
-  (for example the host's Tailscale IP, or the service LXC's LAN IP). The
-  compose proxy publishes port 8080 on this address only; it defaults to
-  `127.0.0.1` (loopback), which is safe but unreachable remotely. Never use
-  `0.0.0.0` - the stack must not be exposed on every interface.
-- `TRUSTED_PROXY_CIDR` — the source address the reverse proxy's traffic arrives
-  from (for example the VPS tailnet IP, subnet-router address, or Nginx Proxy
-  Manager LXC IP). The compose proxy adopts the proxy-set `X-Real-IP` only from
-  this source, so
-  rate limiting keys on real browser IPs instead of lumping every visitor into
-  the forwarder's bucket. Defaults to `127.0.0.1` (trust nobody).
-
-See [ENV.md](ENV.md) for the full list.
-
-## 3. Build and start
+Generate independent random values. Do not reuse passwords:
 
 ```bash
+openssl rand -hex 32   # SESSION_SECRET
+openssl rand -hex 32   # Postgres owner password
+openssl rand -hex 32   # web database password
+openssl rand -hex 32   # worker database password
+openssl rand -hex 32   # Redis password
+pnpm --filter @print/web hash-password
+```
+
+The password helper prompts on the terminal (at least 12 characters, at most 72
+UTF-8 bytes), so plaintext is not exposed in shell history or process listings.
+Double every `$` in the resulting bcrypt hash to `$$` in Compose `.env`.
+
+Set three distinct database URLs targeting the same database:
+
+```dotenv
+POSTGRES_USER=print_owner
+POSTGRES_PASSWORD=<owner-password>
+POSTGRES_DB=print
+MIGRATION_DATABASE_URL=postgresql://print_owner:<owner-password>@postgres:5432/print
+DATABASE_URL=postgresql://print_web:<web-password>@postgres:5432/print
+WORKER_DATABASE_URL=postgresql://print_worker:<worker-password>@postgres:5432/print
+```
+
+Percent-encode URL passwords when necessary. The short-lived migration service
+uses the owner URL, creates/rotates the runtime roles, revokes public access,
+and reapplies explicit grants. Web and worker receive only their own runtime
+role.
+
+For an existing Postgres volume, keep its original `POSTGRES_USER` as the owner
+and use that role in `MIGRATION_DATABASE_URL`; changing the environment value
+does not rename an already-created database role. Choose two new runtime role
+names/URLs. The next migration run provisions them before the app starts.
+
+Also set:
+
+- `APP_ORIGIN=https://print.rish.pw`
+- `PROXY_BIND` to the private host address reached by the edge, never
+  `0.0.0.0`
+- `TRUSTED_PROXY_CIDR` to the exact source address/CIDR seen from the edge
+- optional provider/business values documented in [ENV.md](ENV.md)
+
+## 3. Build, migrate, and start
+
+```bash
+docker compose config --quiet
 docker compose up -d --build
+docker compose ps
+docker compose logs migrate
 ```
 
-This builds the web and worker images (the worker image is large — it bundles
-OrcaSlicer + webkit, ~1.5–2 GB — and the first build downloads the AppImage).
-On start-up the web container runs `prisma migrate deploy` automatically.
-
-Check health:
+The one-shot `migrate` service must exit with status 0 before web or worker can
+start. It applies Prisma migrations and least-privilege grants. To deliberately
+rerun it after a grant/credential change:
 
 ```bash
-docker compose ps
-# Use the address you set as PROXY_BIND (localhost if you kept the default).
-curl -s http://${PROXY_BIND:-localhost}:8080/api/health   # {"ok":true,"db":true,"redis":true}
+docker compose run --rm migrate
+docker compose up -d web worker
 ```
 
-## 4. Public Reverse Proxy
+The worker image is large because it includes OrcaSlicer. For encrypted
+bind-mounted storage, include `docker-compose.vault.yml` as described in
+[STORAGE_VAULT_LXC.md](STORAGE_VAULT_LXC.md).
 
-Use exactly one public reverse proxy path. If Nginx Proxy Manager is only a
-local convenience proxy for LAN IP-to-name routing, keep `print.rish.pw` on the
-VPS nginx path and do not move production ingress to NPM. Put `print.rish.pw`
-in NPM only if that NPM LXC is intentionally promoted to the public ingress, or
-if the VPS is only tunneling traffic to NPM.
+Check service health through the private bind:
 
-### Plain nginx server block
+```bash
+curl --fail --silent --show-error \
+  "http://${PROXY_BIND:-127.0.0.1}:8080/api/health"
+```
 
-Add a server block that proxies to the host address from `PROXY_BIND`:
+## 4. Public reverse proxy
+
+There must be only one public ingress. Firewall compose port 8080 so only that
+proxy can reach it. The edge must redirect HTTP, terminate TLS, set the original
+scheme/IP headers, omit query strings and referrers from logs, and grant the
+large body allowance only to the exact upload endpoint.
+
+### Plain nginx example
 
 ```nginx
+log_format print_no_args '$remote_addr - $remote_user [$time_local] '
+                         '"$request_method $uri $server_protocol" $status $body_bytes_sent '
+                         '"-" "$http_user_agent"';
+
 server {
+    listen 80;
     server_name print.rish.pw;
-    listen 443 ssl;
-    # ssl_certificate / ssl_certificate_key managed by certbot
+    return 301 https://$host$request_uri;
+}
 
-    # MUST match the compose proxy — a smaller value silently breaks 100 MB uploads.
-    client_max_body_size 110m;
-    proxy_read_timeout 120s;
+server {
+    listen 443 ssl http2;
+    server_name print.rish.pw;
+    # ssl_certificate / ssl_certificate_key managed by your ACME client
 
-    location / {
+    access_log /var/log/nginx/print.access.log print_no_args;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    server_tokens off;
+
+    # Small by default. Upload is the sole exception below.
+    client_max_body_size 64k;
+    client_body_timeout 15s;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+
+    location = /api/uploads {
+        client_max_body_size 301m;
+        client_body_timeout 120s;
+        proxy_request_buffering off;
         proxy_pass http://<PROXY_BIND_ADDRESS>:8080;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+    }
+
+    location / {
+        proxy_pass http://<PROXY_BIND_ADDRESS>:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
     }
 }
 ```
 
-> **`client_max_body_size 110m` is the single most common deployment mistake.**
-> It must be set on **both** the public reverse proxy and the compose proxy
-> (already done in `docker/proxy/nginx.conf`). If the public proxy value is
-> smaller, large uploads fail with an opaque 413 before ever reaching the app.
+Using `$uri` rather than `$request_uri` prevents legacy capability query values
+from entering access logs. Do not add `$http_referer` to this vhost's log
+format. Keep the 301 MiB streaming exception exact; granting it to `/` lets
+small JSON endpoints become buffering/slow-body targets at the edge.
 
-### Nginx Proxy Manager as Public Ingress
+### Nginx Proxy Manager
 
-Create a Proxy Host:
+- Enable Let's Encrypt, Force SSL, HTTP/2, HSTS, and Block Common Exploits.
+- Set the default advanced body limit to `64k` and body timeout to `15s`.
+- Add an exact custom location `/api/uploads` with `client_max_body_size 301m`,
+  `client_body_timeout 120s`, and `proxy_request_buffering off`.
+- Configure an access log that excludes query strings and referrers, or disable
+  access logging for this host if NPM cannot provide a safe format.
+- Set `TRUSTED_PROXY_CIDR` and the port-8080 firewall allowlist to the NPM source
+  address as observed by the compose host.
 
-- Domain Names: `print.rish.pw`
-- Scheme: `http`
-- Forward Hostname / IP: the `PROXY_BIND` address, for example `192.168.1.7`
-- Forward Port: `8080`
-- Enable SSL with Let's Encrypt, Force SSL, and HTTP/2
-- Keep "Block Common Exploits" enabled
+For local-only routing use a separate LAN name or split DNS. Do not create a
+second publicly reachable path to port 8080.
 
-In the NPM Advanced field, add:
-
-```nginx
-client_max_body_size 110m;
-proxy_read_timeout 120s;
-proxy_send_timeout 120s;
-```
-
-Then set `TRUSTED_PROXY_CIDR` to the NPM LXC address as seen by the print LXC,
-and update the host firewall allowlist for port 8080 to that same source.
-
-For local-only NPM routing, use a separate LAN name such as
-`print.home.arpa`/`print.lan`, or a split-DNS override for `print.rish.pw` only
-inside your LAN. If local NPM proxies directly to port 8080, also add the NPM
-LXC IP to the port-8080 firewall allowlist; otherwise local users can simply use
-the public `https://print.rish.pw` path through the VPS and no firewall change is
-needed.
-
-The compose proxy sets `X-Real-IP`/`X-Forwarded-For`; rate limiting keys off the
-client IP the public reverse proxy forwards. The compose proxy is the trust
-boundary - do not expose port 8080 to the public internet. The compose file
-helps enforce this: port 8080 binds to `PROXY_BIND` (default `127.0.0.1`) - see
-step 2.
-
-## 5. Operating
+## 5. Operations
 
 ```bash
-docker compose logs -f web worker      # tail logs
-docker compose restart web             # restart a service
-docker compose pull && docker compose up -d --build   # update
+docker compose logs -f web worker
+docker compose restart web
+docker compose pull
+docker compose up -d --build
 ```
 
-Backups, retention and Orca upgrades are covered in [MAINTENANCE.md](MAINTENANCE.md).
+Review migration SQL, image-digest updates, CI scans, backups, and the Orca
+smoke gate before deploying. See [MAINTENANCE.md](MAINTENANCE.md) and
+[SECURITY.md](SECURITY.md).
 
-## Notes
-
-- `DEPLOYMENT.md` in the **repository root** (not this file) holds host-specific
-  secrets/topology and is git-ignored — never commit those details.
-- Only the compose `proxy` publishes a port. `postgres`, `redis`, `web` and
-  `worker` are reachable only on the internal compose network.
+Only compose nginx publishes a port. PostgreSQL and authenticated Redis remain
+on the internal backend network; the worker has no edge-network attachment.

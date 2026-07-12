@@ -5,7 +5,7 @@
   "description": "Instant 3D-printing quotation system for print.rish.pw",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "packageManager": "pnpm@9.15.9",
   "pnpm": {

@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
 import { NextResponse, type NextRequest } from "next/server";
-import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
+import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { env } from "@/lib/env";
-import { RATE_LIMITS } from "@/lib/security";
+import { RATE_LIMITS, withRedisLock } from "@/lib/security";
 import { createAdminSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -15,21 +15,26 @@ export async function POST(request: NextRequest) {
   const guard = await guardMutation(request, "adminLogin", RATE_LIMITS.adminLogin);
   if (guard) return guard;
 
-  const tooLarge = assertBodySize(request, MAX_BODY_BYTES);
-  if (tooLarge) return tooLarge;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "BAD_JSON", "Request body must be JSON");
-  }
+  const parsedBody = await readJsonBody(request, MAX_BODY_BYTES);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
   const password = (body as { password?: unknown })?.password;
-  if (typeof password !== "string" || password.length === 0) {
+  if (
+    typeof password !== "string" ||
+    password.length === 0 ||
+    Buffer.byteLength(password, "utf8") > 72
+  ) {
     return jsonError(422, "MISSING_PASSWORD", "Enter the admin password");
   }
 
-  const ok = await bcrypt.compare(password, env.adminPasswordHash).catch(() => false);
+  // bcryptjs is intentionally expensive and CPU-bound. Serialize verifications
+  // across replicas so a distributed source cannot run many hashes in parallel.
+  const ok = await withRedisLock(
+    "admin-password-verify",
+    () => bcrypt.compare(password, env.adminPasswordHash).catch(() => false),
+    { leaseMs: 5_000, waitMs: 1_000 },
+  );
+  if (ok === null) return jsonError(503, "LOGIN_BUSY", "Login is busy. Please retry.");
   if (!ok) return jsonError(401, "INVALID_CREDENTIALS", "Incorrect password");
 
   await createAdminSession();

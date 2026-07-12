@@ -38,6 +38,8 @@ const SESSION = "sess-1";
 const mocks = vi.hoisted(() => {
   const state: { table: Row[] } = { table: [] };
   const removeQuietly = vi.fn(async (_path: string) => {});
+  const modelPath = vi.fn((id: string, format?: string) => `/u/${id}.${format ?? "stl"}`);
+  const thumbPath = vi.fn((id: string) => `/t/${id}.png`);
 
   // Faithful subset of the Prisma `where` semantics the route relies on.
   const matches = (r: Row, where: Record<string, any>): boolean => {
@@ -48,7 +50,7 @@ const mocks = vi.hoisted(() => {
     return true;
   };
 
-  return { state, removeQuietly, matches };
+  return { state, removeQuietly, modelPath, thumbPath, matches };
 });
 
 vi.mock("@print/db", () => ({
@@ -69,8 +71,17 @@ vi.mock("@print/db", () => ({
   },
 }));
 vi.mock("@/lib/session", () => ({ getQuoteSessionId: vi.fn(async () => SESSION) }));
-vi.mock("@/lib/security", () => ({ assertSameOrigin: vi.fn(() => true) }));
-vi.mock("@/lib/storage", () => ({ removeQuietly: mocks.removeQuietly }));
+vi.mock("@/lib/security", () => ({
+  assertSameOrigin: vi.fn(() => true),
+  clientIp: vi.fn(() => "127.0.0.1"),
+  rateLimit: vi.fn(async () => ({ allowed: true, retryAfterSeconds: 0 })),
+  RATE_LIMITS: { modelMutation: { max: 60, windowSeconds: 600 } },
+}));
+vi.mock("@/lib/storage", () => ({
+  removeQuietly: mocks.removeQuietly,
+  modelPath: mocks.modelPath,
+  thumbPath: mocks.thumbPath,
+}));
 
 // The mocked Prisma client, for per-test `mockImplementationOnce` overrides.
 import { prisma } from "@print/db";
@@ -78,15 +89,13 @@ import { prisma } from "@print/db";
 // Imported after the mocks are registered.
 const { DELETE, GET } = await import("@/app/api/models/route");
 
-/** Minimal stand-in for the parts of NextRequest the route touches (`.json()`).
- *  `throws` reproduces an absent/invalid body. */
+/** Real streaming request body so bounded JSON parsing is covered too.
+ * `throws` reproduces an absent body. */
 const req = (body: unknown, throws = false): NextRequest =>
-  ({
-    headers: new Headers(),
-    json: async () => {
-      if (throws) throw new Error("no body");
-      return body;
-    },
+  new Request("http://localhost/api/models", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    ...(throws ? {} : { body: JSON.stringify(body) }),
   }) as unknown as NextRequest;
 
 const getReq = (url: string): NextRequest =>

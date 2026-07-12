@@ -1,0 +1,34 @@
+# Production storage override for a dedicated LXC. The host/LXC mount setup is
+# documented in docs/STORAGE_VAULT_LXC.md. Every variable is required so a typo
+# cannot silently create database or upload data on the LXC root filesystem.
+
+services:
+  web:
+    volumes:
+      - type: bind
+        source: ${PRINT_UPLOAD_DIR:?Set PRINT_UPLOAD_DIR to the vault uploads directory}
+        target: /data/uploads
+      - type: bind
+        source: ${PRINT_PDF_DIR:?Set PRINT_PDF_DIR to the vault PDF directory}
+        target: /data/pdfs
+
+  worker:
+    volumes:
+      - type: bind
+        source: ${PRINT_UPLOAD_DIR:?Set PRINT_UPLOAD_DIR to the vault uploads directory}
+        target: /data/uploads
+      - type: bind
+        source: ${PRINT_PDF_DIR:?Set PRINT_PDF_DIR to the vault PDF directory}
+        target: /data/pdfs
+
+  postgres:
+    volumes:
+      - type: bind
+        source: ${PRINT_DB_DIR:?Set PRINT_DB_DIR to the vault PostgreSQL directory}
+        target: /var/lib/postgresql/data
+
+  redis:
+    volumes:
+      - type: bind
+        source: ${PRINT_REDIS_DIR:?Set PRINT_REDIS_DIR to the vault Redis directory}
+        target: /data

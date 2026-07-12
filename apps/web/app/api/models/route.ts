@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { CATALOG, modelConfigSchema, type BoundingBoxMm, type ModelConfig } from "@print/shared";
-import { assertBodySize, jsonError } from "@/lib/api-util";
-import { assertSameOrigin } from "@/lib/security";
+import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
+import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
-import { removeQuietly } from "@/lib/storage";
+import { modelPath, removeQuietly, thumbPath } from "@/lib/storage";
 import type { UploadedModelDto } from "@/lib/upload-client";
 
 export const runtime = "nodejs";
@@ -119,22 +119,20 @@ export async function GET(request: NextRequest) {
  *  fails. Everything else unattached is genuinely orphaned (e.g. left over after
  *  a page reload) and safe to remove. */
 export async function DELETE(request: NextRequest) {
-  if (!assertSameOrigin(request)) return jsonError(403, "CSRF", "Cross-origin request rejected");
+  const guard = await guardMutation(request, "modelMutation", RATE_LIMITS.modelMutation);
+  if (guard) return guard;
   const sessionId = await getQuoteSessionId();
   if (!sessionId) return NextResponse.json({ cleared: 0 });
 
   // A keep-list of at most maxModelsPerSession UUIDs — anything bigger is abuse.
-  const tooLarge = assertBodySize(request, 16 * 1024);
-  if (tooLarge) return tooLarge;
-
   // Parse the preserve-list defensively: a missing/invalid body means "keep
   // nothing" (the cleanup-after-reload case, where the client has no models).
   let keep: string[] = [];
-  try {
-    const body = (await request.json()) as { keep?: unknown };
-    if (Array.isArray(body.keep)) keep = body.keep.filter((x): x is string => typeof x === "string");
-  } catch {
-    /* no/invalid JSON body */
+  const parsedBody = await readJsonBody(request, 16 * 1024);
+  if (!parsedBody.ok && parsedBody.response.status === 413) return parsedBody.response;
+  if (parsedBody.ok) {
+    const body = parsedBody.value as { keep?: unknown };
+    if (Array.isArray(body?.keep)) keep = body.keep.filter((x): x is string => typeof x === "string");
   }
 
   const stale = await prisma.uploadedModel.findMany({
@@ -142,7 +140,7 @@ export async function DELETE(request: NextRequest) {
     // had inconsistent semantics across Prisma versions; omitting it is the
     // unambiguous "no exclusion" (clear everything unattached) case.
     where: { sessionId, items: { none: {} }, ...(keep.length ? { id: { notIn: keep } } : {}) },
-    select: { id: true, storedPath: true, thumbPath: true },
+    select: { id: true, format: true },
   });
 
   let cleared = 0;
@@ -157,8 +155,8 @@ export async function DELETE(request: NextRequest) {
       where: { id: model.id, items: { none: {} } },
     });
     if (count === 0) continue;
-    await removeQuietly(model.storedPath);
-    await removeQuietly(model.thumbPath);
+    await removeQuietly(modelPath(model.id, model.format));
+    await removeQuietly(thumbPath(model.id));
     cleared += 1;
   }
   return NextResponse.json({ cleared });

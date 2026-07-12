@@ -3,7 +3,7 @@ import { CATALOG } from "./catalog";
 import { estimateCompletionDate } from "./completion-date";
 import { formatFromFilename, sanitizeOriginalName } from "./filename";
 import { formatDuration, formatGrams, formatPaise } from "./money";
-import { settingsKey } from "./settings-key";
+import { settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "./whatsapp";
@@ -13,6 +13,12 @@ describe("settingsKey", () => {
     expect(
       settingsKey({ material: "PLA", layerHeightUm: 160, infillPct: 25, supports: "auto" }),
     ).toBe("PLA:160:25:auto");
+  });
+
+  it("scopes persistent cache entries to format and slicer/profile version", () => {
+    const settings = { material: "PLA", layerHeightUm: 160, infillPct: 25, supports: "auto" } as const;
+    expect(sliceArtifactKey("stl", settings)).toBe("orca-2.4.1-a1-v1:stl:PLA:160:25:auto");
+    expect(sliceArtifactKey("obj", settings)).not.toBe(sliceArtifactKey("stl", settings));
   });
 });
 

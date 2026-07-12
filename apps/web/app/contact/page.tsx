@@ -51,6 +51,7 @@ export default function ContactPage() {
           <div className="tile overflow-hidden p-0">
             <iframe
               src={siteConfig.googleMapsEmbedUrl}
+              sandbox="allow-scripts allow-same-origin allow-popups"
               title="Location map"
               className="h-72 w-full"
               loading="lazy"

@@ -10,13 +10,19 @@ import { SummaryBar } from "./summary-bar";
 
 /** Client shell for the quote builder: uploads, per-model cards with live
  *  slicing + pricing, and the sticky quote summary. */
-export function QuoteBuilder({ maxModels }: { maxModels: number }) {
+export function QuoteBuilder({
+  maxModels,
+  maxUploadMb,
+}: {
+  maxModels: number;
+  maxUploadMb: number;
+}) {
   const models = useQuoteStore((s) => s.models);
 
   return (
     <div className="mx-auto mt-12 max-w-3xl">
       <SessionCleanupBanner />
-      <Dropzone maxModels={maxModels} />
+      <Dropzone maxModels={maxModels} maxUploadMb={maxUploadMb} />
 
       {models.length > 0 && (
         <>

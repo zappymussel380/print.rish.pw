@@ -1,7 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
-import { logger } from "./logger";
+import { logger, safeErrorMessage } from "./logger";
 import { redis } from "./redis";
+import { readBoundedJson } from "./upstream-response";
 
 /**
  * Shared Shiprocket rate estimator. Both the interactive estimate endpoint
@@ -86,6 +87,8 @@ function derive(input: EstimateInput) {
 
 const ESTIMATE_TTL_SECONDS = 30 * 60; // A shown estimate is honoured for 30 min.
 const secretKey = () => new TextEncoder().encode(env.sessionSecret);
+const TOKEN_ISSUER = "print.rish.pw";
+const TOKEN_AUDIENCE = "shipping-estimate";
 
 interface EstimateClaims {
   p: string; // delivery pincode
@@ -113,6 +116,8 @@ export async function issueEstimateToken(
   };
   return new SignJWT({ ...claims })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(TOKEN_ISSUER)
+    .setAudience(TOKEN_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + ESTIMATE_TTL_SECONDS)
     .sign(secretKey());
@@ -131,7 +136,11 @@ export async function verifyEstimateToken(
 ): Promise<{ amountPaise: number; days: string | null; pincode: string } | null> {
   let claims: EstimateClaims;
   try {
-    const { payload } = await jwtVerify(token, secretKey());
+    const { payload } = await jwtVerify(token, secretKey(), {
+      algorithms: ["HS256"],
+      issuer: TOKEN_ISSUER,
+      audience: TOKEN_AUDIENCE,
+    });
     claims = payload as unknown as EstimateClaims;
   } catch {
     return null;
@@ -165,8 +174,10 @@ async function getToken(email: string, password: string, force = false): Promise
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new UpstreamError(`login failed (${res.status})`);
-  const data = (await res.json()) as { token?: string };
-  if (!data.token) throw new UpstreamError("login returned no token");
+  const data = (await readBoundedJson(res, 32 * 1024)) as { token?: string };
+  if (typeof data.token !== "string" || data.token.length === 0 || data.token.length > 4096) {
+    throw new UpstreamError("login returned no valid token");
+  }
   await redis.set(TOKEN_KEY, data.token, "EX", TOKEN_TTL_SECONDS);
   return data.token;
 }
@@ -235,9 +246,15 @@ export async function fetchShipping(input: EstimateInput): Promise<ShippingResul
     }
     if (!res.ok) throw new UpstreamError(`serviceability failed (${res.status})`);
 
-    const data = (await res.json()) as { data?: { available_courier_companies?: CourierCompany[] } };
+    const data = (await readBoundedJson(res, 1024 * 1024)) as {
+      data?: { available_courier_companies?: CourierCompany[] };
+    };
     const couriers = (data.data?.available_courier_companies ?? []).filter(
-      (c) => typeof c.rate === "number" && c.rate > 0,
+      (c) =>
+        typeof c.rate === "number" &&
+        Number.isFinite(c.rate) &&
+        c.rate > 0 &&
+        c.rate <= 1_000_000,
     );
     if (couriers.length === 0) return { ok: false, reason: "NO_SERVICE" };
 
@@ -247,13 +264,16 @@ export async function fetchShipping(input: EstimateInput): Promise<ShippingResul
     const roundedRupees = Math.max(10, Math.ceil(best.rate! / 10) * 10);
     const estimate: ShippingEstimate = {
       amountPaise: roundedRupees * 100,
-      days: best.estimated_delivery_days ?? null,
+      days:
+        typeof best.estimated_delivery_days === "string"
+          ? best.estimated_delivery_days.replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 64)
+          : null,
       weightKg,
     };
     await redis.set(cacheKey, JSON.stringify(estimate), "EX", RESULT_TTL_SECONDS);
     return { ok: true, estimate };
   } catch (err) {
-    logger.error({ err }, "Shipping rate lookup failed");
+    logger.error({ error: safeErrorMessage(err) }, "Shipping rate lookup failed");
     return { ok: false, reason: "UPSTREAM" };
   }
 }

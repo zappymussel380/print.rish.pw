@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { type Prisma, prisma } from "@print/db";
 import {
   AdminDashboard,
   type AdminStats,
   type QuotationRow,
 } from "@/components/admin/admin-dashboard";
+import { isAdmin } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -14,6 +16,10 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
+  // Keep the PII query independently protected even if middleware matching or
+  // framework behavior changes. API routes apply the same defense in depth.
+  if (!(await isAdmin())) redirect("/admin/login");
+
   const quotations = await prisma.quotation.findMany({
     orderBy: { createdAt: "desc" },
     take: 1000,

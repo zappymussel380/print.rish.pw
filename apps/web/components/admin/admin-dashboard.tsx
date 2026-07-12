@@ -41,6 +41,7 @@ const STATUSES = [
   "DELIVERED",
   "CANCELLED",
 ] as const;
+const TERMINAL_STATUSES = new Set(["COMPLETED", "DELIVERED", "CANCELLED"]);
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 
@@ -193,7 +194,7 @@ export function AdminDashboard({
                 <td className="py-3 pr-3">
                   <select
                     value={row.status}
-                    disabled={busyId === row.id}
+                    disabled={busyId === row.id || TERMINAL_STATUSES.has(row.status)}
                     onChange={(e) => changeStatus(row.id, e.target.value)}
                     className="input-base w-auto px-2 py-1.5 text-xs"
                     aria-label={`Status of ${row.number}`}

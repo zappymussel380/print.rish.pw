@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
+import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { env } from "@/lib/env";
-import { logger } from "@/lib/logger";
+import { logger, safeErrorMessage } from "@/lib/logger";
 import { RATE_LIMITS } from "@/lib/security";
 
 export const runtime = "nodejs";
@@ -34,15 +34,9 @@ export async function POST(request: NextRequest) {
 
   // Reject oversized bodies before parsing. The largest legit field is the 4 000-
   // char message, so 8 KiB is ample headroom for the whole form.
-  const tooLarge = assertBodySize(request, 8 * 1024);
-  if (tooLarge) return tooLarge;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "BAD_JSON", "Request body must be JSON");
-  }
+  const parsedBody = await readJsonBody(request, 8 * 1024);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
 
   const raw = body as Record<string, unknown>;
   const name = stripControl(String(raw.name ?? "")).trim();
@@ -111,7 +105,7 @@ Sent via print.rish.pw contact form`,
     }
     return NextResponse.json({ status: "ok" });
   } catch (err) {
-    logger.error({ err }, "Contact email send threw");
+    logger.error({ error: safeErrorMessage(err) }, "Contact email send threw");
     return jsonError(502, "SEND_FAILED", "Failed to send email. Please try again.");
   }
 }

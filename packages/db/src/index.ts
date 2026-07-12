@@ -6,7 +6,9 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+    // Prisma error events can embed query arguments. Let callers log a bounded,
+    // redacted summary instead of emitting customer data directly in production.
+    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : [],
   });
 
 if (process.env.NODE_ENV !== "production") {

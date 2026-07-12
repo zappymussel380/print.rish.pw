@@ -19,19 +19,28 @@ export const config = {
   profilesDir: str("PROFILES_DIR", fileURLToPath(new URL("../profiles", import.meta.url))),
   /** Shared uploads volume — same path the web container mounts. */
   uploadDir: str("UPLOAD_DIR", "./data/uploads"),
+  pdfDir: str("PDF_DIR", "./data/pdfs"),
   /** Per-job scratch root (fast local disk / tmpfs in production). */
   workRoot: str("SLICE_WORK_DIR", "/tmp/slice-jobs"),
-  /** Writable XDG runtime dir Orca needs for its 3MF export path. */
-  xdgRuntimeDir: str("XDG_RUNTIME_DIR", "/tmp/xdg"),
-  orcaDataDir: str("ORCA_DATADIR", "/tmp/orca-data"),
-  sliceTimeoutMs: int("SLICE_TIMEOUT_SECONDS", 180) * 1000,
-  concurrency: int("WORKER_CONCURRENCY", 2),
+  sliceTimeoutMs: Math.min(int("SLICE_TIMEOUT_SECONDS", 180), 900) * 1000,
+  concurrency: Math.min(int("WORKER_CONCURRENCY", 2), 8),
+  /** Base numeric uid/gid for untrusted Orca subprocesses. Each concurrent
+   * job gets a distinct offset identity and a private staged model copy. */
+  slicerUid: int("SLICER_UID", 1002),
+  slicerGid: int("SLICER_GID", 3000),
+  storageUid: int("STORAGE_UID", 1001),
+  storageGid: int("STORAGE_GID", 1001),
+  maxUploadBytes: Math.min(int("MAX_UPLOAD_MB", 300), 300) * 1024 * 1024,
   slicerVersion: str("ORCA_VERSION", "2.4.1"),
-  thumbSize: int("THUMB_SIZE", 512),
+  thumbSize: Math.min(int("THUMB_SIZE", 512), 1024),
   /** Hours to keep uploads never attached to a submitted quotation. */
   uploadRetentionHours: int("UPLOAD_RETENTION_HOURS", 48),
   /** Days to keep model files of terminal-state quotations (rows/PDFs kept). */
   fileRetentionDays: int("FILE_RETENTION_DAYS", 30),
+  /** Local-only escape hatch. Production must run the orchestrator as root so
+   * it can drop Orca to a distinct credential-free UID. */
+  allowInsecureSlicer:
+    process.env.NODE_ENV !== "production" && process.env.ALLOW_INSECURE_SLICER === "true",
 } as const;
 
 /** Flattened process profile filename for a given layer height (µm). */

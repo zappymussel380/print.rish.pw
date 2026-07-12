@@ -37,15 +37,21 @@ export function finalizeModel(positions: Float32Array): ParsedModel {
       (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
   }
 
-  if (![minX, minY, minZ, maxX, maxY, maxZ].every(Number.isFinite)) {
+  const bbox = { x: maxX - minX, y: maxY - minY, z: maxZ - minZ };
+  const volumeCm3 = Math.abs(signedVolume) / 1000;
+  if (
+    ![minX, minY, minZ, maxX, maxY, maxZ, bbox.x, bbox.y, bbox.z, volumeCm3].every(
+      Number.isFinite,
+    )
+  ) {
     throw new ModelParseError("Model contains non-finite coordinates");
   }
 
   return {
     positions,
     triangleCount: positions.length / 9,
-    bboxMm: { x: maxX - minX, y: maxY - minY, z: maxZ - minZ },
+    bboxMm: bbox,
     // mm³ → cm³
-    volumeCm3: Math.abs(signedVolume) / 1000,
+    volumeCm3,
   };
 }

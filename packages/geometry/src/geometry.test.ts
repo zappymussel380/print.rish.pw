@@ -2,8 +2,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { extract3mfPlates, extract3mfSourceConfig, ModelParseError, parseModel } from "./index";
-import { MAX_XML_BYTES, parseXml } from "./xml";
+import {
+  extract3mfPlates,
+  extract3mfSourceConfig,
+  MAX_3MF_PLATES,
+  ModelParseError,
+  parseModel,
+} from "./index";
+import { MAX_XML_BYTES, MAX_XML_DEPTH, MAX_XML_ELEMENTS, parseXml } from "./xml";
+import { MAX_ZIP_ENTRIES } from "./zip";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "..", "fixtures", name));
 
@@ -32,6 +39,17 @@ describe("parseModel", () => {
     } catch (err) {
       expect((err as ModelParseError).code).toBe("ZIP_BOMB");
     }
+  });
+
+  it("rejects containers with an excessive number of entries", () => {
+    const entries = Object.fromEntries(
+      Array.from({ length: MAX_ZIP_ENTRIES + 1 }, (_, index) => [
+        `Metadata/padding-${index}.txt`,
+        new Uint8Array([index & 0xff]),
+      ]),
+    );
+    const archive = Buffer.from(zipSync(entries));
+    expect(() => parseModel(archive, "3mf")).toThrowError(/entries/);
   });
 
   it("parses split 3MF projects with geometry outside the main model part", () => {
@@ -168,6 +186,32 @@ describe("parseModel", () => {
     }
   });
 
+  it("rejects 3MF projects that multiply geometry across excessive plates", () => {
+    const model = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources><object id="1" type="model"><mesh>
+          <vertices>
+            <vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/>
+          </vertices>
+          <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+        </mesh></object></resources>
+        <build><item objectid="1"/></build>
+      </model>`;
+    const plates = Array.from(
+      { length: MAX_3MF_PLATES + 1 },
+      (_, index) => `<plate><metadata key="plater_id" value="${index + 1}"/>
+        <model_instance><metadata key="object_id" value="1"/></model_instance></plate>`,
+    ).join("");
+    const archive = Buffer.from(
+      zipSync({
+        "3D/3dmodel.model": strToU8(model),
+        "Metadata/model_settings.config": strToU8(`<config>${plates}</config>`),
+      }),
+    );
+
+    expect(() => extract3mfPlates(archive)).toThrowError(/printable plates/);
+  });
+
   it("rejects garbage bytes for every format", () => {
     const garbage = Buffer.from("not a model at all, sorry");
     for (const format of ["stl", "obj", "3mf", "amf"] as const) {
@@ -227,5 +271,14 @@ describe("parseXml guards", () => {
     // actually parsing a 128 MB document.
     const oversized = `<!--${"x".repeat(MAX_XML_BYTES)}--><amf/>`;
     expect(() => parseXml(oversized, "test")).toThrowError(/exceeds/);
+  });
+
+  it("rejects excessive element counts and nesting before DOM allocation", () => {
+    expect(() => parseXml(`<root>${"<x/>".repeat(MAX_XML_ELEMENTS + 1)}</root>`, "test")).toThrowError(
+      /elements/,
+    );
+    expect(() =>
+      parseXml(`${"<x>".repeat(MAX_XML_DEPTH + 1)}${"</x>".repeat(MAX_XML_DEPTH + 1)}`, "test"),
+    ).toThrowError(/nesting/);
   });
 });

@@ -1,7 +1,6 @@
-import { randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
-import { Prisma, prisma } from "@print/db";
+import { Prisma, prisma, type Quotation } from "@print/db";
 import {
   CATALOG,
   customerSchema,
@@ -9,20 +8,31 @@ import {
   modelConfigSchema,
   priceQuote,
   type QuoteLineInput,
-  settingsKey,
+  sliceArtifactKey,
   summariseItems,
 } from "@print/shared";
-import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
+import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { env } from "@/lib/env";
-import { logger } from "@/lib/logger";
+import { logger, safeErrorMessage } from "@/lib/logger";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { renderQuotationPdf } from "@/lib/pdf/quotation-pdf";
 import { nextQuotationNumber } from "@/lib/quotation-number";
-import { RATE_LIMITS } from "@/lib/security";
+import { issueQuotationAccess, setQuotationAccessCookie } from "@/lib/quotation-access";
+import {
+  RATE_LIMITS,
+  releaseRateLimitReservation,
+  reserveRateLimit,
+  withRedisLock,
+} from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
 import { verifyEstimateToken } from "@/lib/shipping";
 import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
-import { ensureStorageDirs, pdfPath } from "@/lib/storage";
+import {
+  ensureStorageDirs,
+  hasPdfStorageHeadroom,
+  pdfPath,
+  removeQuietly,
+} from "@/lib/storage";
 import { notifyNewQuotation } from "@/lib/telegram";
 import { buildWhatsAppUrl } from "@print/shared";
 
@@ -36,6 +46,9 @@ const SUPPORT_ENUM = { auto: "AUTO", off: "OFF", always: "ALWAYS" } as const;
 // materially larger is abuse, so reject by Content-Length before reading it
 // (32 KiB is generous headroom for the real payload — mirrors /api/shipping).
 const MAX_BODY_BYTES = 32 * 1024;
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+
+class CheckoutConflictError extends Error {}
 
 export async function POST(request: NextRequest) {
   const guard = await guardMutation(request, "checkout", RATE_LIMITS.checkout);
@@ -46,15 +59,9 @@ export async function POST(request: NextRequest) {
 
   // Reject oversized bodies before parsing so even a single in-budget request
   // can't stream a huge payload at the parser.
-  const tooLarge = assertBodySize(request, MAX_BODY_BYTES);
-  if (tooLarge) return tooLarge;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "BAD_JSON", "Request body must be JSON");
-  }
+  const parsedBody = await readJsonBody(request, MAX_BODY_BYTES);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
 
   const customer = customerSchema.safeParse((body as { customer?: unknown })?.customer);
   if (!customer.success) {
@@ -85,11 +92,11 @@ export async function POST(request: NextRequest) {
     stats: { filamentGrams: number; filamentMm: number; printSeconds: number; supportGrams: number | null };
   }[] = [];
 
-  // One line per model/settings — quantity handles multiples (matching the
+  // One line per model — quantity handles multiples (matching the
   // quote UI). Duplicates are rejected rather than silently merged: this
   // becomes a financial document, so the server must never reinterpret what
   // the customer submitted. The legit client can't produce duplicates.
-  const seenLines = new Set<string>();
+  const seenModels = new Set<string>();
 
   for (const raw of rawItems) {
     const modelId = (raw as { modelId?: unknown })?.modelId;
@@ -97,20 +104,28 @@ export async function POST(request: NextRequest) {
     if (typeof modelId !== "string" || !config.success) {
       return jsonError(422, "BAD_ITEM", "A model in your quote has invalid settings");
     }
+    if (seenModels.has(modelId)) {
+      return jsonError(422, "DUPLICATE_ITEM", "A model appears twice in your quote — use quantity instead");
+    }
+    seenModels.add(modelId);
 
     const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
     if (!model) return jsonError(404, "MODEL_NOT_FOUND", "A model in your quote was not found");
+    if (model.submittedAt) {
+      return jsonError(409, "MODEL_ALREADY_SUBMITTED", "A model in this quote was already submitted");
+    }
 
     const normalizedConfig = normalizeModelConfigLocks(config.data, model);
-    const lineKey = `${modelId}::${settingsKey(normalizedConfig)}`;
-    if (seenLines.has(lineKey)) {
-      return jsonError(422, "DUPLICATE_ITEM", "A model appears twice in your quote — use quantity instead");
-    }
-    seenLines.add(lineKey);
 
     const slice = await prisma.sliceResult.findUnique({
       where: {
-        fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: settingsKey(normalizedConfig) },
+        fileHash_settingsKey: {
+          fileHash: model.fileHash,
+          settingsKey: sliceArtifactKey(
+            model.format as "stl" | "3mf" | "obj" | "amf",
+            normalizedConfig,
+          ),
+        },
       },
     });
     if (!slice || slice.status !== "DONE" || slice.filamentGrams == null) {
@@ -144,7 +159,7 @@ export async function POST(request: NextRequest) {
     return jsonError(422, "PRICING_FAILED", "Could not price this quote");
   }
   const completion = estimateCompletionDate(breakdown.totals.printSeconds, CATALOG.leadTime);
-  const accessToken = randomBytes(32).toString("hex");
+  const access = issueQuotationAccess();
 
   // Optional prepaid shipping. The client sends the signed estimate token it got
   // when the customer viewed shipping on the quote page. We honour that exact
@@ -178,57 +193,125 @@ export async function POST(request: NextRequest) {
   }
   const grandTotalPaise = breakdown.totalPaise + shippingPaise;
 
-  const created = await prisma.$transaction(async (tx) => {
-    const number = await nextQuotationNumber(tx);
-    return tx.quotation.create({
-      data: {
-        number,
-        accessToken,
-        status: "PENDING",
-        customerName: customer.data.name,
-        customerEmail: customer.data.email,
-        customerPhone: customer.data.phone,
-        customerCity: customer.data.city,
-        notes: customer.data.notes ?? "",
-        setupFeePaise: breakdown.setupFeePaise,
-        totalPaise: grandTotalPaise,
-        shippingPaise,
-        shippingPincode,
-        estimatedCompletion: completion,
-        pricingSnapshot: {
-          catalog: CATALOG,
-          breakdown,
-          shipping:
-            shippingPaise > 0
-              ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays }
-              : { excluded: true },
-          generatedAt: new Date().toISOString(),
-        } as unknown as Prisma.InputJsonValue,
-        items: {
-          create: breakdown.lines.map((line, i) => {
-            const e = entries[i]!;
-            return {
-              modelId: e.modelId,
-              sliceResultId: e.sliceResultId,
-              material: e.config.material,
-              colour: e.config.colour,
-              layerHeightUm: e.config.layerHeightUm,
-              infillPct: e.config.infillPct,
-              supports: SUPPORT_ENUM[e.config.supports],
-              quantity: e.config.quantity,
-              unitGrams: line.unitGrams,
-              unitPrintSeconds: line.unitPrintSeconds,
-              materialPaise: line.materialPaise,
-              electricityPaise: line.electricityPaise,
-              maintenancePaise: line.maintenancePaise,
-              subtotalPaise: line.subtotalPaise,
-            };
-          }),
+  const persistedIntegers = [
+    breakdown.setupFeePaise,
+    breakdown.totalPaise,
+    shippingPaise,
+    grandTotalPaise,
+    ...breakdown.lines.flatMap((line) => [
+      line.unitPrintSeconds,
+      line.materialPaise,
+      line.electricityPaise,
+      line.maintenancePaise,
+      line.subtotalPaise,
+    ]),
+  ];
+  if (
+    persistedIntegers.some(
+      (value) => !Number.isInteger(value) || value < 0 || value > 2_147_483_647,
+    )
+  ) {
+    return jsonError(422, "QUOTE_TOO_LARGE", "This quotation exceeds supported numeric limits");
+  }
+
+  // Cross-IP circuit breaker is charged only after a session-owned, sliced,
+  // priceable order has passed validation, so unauthenticated garbage cannot
+  // cheaply consume the site's daily permanent-storage/notification capacity.
+  const globalLimit = await reserveRateLimit(
+    "checkout-global",
+    "all",
+    RATE_LIMITS.checkoutGlobal.max,
+    RATE_LIMITS.checkoutGlobal.windowSeconds,
+  );
+  if (!globalLimit.allowed) {
+    const response = jsonError(
+      503,
+      "CHECKOUT_CAPACITY_REACHED",
+      "Quotation capacity is temporarily full. Please try again later.",
+    );
+    response.headers.set("Retry-After", String(globalLimit.retryAfterSeconds));
+    return response;
+  }
+
+  let created: Quotation;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      // Claim every model in the same transaction as the quotation. This
+      // conditional update is the cross-replica/concurrent replay boundary:
+      // only one request can transition all rows to submitted.
+      const claimed = await tx.uploadedModel.updateMany({
+        where: {
+          id: { in: entries.map((entry) => entry.modelId) },
+          sessionId,
+          submittedAt: null,
+          items: { none: {} },
         },
-        history: { create: { toStatus: "PENDING", note: "Quotation submitted" } },
-      },
+        data: { submittedAt: new Date() },
+      });
+      if (claimed.count !== entries.length) throw new CheckoutConflictError();
+
+      const number = await nextQuotationNumber(tx);
+      return tx.quotation.create({
+        data: {
+          number,
+          accessToken: access.verifier,
+          accessTokenExpiresAt: access.expiresAt,
+          status: "PENDING",
+          customerName: customer.data.name,
+          customerEmail: customer.data.email,
+          customerPhone: customer.data.phone,
+          customerCity: customer.data.city,
+          notes: customer.data.notes ?? "",
+          setupFeePaise: breakdown.setupFeePaise,
+          totalPaise: grandTotalPaise,
+          shippingPaise,
+          shippingPincode,
+          estimatedCompletion: completion,
+          pricingSnapshot: {
+            catalog: CATALOG,
+            breakdown,
+            shipping:
+              shippingPaise > 0
+                ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays }
+                : { excluded: true },
+            generatedAt: new Date().toISOString(),
+          } as unknown as Prisma.InputJsonValue,
+          items: {
+            create: breakdown.lines.map((line, i) => {
+              const e = entries[i]!;
+              return {
+                modelId: e.modelId,
+                sliceResultId: e.sliceResultId,
+                material: e.config.material,
+                colour: e.config.colour,
+                layerHeightUm: e.config.layerHeightUm,
+                infillPct: e.config.infillPct,
+                supports: SUPPORT_ENUM[e.config.supports],
+                quantity: e.config.quantity,
+                unitGrams: line.unitGrams,
+                unitPrintSeconds: line.unitPrintSeconds,
+                materialPaise: line.materialPaise,
+                electricityPaise: line.electricityPaise,
+                maintenancePaise: line.maintenancePaise,
+                subtotalPaise: line.subtotalPaise,
+              };
+            }),
+          },
+          history: { create: { toStatus: "PENDING", note: "Quotation submitted" } },
+        },
+      });
     });
-  });
+  } catch (err) {
+    if (globalLimit.member) {
+      await releaseRateLimitReservation("checkout-global", "all", globalLimit.member).catch(
+        () => {},
+      );
+    }
+    if (err instanceof CheckoutConflictError) {
+      return jsonError(409, "MODEL_ALREADY_SUBMITTED", "This quote was already submitted");
+    }
+    throw err;
+  }
 
   // PDF rendering happens outside the transaction (it is CPU-bound and slow).
   try {
@@ -262,11 +345,28 @@ export async function POST(request: NextRequest) {
       totalPrintSeconds: breakdown.totals.printSeconds,
       completion,
     });
+    if (pdf.length > MAX_PDF_BYTES) throw new Error("Generated quotation PDF exceeds the size limit");
     const path = pdfPath(created.number);
-    await writeFile(path, pdf);
-    await prisma.quotation.update({ where: { id: created.id }, data: { pdfPath: path } });
-  } catch {
+    const persisted = await withRedisLock(
+      "pdf-write",
+      async () => {
+        if (!(await hasPdfStorageHeadroom(pdf.length + env.storageReserveBytes))) {
+          throw new Error("Insufficient reserved capacity for quotation PDF");
+        }
+        await writeFile(path, pdf, { flag: "wx", mode: 0o600 });
+        try {
+          await prisma.quotation.update({ where: { id: created.id }, data: { pdfPath: path } });
+        } catch (err) {
+          await removeQuietly(path).catch(() => {});
+          throw err;
+        }
+      },
+      { leaseMs: 30_000, waitMs: 10_000 },
+    );
+    if (persisted === null) throw new Error("Quotation PDF storage is busy");
+  } catch (err) {
     // A missing PDF should not lose the quotation; it can be regenerated.
+    logger.warn({ error: safeErrorMessage(err) }, "quotation PDF generation failed");
   }
 
   logger.info(
@@ -320,13 +420,17 @@ export async function POST(request: NextRequest) {
       })
     : whatsappChatUrl();
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     {
       number: created.number,
-      accessToken,
-      pdfUrl: `/api/quotations/${created.number}/pdf?token=${accessToken}`,
+      accessToken: access.token,
+      pdfUrl: `/api/quotations/${created.number}/pdf`,
       whatsappUrl,
     },
     { status: 201 },
   );
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  setQuotationAccessCookie(response, created.number, access.token, access.expiresAt);
+  return response;
 }

@@ -11,6 +11,11 @@ The AppImage is extracted at image-build time (`--appimage-extract`; FUSE is
 unavailable in containers) into `/opt/orca`, and run via `xvfb-run` because the
 CLI still initialises wxWidgets/GL on some paths.
 
+The persistent cache version is independently pinned in
+`packages/shared/src/settings-key.ts`. Any Orca/profile change that can affect
+toolpaths must bump `SLICE_PIPELINE_VERSION`; otherwise old price statistics
+would be reused under the new slicer.
+
 ## The committed, flattened profiles
 
 `apps/worker/profiles/` holds six standalone JSON profiles:
@@ -66,7 +71,8 @@ is a price multiplier.
 
 The CLI (`--slice 0`) does **not** emit a plate thumbnail, so the worker
 rasterises its own from the parsed mesh — a small dependency-free software
-renderer (`apps/worker/src/thumbnail.ts` + `png.ts`), no GL, no native modules.
+renderer (`packages/geometry/src/thumbnail.ts` + `png.ts`), no GL, no native
+modules.
 Thumbnails are written beside the model file under `uploads/thumbs/`.
 
 ## Smoke / upgrade gate
@@ -76,3 +82,5 @@ After any Orca or profile change, slice the bundled calibration cube
 layer heights and confirm the reported grams land in a sane band. A 20 mm cube at
 PLA/0.20/15% is ~5 g. If weights come back empty or zero, the inheritance
 flattening is stale — re-run the flatten script.
+Only deploy after updating the pinned AppImage SHA-256 and cache pipeline
+version as well.

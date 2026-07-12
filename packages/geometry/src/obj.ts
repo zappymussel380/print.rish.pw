@@ -1,20 +1,42 @@
 import { finalizeModel } from "./math";
-import { MAX_TRIANGLES, ModelParseError, type ParsedModel } from "./types";
+import {
+  MAX_TEXT_MODEL_BYTES,
+  MAX_TRIANGLES,
+  MAX_VERTICES,
+  ModelParseError,
+  type ParsedModel,
+} from "./types";
 
 /** Minimal OBJ parser: `v` and `f` records only (geometry is all a quote
  *  needs). Faces with more than three vertices are fan-triangulated; negative
  *  indices are resolved per spec. */
 export function parseObj(buf: Buffer): ParsedModel {
+  if (buf.length > MAX_TEXT_MODEL_BYTES) {
+    throw new ModelParseError(
+      `OBJ exceeds the ${MAX_TEXT_MODEL_BYTES / 1024 / 1024} MiB text-format limit`,
+      "TOO_COMPLEX",
+    );
+  }
   const text = buf.toString("utf8");
   const vertices: number[] = [];
   const triangles: number[] = [];
 
-  for (const rawLine of text.split(/\r?\n/)) {
+  let lineStart = 0;
+  while (lineStart <= text.length) {
+    let lineEnd = text.indexOf("\n", lineStart);
+    if (lineEnd < 0) lineEnd = text.length;
+    if (lineEnd - lineStart > 256 * 1024) {
+      throw new ModelParseError("OBJ contains an excessively long line", "TOO_COMPLEX");
+    }
+    const rawLine = text.slice(lineStart, lineEnd);
     const line = rawLine.trim();
     if (line.startsWith("v ")) {
       const parts = line.slice(2).trim().split(/\s+/, 3);
       if (parts.length < 3) throw new ModelParseError("OBJ vertex with fewer than 3 coordinates");
       vertices.push(Number(parts[0]), Number(parts[1]), Number(parts[2]));
+      if (vertices.length / 3 > MAX_VERTICES) {
+        throw new ModelParseError(`OBJ exceeds ${MAX_VERTICES} vertices`, "TOO_COMPLEX");
+      }
     } else if (line.startsWith("f ")) {
       const refs = line
         .slice(2)
@@ -28,14 +50,19 @@ export function parseObj(buf: Buffer): ParsedModel {
           }
           return idx;
         });
+      if (refs.length > 10_000) {
+        throw new ModelParseError("OBJ face has too many vertices", "TOO_COMPLEX");
+      }
       if (refs.length < 3) continue;
       for (let i = 1; i + 1 < refs.length; i++) {
+        if (triangles.length / 3 >= MAX_TRIANGLES) {
+          throw new ModelParseError(`OBJ exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
+        }
         triangles.push(refs[0]!, refs[i]!, refs[i + 1]!);
       }
-      if (triangles.length / 3 > MAX_TRIANGLES) {
-        throw new ModelParseError(`OBJ exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
-      }
     }
+    if (lineEnd === text.length) break;
+    lineStart = lineEnd + 1;
   }
 
   if (triangles.length === 0) throw new ModelParseError("OBJ contains no faces", "EMPTY");

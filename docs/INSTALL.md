@@ -2,78 +2,96 @@
 
 ## Prerequisites
 
-- Node.js ≥ 20 and pnpm 9 (`corepack enable`)
-- Docker (for Postgres + Redis, and optionally the full stack)
-- For local slicing you also need the worker's OrcaSlicer image; most UI work
-  does not require it (the app runs fine, slices just stay "queued").
+- Node.js 24 or newer and pnpm 9 (`corepack enable`)
+- Docker and Docker Compose v2 for Postgres/Redis
+- The hardened worker container for real slicing; UI/API work can run web-only
 
 ## 1. Install dependencies
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
-## 2. Start Postgres + Redis
+## 2. Start development services
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-This exposes Postgres on `localhost:5433` and Redis on `localhost:6380`.
+This exposes Postgres only on `127.0.0.1:5433` and Redis only on
+`127.0.0.1:6380`.
 
-## 3. Configure environment
+## 3. Configure the web app
 
-```bash
-cp .env.example .env
-```
+Next loads environment files from `apps/web`, so create
+`apps/web/.env.local` for local web development:
 
-Fill in at least:
-
-- `SESSION_SECRET` — `openssl rand -hex 32`
-- `ADMIN_PASSWORD_HASH` — `pnpm --filter @print/web hash-password 'your-password'`
-- point `DATABASE_URL` / `REDIS_URL` at the dev containers:
-
-```
+```dotenv
+APP_ORIGIN=http://localhost:3000
 DATABASE_URL=postgresql://print:print@localhost:5433/print
 REDIS_URL=redis://localhost:6380
+SESSION_SECRET=<output-of-openssl-rand-hex-32>
+ADMIN_PASSWORD_HASH=<single-dollar-bcrypt-hash>
 ```
 
-See [ENV.md](ENV.md) for every variable.
+Generate values without putting the plaintext admin password in argv:
+
+```bash
+openssl rand -hex 32
+pnpm --filter @print/web hash-password
+```
+
+The password helper requires at least 12 characters and at most 72 UTF-8 bytes.
+Do not double `$` in
+`apps/web/.env.local`; doubling is only needed for the production Compose
+`.env` interpolation path. `APP_ORIGIN` must be local HTTP or CSRF and cookie
+behavior will not match the development URL.
+
+Optional business/provider variables are listed in [ENV.md](ENV.md).
 
 ## 4. Apply migrations
 
 ```bash
-pnpm --filter @print/db migrate:dev
+DATABASE_URL=postgresql://print:print@localhost:5433/print \
+  pnpm --filter @print/db migrate:dev
 ```
 
-## 5. Run
+Development uses one database owner for convenience. Production uses the
+separate migration/web/worker roles described in [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## 5. Run web-only development
 
 ```bash
-pnpm dev            # web on :3000 + worker (parallel)
+pnpm --filter @print/web dev
 ```
 
 - App: <http://localhost:3000>
-- Admin: <http://localhost:3000/admin> (redirects to `/admin/login`)
+- Admin: <http://localhost:3000/admin>
+
+Uploads and UI/API work without Orca, but slice jobs stay queued. Do not run the
+worker casually under your login: it fails closed when it cannot isolate Orca
+from credentials. `ALLOW_INSECURE_SLICER=true` is an explicit local-only escape
+hatch and gives hostile native code access to worker credentials/uploads.
+
+For end-to-end slicing, configure the production-style root `.env` and run the
+hardened Compose stack:
+
+```bash
+docker compose up -d --build
+```
+
+Then use the private compose proxy on port 8080. See
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Useful commands
 
 ```bash
-pnpm build              # build every package
-pnpm test               # run all unit tests
-pnpm typecheck          # type-check every package
-pnpm --filter @print/db studio        # Prisma Studio
-pnpm --filter @print/web hash-password '<pw>'   # bcrypt an admin password
+pnpm build
+pnpm test
+pnpm typecheck
+pnpm audit
+pnpm --filter @print/db studio
+pnpm --filter @print/web hash-password
 ```
 
-## Running the worker locally
-
-The worker needs OrcaSlicer. The simplest path is to run just the worker in its
-container against your host Postgres/Redis, or build the image and run it:
-
-```bash
-docker compose build worker
-docker compose run --rm worker
-```
-
-Without the worker, uploads and the UI work; slices remain pending. See
-[ORCA-PROFILES.md](ORCA-PROFILES.md) for how the slicing profiles are built.
+See [ORCA-PROFILES.md](ORCA-PROFILES.md) for the pinned slicer/profile workflow.

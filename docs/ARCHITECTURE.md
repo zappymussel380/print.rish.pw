@@ -2,11 +2,14 @@
 
 ## Overview
 
-Two application containers share a pnpm workspace:
+Two long-running application containers and one short-lived migration task
+share a pnpm workspace:
 
 - **web** (`apps/web`) — Next.js 15. Serves the UI and all API route handlers.
 - **worker** (`apps/worker`) — a BullMQ consumer that runs OrcaSlicer, renders
   thumbnails, and performs the daily retention sweep.
+- **migrate** (web image, one-shot) — applies Prisma migrations and provisions
+  separate least-privilege web/worker database roles.
 
 They share three workspace packages:
 
@@ -16,8 +19,8 @@ They share three workspace packages:
 - **`@print/geometry`** — a dependency-light parser for STL/3MF/OBJ/AMF that
   returns a triangle soup, bounding box and volume (no three.js in Node).
 
-Backing services: **PostgreSQL** (Prisma) and **Redis** (BullMQ queue, slice
-cache coordination, sliding-window rate limits, worker heartbeat).
+Backing services: **PostgreSQL** (Prisma) and authenticated **Redis** (BullMQ
+queue, slice cache coordination, rate limits, worker heartbeat).
 
 ```
           ┌────────── VPS host nginx (print.rish.pw, TLS) ──────────┐
@@ -41,48 +44,80 @@ Only the **proxy** publishes a port. The VPS host nginx terminates TLS for
 ## Request flows
 
 ### Upload
-`POST /api/uploads` streams the multipart body through busboy straight to disk
-under `UPLOAD_DIR/<uuid>.<ext>`, hashing (sha256) as it flows. The file is then
-parsed by `@print/geometry` — a successful parse is a far stronger validity
-check than magic bytes — and checked against the printer bed. A row is written
-to `UploadedModel`, scoped to an anonymous, signed `qsid` session cookie.
+`POST /api/uploads` streams the multipart body through busboy to an exclusively
+created private temporary file, hashing (sha256) as it flows. It has a
+10-minute absolute deadline in addition to proxy idle timeouts. Geometry is
+then parsed under a global cross-replica ingest lease — a successful parse is a
+far stronger validity check than magic bytes — and checked against the printer
+bed. The file is atomically renamed to the server-derived UUID path and a row
+is scoped to an anonymous signed `qsid` session cookie.
+The route enforces a 300 MiB hard file limit, byte and session quotas, a storage
+reserve, archive/XML expansion limits, at most 20 3MF plates, and a global
+four-million-triangle/one-million-vertex budget. XML element/depth and OBJ line
+budgets prevent small-input structural explosions. A 3MF archive is traversed
+once with one aggregate decompression budget.
+Persistence is serialized per quote session so parallel uploads cannot race the
+aggregate model-count or byte limits. Cross-replica byte reservations and a
+final filesystem check preserve the configured free-space reserve.
 
 ### Slice + live pricing
 The quote page requests a slice per model+settings via `POST /api/slices`:
 
-1. Cache key = `sha256(file)` (`fileHash`) + `settingsKey`
-   (`material:layerHeightUm:infillPct:supports` — colour/quantity excluded).
+1. Cache key = `sha256(file)` (`fileHash`) + `settingsKey`, where the latter is
+   `pipeline-version:format:material:layerHeightUm:infillPct:supports`.
+   Version and format prevent stale-profile and cross-format/polyglot reuse;
+   colour/quantity remain excluded.
 2. Hit on `SliceResult` → returned immediately. Miss → a `SliceResult` row is
    created and a BullMQ job enqueued with a deterministic `jobId` (natural
    dedup of identical in-flight requests). The client polls
    `GET /api/slices/:id` every 1.5 s.
-3. The worker writes a per-job process profile (flattened base + infill/support
-   overrides), runs OrcaSlicer headless under `xvfb-run`, parses
-   `Metadata/slice_info.config` from the exported 3MF for weight/time, renders a
-   thumbnail from the parsed mesh, and updates the row.
+3. The trusted worker reloads the database-owned path and validates settings,
+   type, size, and SHA-256 while staging a no-follow private copy. It writes a
+   per-job process profile, then launches OrcaSlicer under `setpriv` with a
+   unique uid/gid, no capabilities, and a cleared environment. Concurrent jobs
+   cannot read each other's scratch directories or the upload vault.
+4. Orca's `--pipe` JSON reports real `total_percent` progress. The worker stores
+   that percentage and stage in PostgreSQL, while the client polls every 1.5 s.
+5. The worker parses `Metadata/slice_info.config` from the exported 3MF for
+   bounded/plausible weight/time fields, renders a work-bounded thumbnail, and
+   marks the result complete. Progress writes are monotonic, coalesced, and
+   limited to one per second so slicer-controlled messages cannot build a DB
+   backlog.
 
 Pricing is a **pure, isomorphic** function (`@print/shared/pricing`). The client
 reprices instantly from cached slice results; the server reprices
 authoritatively at checkout — client totals are never trusted.
 
 ### Checkout
-`POST /api/quotations` rebuilds every line from DB slice results, reprices,
-allocates a number (`RSP-<year>-<seq>` via a transactional counter), persists
-the quotation + items + status history, renders the PDF, and returns a WhatsApp
-handoff URL + a token-guarded confirmation link.
+`POST /api/quotations` rebuilds every line from DB slice results and reprices.
+In one transaction it atomically claims each model as single-use, allocates an
+`RSP-<year>-<seq>` number, and persists quotation/items/history. It then renders
+a size-bounded PDF under a serialized free-space check. Per-IP limits and a
+global daily circuit breaker bound permanent-row/PDF/notification amplification.
+
+The raw 256-bit customer capability is returned once and transported to the
+confirmation page in a URL fragment, which is not sent in HTTP. Client code
+redeems it with a same-origin bounded POST, receives a per-quotation HttpOnly
+cookie, and removes the fragment. Only a SHA-256 verifier and 30-day expiry are
+stored. Confirmation/PDF responses are private/no-store/no-referrer.
 
 ## Design decisions
 
 - **No mathematical estimation.** Every price is backed by real toolpaths. This
   is the whole point, and dictates the async worker + cache design.
-- **Readable settings key, not a hash.** `PLA:200:15:auto` is debuggable in the
-  DB and collision-free by construction.
+- **Readable, versioned settings key.**
+  `orca-2.4.1-a1-v1:stl:PLA:200:15:auto` is debuggable and collision-free by
+  construction.
 - **Worker renders its own thumbnails.** The OrcaSlicer CLI (`--slice 0`) does
   not emit a plate thumbnail, so the worker rasterises the parsed mesh itself (a
   small software renderer — no GL, no native deps).
 - **Integer paise everywhere.** No floating-point money.
 - **Catalog passed as a parameter** to the pricing engine, so a future
   DB-backed catalog needs no engine changes.
+- **Native slicer is untrusted.** It receives a private verified model copy,
+  cannot read the orchestrator environment through `/proc`, has no capabilities,
+  and runs without internet egress. Its output is size/decompression bounded and
+  read without following symlinks. This limits impact; it is not a VM boundary.
 
 See [PRICING.md](PRICING.md), [ORCA-PROFILES.md](ORCA-PROFILES.md) and
 [DATABASE.md](DATABASE.md) for the details of each subsystem.

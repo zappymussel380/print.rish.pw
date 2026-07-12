@@ -8,7 +8,7 @@ generator client {
   // workspace source (reliable with Next standalone in a monorepo), rather than
   // in a version-hashed .pnpm path that file-tracing misses.
   output        = "../generated/client"
-  // "native" covers local dev; the debian target matches the node:20-slim /
+  // "native" covers local dev; the debian target matches the node:24-slim /
   // ubuntu:24.04 container runtime (OpenSSL 3.0) for web and worker.
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
@@ -72,6 +72,10 @@ model UploadedModel {
   /// Optional locked config fields; the server normalizes these before
   /// slicing/pricing so source-file constraints beat client input.
   lockedConfig  Json?
+  /// Claimed atomically during checkout. A model is single-use for quotation
+  /// creation, preventing replayed/concurrent submissions from generating
+  /// unbounded permanent rows, PDFs, and notifications.
+  submittedAt   DateTime?
   createdAt    DateTime @default(now())
 
   items QuotationItem[]
@@ -86,10 +90,17 @@ model UploadedModel {
 model SliceResult {
   id            String      @id @default(uuid()) @db.Uuid
   fileHash      String      @db.Char(64)
-  /// Canonical settings key, e.g. "PLA:200:15:auto" (see shared/settings-key).
+  /// Versioned pipeline + format + settings key. Including format prevents
+  /// identical polyglot bytes from sharing incompatible slices; the pipeline
+  /// version invalidates results after slicer/profile changes.
   settingsKey   String
   settingsJson  Json
   status        SliceStatus @default(QUEUED)
+  /// Persisted worker progress so polling survives process/container restarts.
+  progressPct       Int      @default(0)
+  progressStage     String   @default("queued")
+  progressMessage   String   @default("Waiting for a slicer")
+  progressUpdatedAt DateTime @default(now())
   /// Per-unit statistics from OrcaSlicer.
   filamentGrams Decimal?    @db.Decimal(10, 3)
   filamentMm    Decimal?    @db.Decimal(12, 1)
@@ -131,8 +142,10 @@ model Quotation {
   /// changes never alter an issued quotation.
   pricingSnapshot     Json
   pdfPath             String?
-  /// Random token that authorises customer access to the PDF/confirmation.
+  /// SHA-256 verifier for customer access. Migration hashes historical bearers;
+  /// the presented capability is never stored and expires automatically.
   accessToken         String          @unique
+  accessTokenExpiresAt DateTime
   estimatedCompletion DateTime?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt

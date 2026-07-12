@@ -1,8 +1,9 @@
-# Next.js web container: standalone build + Prisma migrate-on-start.
+# Next.js web container. The same image also provides the short-lived migration
+# service, while the long-running web process receives only runtime DB creds.
 # Builder and runner share the same debian base so the Prisma query engine
 # generated at build time matches the runtime platform.
 
-FROM node:20-slim AS base
+FROM node:24-slim@sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5 AS base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
@@ -23,7 +24,8 @@ FROM deps AS build
 COPY packages ./packages
 COPY apps/web ./apps/web
 RUN pnpm --filter @print/db generate \
-    && pnpm --filter @print/web build
+    && pnpm --filter @print/web build \
+    && pnpm --filter @print/db deploy /opt/migrate
 
 # ---------- runner: minimal standalone image ----------
 FROM base AS runner
@@ -31,28 +33,33 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssl wget ca-certificates \
+    && apt-get install -y --no-install-recommends openssl wget ca-certificates postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
-    && npm i -g prisma@6.19.3 \
-    && useradd -m -u 1001 nextjs
+    && groupadd -g 1001 nextjs \
+    && useradd -m -u 1001 -g 1001 nextjs
 
 # Next standalone bundle (monorepo layout: server.js lives at apps/web/server.js).
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
-# Schema + migrations for `prisma migrate deploy` at start-up.
+# Schema + migrations for the image's short-lived `migrate` mode.
 COPY --from=build /app/packages/db/prisma ./prisma
+COPY --from=build /opt/migrate /opt/migrate
 # The Prisma query engine binary — Next's file tracing bundles the client code
 # but not this native addon. `.next/server` is one of the runtime's search
 # paths, so drop it there.
 COPY --from=build /app/packages/db/generated/client/libquery_engine-*.so.node ./apps/web/.next/server/
 COPY docker/web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
+COPY apps/web/scripts/validate-env.mjs /app/validate-env.mjs
+COPY apps/web/scripts/provision-database.mjs /app/provision-database.mjs
 RUN chmod +x /usr/local/bin/web-entrypoint.sh
 
 # Pre-create the data dirs owned by the runtime user. Docker initialises the
 # empty named volumes from these paths, so the mounted volumes inherit nextjs
 # ownership (otherwise they default to root and uploads fail with EACCES).
-RUN mkdir -p /data/uploads/thumbs /data/uploads/tmp /data/pdfs && chown -R nextjs /data
+RUN mkdir -p /data/uploads/thumbs /data/uploads/tmp /data/pdfs \
+    && chown -R nextjs:nextjs /data \
+    && chmod 0700 /data/uploads /data/uploads/thumbs /data/uploads/tmp /data/pdfs
 
 USER nextjs
 EXPOSE 3000

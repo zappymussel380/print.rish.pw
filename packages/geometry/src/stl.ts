@@ -1,5 +1,10 @@
 import { finalizeModel } from "./math";
-import { MAX_TRIANGLES, ModelParseError, type ParsedModel } from "./types";
+import {
+  MAX_TEXT_MODEL_BYTES,
+  MAX_TRIANGLES,
+  ModelParseError,
+  type ParsedModel,
+} from "./types";
 
 const BINARY_HEADER_BYTES = 84;
 const BYTES_PER_TRIANGLE = 50;
@@ -11,8 +16,8 @@ export function looksLikeBinaryStl(buf: Buffer): boolean {
 }
 
 export function looksLikeAsciiStl(buf: Buffer): boolean {
-  const head = buf.subarray(0, 512).toString("latin1").trimStart().toLowerCase();
-  return head.startsWith("solid") && buf.toString("latin1").includes("facet");
+  const head = buf.subarray(0, Math.min(buf.length, 64 * 1024)).toString("latin1").toLowerCase();
+  return head.trimStart().startsWith("solid") && head.includes("facet");
 }
 
 export function parseStl(buf: Buffer): ParsedModel {
@@ -95,6 +100,12 @@ function parseBinaryStl(buf: Buffer): ParsedModel {
 }
 
 function parseAsciiStl(buf: Buffer): ParsedModel {
+  if (buf.length > MAX_TEXT_MODEL_BYTES) {
+    throw new ModelParseError(
+      `ASCII STL exceeds the ${MAX_TEXT_MODEL_BYTES / 1024 / 1024} MiB text-format limit`,
+      "TOO_COMPLEX",
+    );
+  }
   const text = buf.toString("latin1");
   const vertexRe = /vertex\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)/g;
   const coords: number[] = [];

@@ -7,8 +7,7 @@ import busboy from "busboy";
 import { NextResponse, type NextRequest } from "next/server";
 import { Prisma, prisma } from "@print/db";
 import {
-  extract3mfPlates,
-  extract3mfSourceConfig,
+  inspect3mfUpload,
   ModelParseError,
   parseModel,
   renderThumbnail,
@@ -26,13 +25,23 @@ import {
   sanitizeOriginalName,
   type ModelConfig,
 } from "@print/shared";
-import { guardMutation, jsonError } from "@/lib/api-util";
+import { assertBodySize, guardMutation, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
-import { RATE_LIMITS } from "@/lib/security";
+import {
+  clientIp,
+  rateLimitBytes,
+  RATE_LIMITS,
+  releaseStorageReservation,
+  reserveStorageBytes,
+  withRedisLock,
+} from "@/lib/security";
 import { getOrCreateQuoteSessionId } from "@/lib/session";
 import {
+  availableStorageBytes,
   ensureStorageDirs,
+  hasStorageHeadroom,
   modelPath,
+  moveIntoPlace,
   removeQuietly,
   thumbPath,
   tmpUploadPath,
@@ -49,6 +58,9 @@ const THUMB_SIZE = 512;
 // framing passes plus PNG encode still cost real event-loop time on the web
 // process, and a pathological mesh should never pay it inline.
 const MAX_INLINE_THUMB_TRIANGLES = 1_000_000;
+const UPLOAD_DEADLINE_MS = 10 * 60_000;
+
+class UploadTimeoutError extends Error {}
 
 interface StreamedFile {
   tmpPath: string;
@@ -88,6 +100,7 @@ async function streamUpload(request: NextRequest): Promise<StreamedFile | null> 
   let sizeBytes = 0;
   let truncated = false;
   let sawFile = false;
+  let timedOut = false;
 
   const done = new Promise<void>((resolvePromise, rejectPromise) => {
     // Resolves once the file's bytes are fully flushed to disk. Busboy's own
@@ -98,7 +111,7 @@ async function streamUpload(request: NextRequest): Promise<StreamedFile | null> 
     bb.on("file", (_field, stream, info) => {
       sawFile = true;
       originalName = info.filename ?? "";
-      const sink = createWriteStream(tmpPath, { mode: 0o600 });
+      const sink = createWriteStream(tmpPath, { flags: "wx", mode: 0o600 });
       stream.on("data", (chunk: Buffer) => {
         sizeBytes += chunk.length;
         hash.update(chunk);
@@ -106,21 +119,32 @@ async function streamUpload(request: NextRequest): Promise<StreamedFile | null> 
       stream.on("limit", () => {
         truncated = true;
       });
-      writeDone = new Promise<void>((res, rej) => {
-        sink.on("finish", res);
-        sink.on("error", rej);
-        stream.on("error", rej);
-      });
-      stream.pipe(sink);
+      writeDone = pipeline(stream, sink);
     });
     bb.on("error", rejectPromise);
     bb.on("finish", () => writeDone.then(resolvePromise, rejectPromise));
   });
 
-  await pipeline(Readable.fromWeb(request.body as never), bb).catch(() => {
-    // pipeline surfaces busboy errors; `done` below settles the outcome.
-  });
-  await done;
+  const abort = new AbortController();
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    abort.abort();
+  }, UPLOAD_DEADLINE_MS);
+  deadline.unref();
+  try {
+    // Await both sides so malformed multipart data, client disconnects, parser
+    // errors, and destination errors all take the same cleanup path.
+    await Promise.all([
+      pipeline(Readable.fromWeb(request.body as never), bb, { signal: abort.signal }),
+      done,
+    ]);
+  } catch (err) {
+    await removeQuietly(tmpPath);
+    if (timedOut) throw new UploadTimeoutError("Upload exceeded the absolute time limit");
+    throw err;
+  } finally {
+    clearTimeout(deadline);
+  }
 
   if (!sawFile) {
     await removeQuietly(tmpPath);
@@ -151,6 +175,7 @@ async function persistUploadedModel(input: {
   originalName: string;
   format: string;
   contents: Buffer;
+  sourceTmpPath?: string;
   parsed: ParsedModel;
   fileHash: string;
   defaultConfig?: Partial<ModelConfig>;
@@ -183,7 +208,11 @@ async function persistUploadedModel(input: {
     id = model.id;
 
     finalPath = modelPath(model.id, input.format);
-    await writeFile(finalPath, input.contents, { mode: 0o600 });
+    if (input.sourceTmpPath) {
+      await moveIntoPlace(input.sourceTmpPath, finalPath);
+    } else {
+      await writeFile(finalPath, input.contents, { flag: "wx", mode: 0o600 });
+    }
     // Persist storedPath immediately — the file now exists on disk, so the DB
     // must point at it before anything else can fail, or retention (which skips
     // rows with an empty storedPath) could never reclaim an orphaned file.
@@ -199,12 +228,17 @@ async function persistUploadedModel(input: {
     // must never fail an upload or strand its file. Skipped for huge meshes
     // (see MAX_INLINE_THUMB_TRIANGLES) — the worker renders those on first slice.
     if (input.parsed.triangleCount <= MAX_INLINE_THUMB_TRIANGLES) {
+      let tp: string | null = null;
       try {
         await ensureStorageDirs();
-        const tp = thumbPath(model.id);
-        await writeFile(tp, renderThumbnail(input.parsed.positions, THUMB_SIZE));
+        tp = thumbPath(model.id);
+        await writeFile(tp, renderThumbnail(input.parsed.positions, THUMB_SIZE), {
+          flag: "wx",
+          mode: 0o600,
+        });
         await prisma.uploadedModel.update({ where: { id: model.id }, data: { thumbPath: tp } });
       } catch {
+        await removeQuietly(tp).catch(() => {});
         // ignore — the worker still renders one on first slice as a fallback
       }
     }
@@ -258,20 +292,100 @@ function normalize3mfSourceConfig(raw: ThreeMfSourceConfig | null | undefined): 
   return Object.keys(source).length > 0 ? source : undefined;
 }
 
-function read3mfSourceConfig(contents: Buffer): Partial<ModelConfig> | undefined {
-  try {
-    return normalize3mfSourceConfig(extract3mfSourceConfig(contents));
-  } catch {
-    return undefined;
-  }
+async function persistWithinSessionLimits(
+  sessionId: string,
+  modelCount: number,
+  sizeBytes: number,
+  persist: () => Promise<NextResponse>,
+): Promise<NextResponse> {
+  const response = await withRedisLock(`upload-session:${sessionId}`, async () => {
+    const [count, aggregate] = await Promise.all([
+      prisma.uploadedModel.count({ where: { sessionId, items: { none: {} } } }),
+      prisma.uploadedModel.aggregate({
+        where: { sessionId, items: { none: {} } },
+        _sum: { sizeBytes: true },
+      }),
+    ]);
+    if (count + modelCount > env.maxModelsPerSession) {
+      return jsonError(
+        422,
+        "TOO_MANY_MODELS",
+        `A quote can contain at most ${env.maxModelsPerSession} models`,
+      );
+    }
+    if ((aggregate._sum.sizeBytes ?? 0) + sizeBytes > env.maxSessionUploadBytes) {
+      return jsonError(
+        413,
+        "SESSION_STORAGE_LIMIT",
+        `Active quote files are limited to ${Math.round(env.maxSessionUploadBytes / 1024 / 1024)} MB in total`,
+      );
+    }
+    // Recheck the real filesystem immediately before durable writes. The
+    // cross-session Redis reservation prevents peers from consuming this space
+    // between the check and persistence.
+    if (!(await hasStorageHeadroom(sizeBytes + env.storageReserveBytes))) {
+      return jsonError(507, "STORAGE_LOW", "Uploads are temporarily paused while storage is low.");
+    }
+    return persist();
+  });
+
+  return response ?? jsonError(503, "UPLOAD_BUSY", "Another upload is still being finalized. Please retry.");
 }
 
 export async function POST(request: NextRequest) {
   const guard = await guardMutation(request, "upload", RATE_LIMITS.upload);
   if (guard) return guard;
 
+  // Multipart framing adds a small amount around the file itself. Reject a
+  // declared oversized request before touching the body; busboy remains the
+  // authoritative per-file limit for absent/chunked Content-Length requests.
+  const bodyTooLarge = assertBodySize(request, env.maxUploadBytes + 1024 * 1024);
+  if (bodyTooLarge) {
+    return jsonError(413, "FILE_TOO_LARGE", `Files are limited to ${env.maxUploadMb} MB`);
+  }
+
+  const declaredBytes = Number(request.headers.get("content-length") ?? 0);
+  const byteCost =
+    Number.isFinite(declaredBytes) && declaredBytes > 0
+      ? Math.min(declaredBytes, env.maxUploadBytes)
+      : env.maxUploadBytes;
+  const byteLimit = await rateLimitBytes(
+    "upload",
+    clientIp(request),
+    byteCost,
+    env.uploadWindowBytes,
+    RATE_LIMITS.upload.windowSeconds,
+  );
+  if (!byteLimit.allowed) {
+    const response = jsonError(
+      429,
+      "UPLOAD_BUDGET_EXCEEDED",
+      "Upload bandwidth limit reached. Please try again later.",
+      { retryAfterSeconds: byteLimit.retryAfterSeconds },
+    );
+    response.headers.set("Retry-After", String(byteLimit.retryAfterSeconds));
+    return response;
+  }
+
   await ensureStorageDirs();
-  const sessionId = await getOrCreateQuoteSessionId();
+  const freeBytes = await availableStorageBytes();
+  // A multi-plate archive may retain its input temp file while writing up to the
+  // bounded extracted output + thumbnails. Reserve fixed expansion headroom in
+  // addition to the request's charged byte cost.
+  const reservationCost = byteCost + 128 * 1024 * 1024;
+  // The reservation outlives the absolute upload deadline plus the bounded
+  // ingest-lock wait/lease, so a slow client cannot continue after capacity is
+  // automatically released.
+  const reservation = await reserveStorageBytes(
+    reservationCost,
+    freeBytes - env.storageReserveBytes,
+    25 * 60,
+  );
+  if (!reservation) {
+    return jsonError(507, "STORAGE_LOW", "Uploads are temporarily paused while storage is low.");
+  }
+  try {
+    const sessionId = await getOrCreateQuoteSessionId();
 
   // Only models not yet attached to a submitted quotation count toward the
   // active-quote cap. A quoted model has left the quote being built and the
@@ -279,6 +393,10 @@ export async function POST(request: NextRequest) {
   // session that once submitted a full quote. Mirrors GET/DELETE in api/models.
   const existing = await prisma.uploadedModel.count({
     where: { sessionId, items: { none: {} } },
+  });
+  const activeBytes = await prisma.uploadedModel.aggregate({
+    where: { sessionId, items: { none: {} } },
+    _sum: { sizeBytes: true },
   });
   if (existing >= env.maxModelsPerSession) {
     return jsonError(
@@ -288,7 +406,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const file = await streamUpload(request);
+  let file: StreamedFile | null;
+  try {
+    file = await streamUpload(request);
+  } catch (err) {
+    if (err instanceof UploadTimeoutError) {
+      return jsonError(408, "UPLOAD_TIMEOUT", "Upload exceeded the 10-minute time limit");
+    }
+    throw err;
+  }
   if (!file) {
     return jsonError(400, "NO_FILE", "Send one model file as multipart/form-data");
   }
@@ -313,16 +439,30 @@ export async function POST(request: NextRequest) {
       return jsonError(422, "EMPTY_FILE", "The uploaded file is empty or incomplete");
     }
 
-    const contents = await readFile(file.tmpPath);
+    if ((activeBytes._sum.sizeBytes ?? 0) + actualSize > env.maxSessionUploadBytes) {
+      return jsonError(
+        413,
+        "SESSION_STORAGE_LIMIT",
+        `Active quote files are limited to ${Math.round(env.maxSessionUploadBytes / 1024 / 1024)} MB in total`,
+      );
+    }
+
+    const parsedResponse = await withRedisLock(
+      "geometry-ingest",
+      async () => {
+        // Acquire the cross-replica ingest slot before reading the full file into
+        // memory. Waiting requests retain only their disk temp file, preventing
+        // a distributed burst from filling the web heap with 300 MiB Buffers.
+        const contents = await readFile(file.tmpPath);
 
     // Bambu/Orca project 3MFs can contain several printable plates. Treat each
     // plate as a separate clean STL-backed model so the customer sees the same
     // printable units the slicer project intended, and so Orca never has to
     // ingest stale or incompatible project-level 3MF settings.
     if (format === "3mf") {
-      let plates;
+      let inspection;
       try {
-        plates = extract3mfPlates(contents);
+        inspection = inspect3mfUpload(contents);
       } catch (err) {
         if (err instanceof ModelParseError) {
           return jsonError(422, `INVALID_MODEL_${err.code}`, err.message);
@@ -330,52 +470,84 @@ export async function POST(request: NextRequest) {
         throw err;
       }
 
-      if (plates.length > 1) {
-        if (existing + plates.length > env.maxModelsPerSession) {
+      if (inspection.plates.length > 1) {
+        const expandedBytes = inspection.plates.reduce((sum, plate) => sum + plate.stl.length, 0);
+        if ((activeBytes._sum.sizeBytes ?? 0) + expandedBytes > env.maxSessionUploadBytes) {
+          return jsonError(
+            413,
+            "SESSION_STORAGE_LIMIT",
+            "The extracted 3MF plates exceed the active quote storage limit",
+          );
+        }
+        if (existing + inspection.plates.length > env.maxModelsPerSession) {
           return jsonError(
             422,
             "TOO_MANY_MODELS",
-            `This 3MF contains ${plates.length} plates, but this quote only has room for ${
+            `This 3MF contains ${inspection.plates.length} plates, but this quote only has room for ${
               env.maxModelsPerSession - existing
             } more model(s)`,
           );
         }
 
-        const created: UploadedModelResponse[] = [];
-        try {
-          for (const plate of plates) {
-            const sourceConfig =
-              normalize3mfSourceConfig(plate.sourceConfig) ??
-              ({ supports: plate.configuredSupports ? "auto" : "off" } satisfies Partial<ModelConfig>);
-            created.push(
-              await persistUploadedModel({
-                sessionId,
-                originalName: plateOriginalName(originalName, plate.index),
-                format: "stl",
-                contents: plate.stl,
-                parsed: plate.model,
-                fileHash: sha256(plate.stl),
-                defaultConfig: sourceConfig,
-                sourceConfig,
-                lockedConfig: { supports: true },
-              }),
-            );
-          }
-        } catch (err) {
-          await Promise.all(
-            created.map((model) =>
-              Promise.all([
-                prisma.uploadedModel.delete({ where: { id: model.id } }).catch(() => undefined),
-                removeQuietly(modelPath(model.id, model.format)),
-                removeQuietly(thumbPath(model.id)),
-              ]),
-            ),
-          );
-          throw err;
-        }
+        return persistWithinSessionLimits(
+          sessionId,
+          inspection.plates.length,
+          expandedBytes,
+          async () => {
+            const created: UploadedModelResponse[] = [];
+            try {
+              for (const plate of inspection.plates) {
+                const sourceConfig =
+                  normalize3mfSourceConfig(plate.sourceConfig) ??
+                  ({ supports: plate.configuredSupports ? "auto" : "off" } satisfies Partial<ModelConfig>);
+                created.push(
+                  await persistUploadedModel({
+                    sessionId,
+                    originalName: plateOriginalName(originalName, plate.index),
+                    format: "stl",
+                    contents: plate.stl,
+                    parsed: plate.model,
+                    fileHash: sha256(plate.stl),
+                    defaultConfig: sourceConfig,
+                    sourceConfig,
+                    lockedConfig: { supports: true },
+                  }),
+                );
+              }
+            } catch (err) {
+              await Promise.all(
+                created.map((model) =>
+                  Promise.all([
+                    prisma.uploadedModel.delete({ where: { id: model.id } }).catch(() => undefined),
+                    removeQuietly(modelPath(model.id, model.format)),
+                    removeQuietly(thumbPath(model.id)),
+                  ]),
+                ),
+              );
+              throw err;
+            }
 
-        return NextResponse.json({ model: created[0], models: created }, { status: 201 });
+            return NextResponse.json({ model: created[0], models: created }, { status: 201 });
+          },
+        );
       }
+
+      const parsed = inspection.model;
+      if (!parsed) throw new ModelParseError("3MF contains no model", "EMPTY");
+      const sourceConfig = normalize3mfSourceConfig(inspection.sourceConfig);
+      return persistWithinSessionLimits(sessionId, 1, contents.length, async () => {
+        const model = await persistUploadedModel({
+          sessionId,
+          originalName,
+          format,
+          contents,
+          sourceTmpPath: file.tmpPath,
+          parsed,
+          fileHash: file.sha256,
+          ...(sourceConfig ? { defaultConfig: sourceConfig, sourceConfig } : {}),
+        });
+        return NextResponse.json({ model, models: [model] }, { status: 201 });
+      });
     }
 
     // Full structural validation: if the geometry parser accepts it, it is a
@@ -390,29 +562,33 @@ export async function POST(request: NextRequest) {
       throw err;
     }
 
-    const model = await persistUploadedModel({
-      sessionId,
-      originalName,
-      format,
-      contents,
-      parsed,
-      fileHash: file.sha256,
-      ...(format === "3mf"
-        ? (() => {
-            const sourceConfig = read3mfSourceConfig(contents);
-            return sourceConfig ? { defaultConfig: sourceConfig, sourceConfig } : {};
-          })()
-        : {}),
-    });
+    return persistWithinSessionLimits(sessionId, 1, contents.length, async () => {
+      const model = await persistUploadedModel({
+        sessionId,
+        originalName,
+        format,
+        contents,
+        sourceTmpPath: file.tmpPath,
+        parsed,
+        fileHash: file.sha256,
+      });
 
-    return NextResponse.json(
-      {
-        model,
-        models: [model],
+      return NextResponse.json(
+        {
+          model,
+          models: [model],
+        },
+        { status: 201 },
+      );
+    });
       },
-      { status: 201 },
+      { leaseMs: 5 * 60_000, waitMs: 60_000 },
     );
+    return parsedResponse ?? jsonError(503, "INGEST_BUSY", "Another model is being inspected. Please retry.");
   } finally {
     await removeQuietly(file.tmpPath);
+  }
+  } finally {
+    await releaseStorageReservation(reservation).catch(() => {});
   }
 }

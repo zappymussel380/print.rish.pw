@@ -11,10 +11,15 @@ const globalForQueue = globalThis as unknown as { sliceQueue?: Queue<SliceJobDat
 
 function parseRedis(url: string) {
   const u = new URL(url);
+  const dbText = u.pathname.replace(/^\//, "");
+  if (dbText && !/^\d+$/.test(dbText)) throw new Error("REDIS_URL has an invalid database index");
   return {
     host: u.hostname,
     port: u.port ? Number(u.port) : 6379,
-    password: u.password || undefined,
+    username: u.username ? decodeURIComponent(u.username) : undefined,
+    password: u.password ? decodeURIComponent(u.password) : undefined,
+    db: dbText ? Number(dbText) : 0,
+    tls: u.protocol === "rediss:" ? { servername: u.hostname } : undefined,
     maxRetriesPerRequest: null as null,
   };
 }

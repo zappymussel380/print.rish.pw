@@ -129,14 +129,8 @@ export async function notifyNewQuotation(input: NewQuotationTelegramInput): Prom
     });
 
     if (!response.ok) {
-      let description = response.statusText;
-      try {
-        const json = (await response.json()) as { description?: string };
-        description = json.description ?? description;
-      } catch {
-        /* keep status text */
-      }
-      logger.warn({ status: response.status, description }, "telegram notification failed");
+      await response.body?.cancel().catch(() => {});
+      logger.warn({ status: response.status }, "telegram notification failed");
       return;
     }
 

@@ -1,33 +1,54 @@
-# Slicing worker: Node 20 runtime + OrcaSlicer (headless via xvfb).
+# Slicing worker: Node 24 runtime + OrcaSlicer (headless via xvfb).
 #
 # Base is ubuntu:24.04 to match the glibc/webkit the upstream AppImage is built
 # against (asset: OrcaSlicer_Linux_AppImage_Ubuntu2404_*). The AppImage is
 # extracted at build time because FUSE is unavailable inside containers.
 
+FROM node:24-bookworm-slim@sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5 AS node-runtime
+
 # ---------- stage 1: fetch + extract OrcaSlicer ----------
-FROM ubuntu:24.04 AS orca
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS orca
 
 ARG ORCA_VERSION=2.4.1
-ADD https://github.com/SoftFever/OrcaSlicer/releases/download/v${ORCA_VERSION}/OrcaSlicer_Linux_AppImage_Ubuntu2404_V${ORCA_VERSION}.AppImage /tmp/orca.AppImage
-RUN chmod +x /tmp/orca.AppImage \
+ARG ORCA_SHA256=7aff29a0ac6bb906f11c069eefe83459781c3364bac20ba9529eb9937a231402
+ADD https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v${ORCA_VERSION}/OrcaSlicer_Linux_AppImage_Ubuntu2404_V${ORCA_VERSION}.AppImage /tmp/orca.AppImage
+RUN echo "${ORCA_SHA256}  /tmp/orca.AppImage" | sha256sum -c - \
+    && chmod +x /tmp/orca.AppImage \
     && cd /tmp \
     && /tmp/orca.AppImage --appimage-extract >/dev/null \
     && mv /tmp/squashfs-root /opt/orca \
     && rm /tmp/orca.AppImage
 
-# ---------- stage 2: runtime ----------
-FROM ubuntu:24.04
+# ---------- stage 2: production worker dependency tree ----------
+FROM node-runtime AS app-build
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /build
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
+COPY packages/db/package.json packages/db/
+COPY packages/shared/package.json packages/shared/
+COPY packages/geometry/package.json packages/geometry/
+COPY apps/worker/package.json apps/worker/
+RUN pnpm install --frozen-lockfile --filter "@print/worker..."
+COPY packages ./packages
+COPY apps/worker ./apps/worker
+RUN pnpm --filter @print/db generate \
+    && pnpm --filter @print/worker deploy --prod /opt/worker-app \
+    && find /opt/worker-app -type f \( -name '*.test.ts' -o -name '*.test.js' \) -delete \
+    && rm -rf /opt/worker-app/test-fixtures
+
+# ---------- stage 3: runtime ----------
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
 
 ARG ORCA_VERSION=2.4.1
 ENV ORCA_VERSION=${ORCA_VERSION} \
     ORCA_BIN=/opt/orca/AppRun \
+    NODE_ENV=production \
     DEBIAN_FRONTEND=noninteractive
 
 # OrcaSlicer runtime dependencies (GUI toolkit links even in CLI mode) + xvfb
-# for the virtual display, + Node 20 for the BullMQ worker.
+# for the virtual display, + Node 24 for the BullMQ worker.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
-        curl \
         xvfb \
         libgl1 \
         libegl1 \
@@ -37,43 +58,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgstreamer1.0-0 \
         libgstreamer-plugins-base1.0-0 \
         locales \
+        openssl \
+        redis-tools \
+        util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
 
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
-# Node 20 (NodeSource) + redis-tools (worker healthcheck) + openssl (Prisma)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs redis-tools openssl \
-    && rm -rf /var/lib/apt/lists/* \
-    && corepack enable && corepack prepare pnpm@9.15.9 --activate
+# Copy the official Node image runtime instead of executing a remote repository
+# setup script during the build.
+COPY --from=node-runtime /usr/local /usr/local
+RUN rm -f /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/pnpm /usr/local/bin/pnpx
 
 COPY --from=orca /opt/orca /opt/orca
 
 # Orca writes config/caches on startup; give it a writable, throwaway home.
 ENV HOME=/tmp/orca-home \
     ORCA_DATADIR=/tmp/orca-data
-RUN useradd -m -u 1001 worker \
-    && mkdir -p /tmp/orca-home /tmp/orca-data /tmp/xdg /tmp/slice-jobs /data/uploads \
-    && chown -R worker:worker /tmp/orca-home /tmp/orca-data /tmp/xdg /tmp/slice-jobs /data/uploads
+RUN groupadd -g 1001 worker \
+    && useradd -m -u 1001 -g 1001 worker \
+    && mkdir -p /tmp/orca-home /tmp/orca-data /tmp/xdg /tmp/slice-jobs /data/uploads /data/pdfs \
+    && chown -R worker:worker /tmp/orca-home /tmp/orca-data /tmp/xdg /tmp/slice-jobs /data/uploads /data/pdfs \
+    && chmod 0700 /data/uploads /data/pdfs
 
 WORKDIR /app
+COPY --from=app-build /opt/worker-app ./worker
 
-# ---------- worker application ----------
-# Install workspace deps (worker + its workspace dependencies only).
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
-COPY packages/db/package.json packages/db/
-COPY packages/shared/package.json packages/shared/
-COPY packages/geometry/package.json packages/geometry/
-COPY apps/worker/package.json apps/worker/
-RUN pnpm install --frozen-lockfile --filter "@print/worker..."
-
-# Source (profiles + test fixtures travel with apps/worker).
-COPY packages ./packages
-COPY apps/worker ./apps/worker
-RUN pnpm --filter @print/db generate
-
+# The trusted orchestrator starts as root with a small capability allowlist. It
+# launches each concurrent Orca through setpriv with a unique uid/gid and no
+# capabilities. Orca receives only a verified private scratch copy, preventing
+# it from reading DB/Redis secrets, the upload vault, or another active job.
+# Call the installed binary directly. Runtime Corepack resolution may attempt a
+# registry download, which is intentionally unavailable on the internal network.
+# Standalone `docker run` fails closed as the unprivileged worker. The reviewed
+# Compose service explicitly overrides this to root plus a narrow capability
+# allowlist so the trusted orchestrator can drop each Orca child to a private
+# credential-free UID and reap escaped descendants.
 USER worker
-
-# Long-running BullMQ consumer (tsx runs the TS entrypoint directly).
-CMD ["pnpm", "--filter", "@print/worker", "start"]
+CMD ["/app/worker/node_modules/.bin/tsx", "/app/worker/src/index.ts"]

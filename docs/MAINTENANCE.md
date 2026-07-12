@@ -2,77 +2,126 @@
 
 ## Backups
 
-What holds durable state:
+Durable state includes PostgreSQL (quotation/customer PII and slice cache),
+uploads/thumbnails, and PDFs. Database dumps and PDFs are sensitive even when
+model files have expired.
 
-- **Postgres** (`pgdata` volume) — quotations, models, slice cache. The source of
-  truth; back this up.
-- **`pdfs` volume** — generated quotation PDFs (regenerable in principle, but
-  cheap to keep).
-- **`uploads` volume** — model files + thumbnails (subject to retention).
-
-Example nightly Postgres dump:
+Create backups with private permissions and no fragile shell pipeline:
 
 ```bash
-docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
-  | gzip > backup-$(date +%F).sql.gz
+umask 077
+backup="postgres-$(date -u +%F).dump"
+docker compose exec -T postgres sh -c \
+  'exec pg_dump --format=custom -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "$backup"
+test -s "$backup"
 ```
 
-Restore into a fresh DB with `gunzip -c … | psql`.
+Encrypt uploads/PDFs and the dump, copy them to immutable/off-host storage whose
+credentials are unavailable to the application host, enforce retention, and
+alert on backup age/failure. Same-host snapshots help recovery but are not
+backups. Restore a sample regularly into an isolated database and verify rows,
+PDFs, and model files; an untested backup is unverified.
 
-## Data retention (automatic)
+## Automatic retention and reconciliation
 
-The worker runs a daily BullMQ repeatable job (`apps/worker/src/retention.ts`):
+The worker runs cleanup once at startup and then daily:
 
-1. **Unattached uploads** older than `UPLOAD_RETENTION_HOURS` (default 48) —
-   files, thumbnails and DB rows deleted.
-2. **Terminal quotations** (COMPLETED/DELIVERED/CANCELLED) older than
-   `FILE_RETENTION_DAYS` (default 30) — model files removed on disk; DB rows and
-   PDFs kept. The file endpoint returns `410 FILE_EXPIRED` afterwards.
+1. Unattached uploads older than `UPLOAD_RETENTION_HOURS` (48 hours) are claimed
+   by a conditional delete, then their derived model/thumbnail paths are
+   removed.
+2. Model files referenced only by immutable terminal quotations older than
+   `FILE_RETENTION_DAYS` (30 days) are purged; DB rows and PDFs remain. The model
+   endpoint then returns `410 FILE_EXPIRED`.
+3. Model/thumbnail/PDF directories are reconciled in bounded batches. Files
+   with no matching authoritative row/pointer and temporary crash leftovers
+   older than two hours are removed.
 
-Tune via the env vars in [ENV.md](ENV.md).
+Database scans and filesystem reconciliation are paginated so historical row
+growth does not require materializing the entire dataset. Cleanup errors are
+logged and retried; paths are derived from IDs rather than trusted DB text.
 
-## Upgrading OrcaSlicer
+Quotation rows and PDFs currently have no automatic maximum lifetime. Define a
+legal/business deletion policy and implement it before customer PII retention
+exceeds that policy.
 
-1. Bump `ORCA_VERSION` in `docker/worker.Dockerfile`.
-2. Re-flatten profiles against the new AppImage (see
-   [ORCA-PROFILES.md](ORCA-PROFILES.md)) and run the calibration-cube smoke gate.
-3. Rebuild: `docker compose build worker && docker compose up -d worker`.
-4. Slice caches from the old version stay valid; force a re-slice by changing a
-   setting if you want fresh numbers.
+## Upgrading OrcaSlicer or profiles
+
+1. Download the exact official AppImage separately and calculate SHA-256.
+2. Update `ORCA_VERSION` and `ORCA_SHA256` in `docker/worker.Dockerfile`.
+3. Re-flatten committed profiles and run the calibration-cube smoke gate in
+   [ORCA-PROFILES.md](ORCA-PROFILES.md).
+4. Bump `SLICE_PIPELINE_VERSION` in
+   `packages/shared/src/settings-key.ts`. This is mandatory for any slicer,
+   machine, process, or filament change that can affect toolpaths.
+5. Rebuild and deploy the worker.
+
+Old cache rows remain in PostgreSQL but the versioned key makes them harmless
+misses. Never leave them active after a toolpath-affecting upgrade.
 
 ## Updating the app
 
 ```bash
-git pull
-docker compose up -d --build      # migrate deploy runs automatically on web start
+git pull --ff-only
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+docker compose logs migrate
 ```
 
-Migrations are applied by the web entrypoint. Roll back by checking out the
-previous tag and rebuilding (irreversible migrations excepted — review before
-deploying).
+The short-lived migration service applies reviewed SQL and re-provisions web
+and worker grants before either starts. Treat destructive/irreversible
+migrations as a release decision; checking out old code does not reverse data
+changes.
 
-## Health & monitoring
+Pinned image digests, pnpm dependencies, Actions, CodeQL, and Trivy are tracked
+by CI/Dependabot. Review updates and rerun tests/build/smoke slicing before
+deployment.
 
-- `GET /api/health` → `{ ok, db, redis }`; the web container healthcheck uses it.
-- The worker refreshes a Redis `worker:heartbeat` key (TTL 30 s); its healthcheck
-  asserts the key exists.
-- Logs: `docker compose logs -f web worker`. Both use structured pino with
-  customer PII (email/phone/notes/name) redacted.
+## Monitoring
 
-## Rotating the admin password
+- `/api/health` reports DB/Redis status and is briefly coalesced.
+- Worker health checks `worker:heartbeat` in authenticated Redis.
+- Alert on disk/free-inode usage, PDF/upload growth, Postgres growth, Redis
+  memory, checkout circuit-breaker events, worker restarts/timeouts, migration
+  failures, and backup age.
+- Logs are structured and omit known capability query strings/customer fields,
+  but still restrict access and retention; exceptions/upstream software can
+  introduce sensitive data.
 
 ```bash
-pnpm --filter @print/web hash-password '<new-password>'
+docker compose logs -f web worker migrate
 ```
 
-Put the hash in `.env` (remember `$`→`$$` for compose), then
-`docker compose up -d web`.
+## Rotating access credentials
+
+Admin password:
+
+```bash
+pnpm --filter @print/web hash-password
+```
+
+Put the doubled-dollar hash in production `.env` and recreate web. Changing the
+hash does **not** revoke already-issued 12-hour admin JWTs. For emergency global
+revocation also rotate `SESSION_SECRET`; this invalidates admin sessions,
+anonymous quote sessions, and shipping estimate tokens. It does not revoke
+30-day quotation capabilities; delete the quotation to revoke one immediately.
+
+To rotate web/worker database passwords, update their runtime URLs and rerun the
+migration service with the still-valid owner URL; it rotates both roles before
+the services restart. Rotate the owner interactively first with `psql`'s
+`\password <owner-role>`, then update `POSTGRES_PASSWORD` and
+`MIGRATION_DATABASE_URL`. Rotate Redis by coordinating the server password and
+both clients; expect queued/rate-limit state disruption if replacing its data.
 
 ## Common issues
 
 | Symptom | Cause / fix |
 | --- | --- |
-| Uploads fail at ~100 MB with a 413 | VPS nginx `client_max_body_size` < 110m — see [DEPLOYMENT.md](DEPLOYMENT.md). |
-| Admin login always wrong | `$` not doubled to `$$` in the compose `.env` hash. |
-| Slices stuck "queued" | Worker not running/healthy — `docker compose ps`, check worker logs. |
-| Prisma "engine not found" after a change | Re-run `pnpm --filter @print/db generate` and rebuild. |
+| Upload returns 413 below 300 MiB | An edge proxy does not have an exact `/api/uploads` 301 MiB exception. |
+| Upload returns 408 | The absolute 10-minute body deadline elapsed. |
+| Admin login always fails after Compose edit | Bcrypt `$` was not doubled to `$$` in root `.env`. |
+| Web/worker wait indefinitely | Inspect the one-shot `migrate` exit/log and role URLs. |
+| Slice stays queued | Check worker health, authenticated Redis, and pipeline/Orca version match. |
+| Redis `NOAUTH` | Server/client password or percent-encoding differs. |
+| Prisma engine missing | Regenerate the client and rebuild the pinned Node 24 image. |

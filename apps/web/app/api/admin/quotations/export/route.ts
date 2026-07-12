@@ -1,12 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { csvCell } from "@/lib/csv";
+import { requireAdminApi } from "@/lib/api-util";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Export all quotations as CSV. Admin-gated by middleware. */
 export async function GET(_request: NextRequest) {
+  const auth = await requireAdminApi();
+  if (auth) return auth;
   const quotations = await prisma.quotation.findMany({
     orderBy: { createdAt: "desc" },
     include: { items: true },

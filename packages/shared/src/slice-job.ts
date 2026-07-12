@@ -1,18 +1,18 @@
+import type { ModelFormat } from "./filename";
 import type { SliceSettings } from "./quote-types";
-import { settingsKey } from "./settings-key";
+import { sliceArtifactKey } from "./settings-key";
 
 /** BullMQ queue name shared by the web enqueuer and the worker consumer. */
 export const SLICE_QUEUE = "slice";
 
-/** Payload handed to the worker. `storedPath` is resolved on the shared uploads
- *  volume, which both containers mount at the same path. */
+/** Payload handed to the worker. Paths and formats are deliberately absent:
+ * the worker resolves those from the database and validates the generated path
+ * before invoking the untrusted slicer. */
 export interface SliceJobData {
   sliceResultId: string;
   modelId: string;
   fileHash: string;
   settingsKey: string;
-  storedPath: string;
-  format: string;
   settings: SliceSettings;
 }
 
@@ -23,6 +23,10 @@ export function sliceJobId(fileHash: string, key: string): string {
   return `slice_${fileHash}_${key.replace(/:/g, "-")}`;
 }
 
-export function sliceJobIdFor(fileHash: string, settings: SliceSettings): string {
-  return sliceJobId(fileHash, settingsKey(settings));
+export function sliceJobIdFor(
+  fileHash: string,
+  format: ModelFormat,
+  settings: SliceSettings,
+): string {
+  return sliceJobId(fileHash, sliceArtifactKey(format, settings));
 }

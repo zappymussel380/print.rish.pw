@@ -38,12 +38,16 @@ print/
 ## Quick start (development)
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile                            # Node.js >= 24
 docker compose -f docker-compose.dev.yml up -d        # Postgres + Redis
-cp .env.example .env                                   # then fill in secrets
-pnpm --filter @print/db migrate:dev
-pnpm dev                                               # web + worker
+# create apps/web/.env.local as documented in docs/INSTALL.md
+DATABASE_URL=postgresql://print:print@localhost:5433/print \
+  pnpm --filter @print/db migrate:dev
+pnpm --filter @print/web dev                           # web on :3000
 ```
+
+The native slicer worker should run through its hardened container, not under a
+credential-bearing local user. See the install guide for end-to-end slicing.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for the full walkthrough and
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production.
@@ -59,3 +63,5 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full walkthrough and
 - [Pricing](docs/PRICING.md) — how quotes are computed and how to change rates
 - [Orca profiles](docs/ORCA-PROFILES.md) — the slicing profiles and re-flattening
 - [Maintenance](docs/MAINTENANCE.md) — backups, retention, upgrades
+- [Security](docs/SECURITY.md) — threat model, mitigations, residual risks
+- [Storage vault + LXC](docs/STORAGE_VAULT_LXC.md) — encrypted `/dev/sde1` layout and migration

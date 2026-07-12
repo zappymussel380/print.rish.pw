@@ -5,9 +5,10 @@ import {
   modelConfigSchema,
   priceQuote,
   type QuoteLineInput,
+  sliceArtifactKey,
   settingsKey,
 } from "@print/shared";
-import { assertBodySize, jsonError } from "@/lib/api-util";
+import { jsonError, readJsonBody } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { assertSameOrigin, clientIp, rateLimit, RATE_LIMITS } from "@/lib/security";
@@ -89,7 +90,13 @@ async function rebuildTotals(
 
     const slice = await prisma.sliceResult.findUnique({
       where: {
-        fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: settingsKey(config) },
+        fileHash_settingsKey: {
+          fileHash: model.fileHash,
+          settingsKey: sliceArtifactKey(
+            model.format as "stl" | "3mf" | "obj" | "amf",
+            config,
+          ),
+        },
       },
     });
     if (!slice || slice.status !== "DONE" || slice.filamentGrams == null) return null;
@@ -141,15 +148,9 @@ export async function POST(request: NextRequest) {
 
   // Reject oversized bodies before parsing so even a single in-budget request
   // can't stream a huge payload at the parser.
-  const tooLarge = assertBodySize(request, MAX_BODY_BYTES);
-  if (tooLarge) return tooLarge;
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "BAD_JSON", "Request body must be JSON");
-  }
+  const parsedBody = await readJsonBody(request, MAX_BODY_BYTES);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.value;
   const raw = body as Record<string, unknown>;
 
   const deliveryPincode = String(raw.deliveryPincode ?? "").trim();
