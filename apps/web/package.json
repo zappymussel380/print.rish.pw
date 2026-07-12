@@ -35,7 +35,7 @@
     "tailwind-merge": "^2.6.0",
     "three": "^0.172.0",
     "yauzl": "^3.2.0",
-    "zod": "^3.24.1",
+    "zod": "^4.4.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
