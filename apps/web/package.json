@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "hash-password": "node scripts/hash-password.mjs"
   },
@@ -41,6 +41,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
+    "@vitest/coverage-v8": "^3.2.7",
     "@types/bcryptjs": "^2.4.6",
     "@types/busboy": "^1.5.4",
     "@types/node": "^22.10.5",
