@@ -49,7 +49,7 @@ to `$$`. The container receives the intended single-dollar value.
 | `GOOGLE_MAPS_EMBED_URL` | empty | Optional exact Google Maps HTTPS embed URL; enables Google in CSP `frame-src`. |
 | `RESEND_API_KEY` / `MAIL_TO` | none | Both are required for contact-form delivery. Messages contain the submitted name, email, subject, and message; the contact form has no phone field. |
 | `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender. |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | empty | Both enable order notifications containing customer/order details. |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | empty | Both enable order notifications containing customer/order details and static, PII-free operator alerts. These remain web-only secrets. |
 | `TELEGRAM_MESSAGE_THREAD_ID` | empty | Optional positive Telegram forum topic ID. |
 | `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` | none | Optional API-user credentials for shipping estimates; do not use the dashboard login. |
 | `SHIPROCKET_PICKUP_PINCODE` | `781001` | Workshop origin pincode. |
@@ -98,7 +98,8 @@ one. Review vendor retention/access terms before enabling it.
   configured provider secrets, and web quota settings. It never receives the
   migration/worker database URLs or the PostgreSQL owner password.
 - `worker`: worker DB URL, authenticated Redis URL, storage paths, and worker
-  knobs only. It receives no session/admin/provider secrets. Each Orca process
+  knobs only. It receives no session/admin/provider secrets or internet-facing
+  network. Heartbeat alerting is observed and sent by web. Each Orca process
   gets a private model copy and a minimal explicit, credential-free environment
   containing only process basics such as `PATH`, locale, `HOME`, and
   `XDG_RUNTIME_DIR`. Compose CPU, memory, and PID limits apply to the whole

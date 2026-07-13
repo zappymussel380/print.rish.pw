@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   releaseStorageReservation: vi.fn(),
   withRedisLock: vi.fn(),
   moveIntoPlace: vi.fn(),
+  sendOperatorAlert: vi.fn(),
 }));
 
 vi.mock("@print/db", () => ({
@@ -59,6 +60,10 @@ vi.mock("@/lib/session", () => ({
   getOrCreateQuoteSessionId: vi.fn(async () => "session-1"),
 }));
 
+vi.mock("@/lib/telegram", () => ({
+  sendOperatorAlert: mocks.sendOperatorAlert,
+}));
+
 vi.mock("@/lib/storage", () => ({
   availableStorageBytes: vi.fn(async () => 10 * 1024 * 1024 * 1024),
   ensureStorageDirs: vi.fn(async () => {
@@ -94,6 +99,7 @@ beforeEach(async () => {
   mocks.moveIntoPlace.mockImplementation(async (source: string, destination: string) => {
     await rename(source, destination);
   });
+  mocks.sendOperatorAlert.mockResolvedValue(undefined);
 });
 
 afterEach(async () => {
@@ -132,5 +138,53 @@ describe("POST /api/uploads archive persistence", () => {
     expect(createData.fileHash).toBe(createHash("sha256").update(stored).digest("hex"));
     expect(createData.fileHash).not.toBe(createHash("sha256").update(archive).digest("hex"));
     expect(mocks.moveIntoPlace).not.toHaveBeenCalled();
+  });
+
+  it("alerts without changing the ingest-lock timeout response", async () => {
+    mocks.withRedisLock.mockImplementation(
+      async (name: string, action: () => Promise<unknown>) =>
+        name === "geometry-ingest" ? null : action(),
+    );
+    const archive = await readFile(
+      join(process.cwd(), "..", "..", "packages", "geometry", "fixtures", "cube.3mf"),
+    );
+    const form = new FormData();
+    form.append("file", new Blob([archive]), "customer-cube.3mf");
+
+    const response = await POST(
+      new Request("http://localhost/api/uploads", { method: "POST", body: form }) as never,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "INGEST_BUSY" } });
+    expect(mocks.sendOperatorAlert).toHaveBeenCalledOnce();
+    expect(mocks.sendOperatorAlert).toHaveBeenCalledWith(
+      "ingest_busy",
+      "Geometry ingest lock timed out; model inspection is temporarily busy.",
+    );
+  });
+
+  it("alerts without changing the upload-session lock timeout response", async () => {
+    mocks.withRedisLock.mockImplementation(
+      async (name: string, action: () => Promise<unknown>) =>
+        name.startsWith("upload-session:") ? null : action(),
+    );
+    const archive = await readFile(
+      join(process.cwd(), "..", "..", "packages", "geometry", "fixtures", "cube.3mf"),
+    );
+    const form = new FormData();
+    form.append("file", new Blob([archive]), "customer-cube.3mf");
+
+    const response = await POST(
+      new Request("http://localhost/api/uploads", { method: "POST", body: form }) as never,
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "UPLOAD_BUSY" } });
+    expect(mocks.sendOperatorAlert).toHaveBeenCalledOnce();
+    expect(mocks.sendOperatorAlert).toHaveBeenCalledWith(
+      "upload_busy",
+      "Upload finalization lock timed out; uploads are temporarily busy.",
+    );
   });
 });

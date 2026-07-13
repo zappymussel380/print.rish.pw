@@ -255,7 +255,7 @@ verified; rasterization math not re-derived), `docker-compose.vault.yml`,
 
 | ID | Task | Files | Acceptance criteria | Effort | Risk |
 |----|------|-------|---------------------|--------|------|
-| 2.1 | **Operator alerts via the existing Telegram bot (DECIDED — see sketch ③).** Alert on: checkout 5xx, PDF generation failure, Shiprocket daily-cap reached, worker heartbeat missing, and `INGEST_BUSY`/`UPLOAD_BUSY` 503 occurrences (interim signal until Task 2.4 replaces the lock; afterwards alert on ingest queue depth instead). Alerts must be rate-limited so an outage can't flood the chat. | `apps/web/lib/telegram.ts` (generalize sender), call sites, worker | Forced checkout failure produces one alert within a minute; alert storm capped | M | Low |
+| 2.1 | **Operator alerts via the existing Telegram bot (DECIDED — see sketch ③).** Alert on: checkout 5xx, PDF generation failure, Shiprocket daily-cap reached, worker heartbeat missing, and `INGEST_BUSY`/`UPLOAD_BUSY` 503 occurrences (interim signal until Task 2.4 replaces the lock; afterwards alert on ingest queue depth instead). Alerts must be rate-limited so an outage can't flood the chat. | `apps/web/lib/telegram.ts`, call sites, health route | Forced checkout failure produces one alert within a minute; alert storm capped | M | Low |
 | 2.2 | API-level flow test: scripted upload (fixture cube) → stub-slicer completes the job → checkout → PDF exists; runs against a real dev server in CI. A worker env flag (`STUB_SLICER=true`, dev/test only, refused in production) returns canned plausible stats instead of spawning Orca. | new test script, small worker flag | One CI job proves the full HTTP funnel without Orca | L | Medium |
 | 2.3 | Backup restore drill (operational): restore PG dump + volumes onto a clean host per `docs/MAINTENANCE.md`; record a dated note of the result in that doc. | `docs/MAINTENANCE.md` | Dated successful drill note exists | M | Low |
 | 2.4 | **Upload ingest queue with visible position (DECIDED — decision 8, sketch ④).** Uploads return `202 + ticket` after the file lands; a worker-consumed FIFO queue (concurrency 1) parses and persists; the upload page polls the ticket and shows "N models ahead of you". Retires the global ingest lock, the per-session finalization lock, and residual risk S2. Sub-steps: (a) worker ingest consumer + `UploadedModel` INSERT grant for the worker role (M); (b) ticket status endpoint + queue-position calculation (S); (c) dropzone/quote-store rework for queued/processing states (M); (d) docs (`SECURITY.md`, `HARDENING.md`, `ARCHITECTURE.md`, `API.md`) + integration tests on the 0.2 rig (M). | `apps/web/app/api/uploads/**`, `apps/web/lib/upload-*`, `apps/web/components/quote/dropzone.tsx`, `apps/web/lib/quote-store.ts`, `apps/worker/src/**`, `apps/web/scripts/provision-database.mjs`, docs | Contended uploads queue instead of erroring; position shown is real queue state; parse no longer runs in the web process; fence/limit tests green; hard depth bound still exists but is practically unreachable | XL (broken down above) | Medium |
@@ -394,11 +394,13 @@ per 15 min, with a suppressed-count appended on the next send). Wire call
 sites: checkout catch path and PDF-failure branch
 (`apps/web/app/api/quotations/route.ts:367-370`), Shiprocket daily-cap branch
 (`apps/web/lib/shipping.ts:218-221`), `INGEST_BUSY`/`UPLOAD_BUSY` 503 branches
-in the upload route, and a worker-side alert when the heartbeat loop detects
-Redis unreachable for > 1 min. Gotchas: alerts must not add latency to the
-customer path (fire-and-forget with `.catch`); never include customer PII in
-alert text (match `logger` redaction discipline); worker has its own pino +
-Redis — reuse its connection, not a new one.
+in the upload route. Re-verification found that a worker-side Telegram call
+would require adding internet egress to the backend-only worker and therefore
+to untrusted Orca. Preserve that boundary: the regularly polled web health
+route observes `worker:heartbeat` and Redis reachability and alerts after a
+continuous one-minute failure instead. Gotchas: alerts must not add latency to
+the customer path (fire-and-forget with `.catch`); never include customer PII
+in alert text (match `logger` redaction discipline).
 
 ---
 

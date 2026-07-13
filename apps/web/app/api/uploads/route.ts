@@ -42,6 +42,7 @@ import {
   thumbPath,
   tmpUploadPath,
 } from "@/lib/storage";
+import { sendOperatorAlert } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 // Uploads can be large; never pre-render or cache.
@@ -292,7 +293,14 @@ async function persistWithinSessionLimits(
     return persist();
   });
 
-  return response ?? jsonError(503, "UPLOAD_BUSY", "Another upload is still being finalized. Please retry.");
+  if (response === null) {
+    void sendOperatorAlert(
+      "upload_busy",
+      "Upload finalization lock timed out; uploads are temporarily busy.",
+    ).catch(() => {});
+    return jsonError(503, "UPLOAD_BUSY", "Another upload is still being finalized. Please retry.");
+  }
+  return response;
 }
 
 export async function POST(request: NextRequest) {
@@ -487,7 +495,14 @@ export async function POST(request: NextRequest) {
         },
         { leaseMs: 5 * 60_000, waitMs: 60_000 },
       );
-      return parsedResponse ?? jsonError(503, "INGEST_BUSY", "Another model is being inspected. Please retry.");
+      if (parsedResponse === null) {
+        void sendOperatorAlert(
+          "ingest_busy",
+          "Geometry ingest lock timed out; model inspection is temporarily busy.",
+        ).catch(() => {});
+        return jsonError(503, "INGEST_BUSY", "Another model is being inspected. Please retry.");
+      }
+      return parsedResponse;
     } finally {
       await removeQuietly(file.tmpPath);
     }

@@ -112,8 +112,20 @@ tests/build/smoke slicing before deployment.
 
 ## Monitoring
 
-- `/api/health` reports DB/Redis status and is briefly coalesced.
-- Worker health checks `worker:heartbeat` in authenticated Redis.
+- `/api/health` reports DB/Redis status and is briefly coalesced. Its regular
+  probe also observes `worker:heartbeat`; a continuously missing heartbeat or
+  unreachable Redis for more than one minute sends a static, PII-free Telegram
+  operator alert when Telegram is configured. Repeats are capped to one per 15
+  minutes and report the number suppressed; recovery resets the outage timer.
+- Worker health checks publish `worker:heartbeat` in authenticated Redis. The
+  web service observes it so the backend-only worker and untrusted Orca child
+  receive neither Telegram credentials nor an internet route.
+- When Telegram is configured, unexpected checkout exceptions, checkout
+  capacity 503s, quotation-PDF failures, the Shiprocket daily cap, and
+  upload/ingest lock timeouts also send static alerts without customer data.
+  Each alert kind is limited to one send per 15 minutes across web replicas;
+  the next send reports how many similar alerts were suppressed. A
+  process-local fallback keeps the cap during Redis outages.
 - Alert on disk/free-inode usage, PDF/upload growth, Postgres growth, Redis
   memory, checkout circuit-breaker events, worker restarts/timeouts, migration
   failures, and backup age.

@@ -173,7 +173,9 @@ services:
     # Deliberately NOT env_file: the worker spawns OrcaSlicer on untrusted
     # uploads, so its environment carries only what the trusted orchestrator
     # reads (see apps/worker/src/config.ts) - never SESSION_SECRET, the admin
-    # hash, or API keys. Orca runs under a different uid with a cleared
+    # hash, or API keys. Telegram alerts remain in the web service, which
+    # observes this worker's Redis heartbeat; do not add an edge network or
+    # provider credentials here. Orca runs under a different uid with a cleared
     # environment and cannot read the orchestrator's /proc environment.
     environment:
       DATABASE_URL: ${WORKER_DATABASE_URL:?Set WORKER_DATABASE_URL}

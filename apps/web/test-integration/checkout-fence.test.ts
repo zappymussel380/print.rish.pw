@@ -30,6 +30,7 @@ vi.mock("@/lib/pdf/quotation-pdf", () => ({
 
 vi.mock("@/lib/telegram", () => ({
   notifyNewQuotation: vi.fn(async () => {}),
+  sendOperatorAlert: vi.fn(async () => {}),
 }));
 
 const webConnection = integrationConnection("DATABASE_URL", "print_web");

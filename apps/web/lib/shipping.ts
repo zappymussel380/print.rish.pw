@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
 import { logger, safeErrorMessage } from "./logger";
 import { redis } from "./redis";
+import { sendOperatorAlert } from "./telegram";
 import { readBoundedJson } from "./upstream-response";
 
 /**
@@ -217,6 +218,10 @@ export async function fetchShipping(input: EstimateInput): Promise<ShippingResul
   if (callsToday === 1) await redis.expire(dayKey, 26 * 60 * 60);
   if (callsToday > DAILY_CALL_CAP) {
     logger.warn({ callsToday }, "Shipping daily call cap reached");
+    void sendOperatorAlert(
+      "shipping_daily_cap",
+      "Shiprocket daily call cap reached; shipping estimates are temporarily busy.",
+    ).catch(() => {});
     return { ok: false, reason: "BUSY" };
   }
 

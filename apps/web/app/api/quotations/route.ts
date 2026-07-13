@@ -33,7 +33,7 @@ import {
   pdfPath,
   removeQuietly,
 } from "@/lib/storage";
-import { notifyNewQuotation } from "@/lib/telegram";
+import { notifyNewQuotation, sendOperatorAlert } from "@/lib/telegram";
 import { buildWhatsAppUrl } from "@print/shared";
 
 export const runtime = "nodejs";
@@ -50,7 +50,7 @@ const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 class CheckoutConflictError extends Error {}
 
-export async function POST(request: NextRequest) {
+async function postQuotation(request: NextRequest) {
   const guard = await guardMutation(request, "checkout", RATE_LIMITS.checkout);
   if (guard) return guard;
 
@@ -224,6 +224,10 @@ export async function POST(request: NextRequest) {
     RATE_LIMITS.checkoutGlobal.windowSeconds,
   );
   if (!globalLimit.allowed) {
+    void sendOperatorAlert(
+      "checkout_5xx",
+      "Checkout daily capacity reached; new quotation requests are returning 503.",
+    ).catch(() => {});
     const response = jsonError(
       503,
       "CHECKOUT_CAPACITY_REACHED",
@@ -367,6 +371,10 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     // A missing PDF should not lose the quotation; it can be regenerated.
     logger.warn({ error: safeErrorMessage(err) }, "quotation PDF generation failed");
+    void sendOperatorAlert(
+      "quotation_pdf_failure",
+      "Quotation PDF generation failed; regeneration may be required.",
+    ).catch(() => {});
   }
 
   logger.info(
@@ -433,4 +441,22 @@ export async function POST(request: NextRequest) {
   response.headers.set("Referrer-Policy", "no-referrer");
   setQuotationAccessCookie(response, created.number, access.token, access.expiresAt);
   return response;
+}
+
+/**
+ * Keep the alert boundary outside the checkout implementation so every
+ * unexpected exception is reported without changing the error Next.js sees.
+ * Expected customer-facing errors return responses from postQuotation and do
+ * not cross this boundary.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    return await postQuotation(request);
+  } catch (err) {
+    void sendOperatorAlert(
+      "checkout_5xx",
+      "Checkout failed before a response could be completed.",
+    ).catch(() => {});
+    throw err;
+  }
 }
