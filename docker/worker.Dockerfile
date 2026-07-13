@@ -4,7 +4,7 @@
 # against (asset: OrcaSlicer_Linux_AppImage_Ubuntu2404_*). The AppImage is
 # extracted at build time because FUSE is unavailable inside containers.
 
-FROM node:24-bookworm-slim@sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5 AS node-runtime
+FROM node:26-bookworm-slim@sha256:e999d087492c7227c85adc70574cf9d3cce774c3e6d7b8dfe473ee6b142c8f2c AS node-runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
