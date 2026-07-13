@@ -10,6 +10,7 @@
   },
   "scripts": {
     "generate": "prisma generate",
+    "lint": "eslint . --max-warnings=0",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { CATALOG, modelConfigSchema, type BoundingBoxMm, type ModelConfig } from "@print/shared";
-import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
+import { guardMutation, readJsonBody } from "@/lib/api-util";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
 import { modelPath, removeQuietly, thumbPath } from "@/lib/storage";

@@ -101,6 +101,9 @@ jobs:
       - name: Audit dependencies
         run: pnpm audit --audit-level low
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck
         run: pnpm -r typecheck
 

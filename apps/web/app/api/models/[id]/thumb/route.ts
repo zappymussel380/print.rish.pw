@@ -41,7 +41,9 @@ async function resolveThumb(
       await prisma.uploadedModel
         .update({ where: { id: modelId }, data: { thumbPath: null } })
         .catch(() => {});
-    } catch {}
+    } catch {
+      // The missing/stale path is handled by the sibling lookup below.
+    }
   }
 
   const sibling = await prisma.uploadedModel.findFirst({

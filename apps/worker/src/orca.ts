@@ -50,6 +50,7 @@ export function parseOrcaProgressLine(line: string): OrcaProgress | null {
     if (typeof value.total_percent !== "number" || !Number.isFinite(value.total_percent)) return null;
     const message =
       typeof value.message === "string"
+        // eslint-disable-next-line no-control-regex
         ? value.message.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120)
         : "Slicing model";
     return {
@@ -182,6 +183,9 @@ async function runOrca(
 
     let finished = false;
     let timedOut = false;
+    // Declared before `finish` because that callback can run before the timer
+    // is armed (for example, on an immediate child-process error).
+    // eslint-disable-next-line prefer-const
     let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = async (code: number | null) => {
       if (finished) return;
@@ -481,6 +485,7 @@ async function readOrcaResult(workDir: string): Promise<Record<string, unknown> 
 }
 
 function cleanChildMessage(value: string, maxLength: number): string {
+  // eslint-disable-next-line no-control-regex
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 

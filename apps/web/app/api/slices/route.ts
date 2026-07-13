@@ -3,7 +3,6 @@ import { Prisma, prisma } from "@print/db";
 import {
   type SliceJobData,
   sliceArtifactKey,
-  settingsKey,
   sliceJobId,
   sliceSettingsSchema,
 } from "@print/shared";

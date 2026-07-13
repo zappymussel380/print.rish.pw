@@ -39,6 +39,7 @@ function serializeProgress(row: SliceResult): SliceProgress {
   const stage = PROGRESS_STAGES.has(row.progressStage)
     ? (row.progressStage as SliceProgressStage)
     : fallbackStage;
+  // eslint-disable-next-line no-control-regex
   const rawMessage = row.progressMessage.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
   return {
     percent: Math.min(99, Math.max(0, Math.round(row.progressPct))),

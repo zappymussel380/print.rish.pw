@@ -4,7 +4,6 @@ import { Download } from "lucide-react";
 import { prisma } from "@print/db";
 import {
   buildWhatsAppUrl,
-  formatDuration,
   formatGrams,
   formatPaise,
   summariseItems,

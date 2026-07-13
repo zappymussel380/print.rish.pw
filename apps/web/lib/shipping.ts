@@ -266,6 +266,7 @@ export async function fetchShipping(input: EstimateInput): Promise<ShippingResul
       amountPaise: roundedRupees * 100,
       days:
         typeof best.estimated_delivery_days === "string"
+          // eslint-disable-next-line no-control-regex
           ? best.estimated_delivery_days.replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 64)
           : null,
       weightKg,

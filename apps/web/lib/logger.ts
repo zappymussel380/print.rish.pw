@@ -28,6 +28,7 @@ export function safeErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   return raw
     .replace(/https?:\/\/\S+/gi, "[url]")
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f\x7f]/g, " ")
     .slice(0, 300);
 }

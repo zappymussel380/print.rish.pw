@@ -25,6 +25,7 @@ export function useSliceSync(model: QuoteModel): void {
 
   useEffect(() => {
     if (!ready) return;
+    const activeTimers = timers.current;
     const cacheKey = sliceCacheKey(modelId, key);
 
     // Already have (or are already fetching) this combination — do nothing.
@@ -32,8 +33,8 @@ export function useSliceSync(model: QuoteModel): void {
     if (current && current.status !== "failed") return;
 
     const abort = new AbortController();
-    timers.current.abort?.abort();
-    timers.current.abort = abort;
+    activeTimers.abort?.abort();
+    activeTimers.abort = abort;
 
     const start = async () => {
       setSlice(cacheKey, {
@@ -76,9 +77,9 @@ export function useSliceSync(model: QuoteModel): void {
       }
     };
 
-    timers.current.debounce = setTimeout(start, DEBOUNCE_MS);
+    activeTimers.debounce = setTimeout(start, DEBOUNCE_MS);
     return () => {
-      clearTimeout(timers.current.debounce);
+      clearTimeout(activeTimers.debounce);
       abort.abort();
     };
   }, [ready, modelId, key, model.config, setSlice]);

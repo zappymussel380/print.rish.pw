@@ -19,3 +19,6 @@ allowBuilds:
   msgpackr-extract: true
   prisma: true
   sharp: true
+  # eslint-import-resolver-typescript can use its prebuilt optional binaries;
+  # no lifecycle script is required for linting this repository.
+  unrs-resolver: false
