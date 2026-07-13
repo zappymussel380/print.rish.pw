@@ -151,5 +151,20 @@ stored. Confirmation/PDF responses are private/no-store/no-referrer.
   and runs without internet egress. Its output is size/decompression bounded and
   read without following symlinks. This limits impact; it is not a VM boundary.
 
+## Scale triggers
+
+The current shape is sized for a single-operator print service. Two signals
+mark the point where it needs revisiting:
+
+- **Ingest capacity.** The upload ingest queue runs one consumer at
+  concurrency 1. When the queue-saturation operator alerts (80 %/full) become
+  a regular occurrence rather than a burst anomaly, revisit ingest capacity:
+  raise consumer concurrency, move parsing into a child process, or split
+  ingest into a dedicated service/VM (the deferred process-isolation option).
+- **Poll-path load.** Quote-page polling (upload tickets ~1.5 s, slice status
+  ~2 s) is served uncached. At roughly 10× today's quote-page concurrency,
+  revisit poll-path caching (short-TTL Redis caching of status payloads or
+  server-sent events) before scaling the web tier.
+
 See [PRICING.md](PRICING.md), [ORCA-PROFILES.md](ORCA-PROFILES.md) and
 [DATABASE.md](DATABASE.md) for the details of each subsystem.
