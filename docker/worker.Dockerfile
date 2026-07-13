@@ -40,9 +40,10 @@ RUN pnpm install --frozen-lockfile --filter "@print/worker..."
 COPY packages ./packages
 COPY apps/worker ./apps/worker
 RUN pnpm --filter @print/db generate \
+    && pnpm --filter @print/worker build \
     && pnpm --filter @print/worker deploy --legacy --prod /opt/worker-app \
     && find /opt/worker-app -type f \( -name '*.test.ts' -o -name '*.test.js' \) -delete \
-    && rm -rf /opt/worker-app/test-fixtures
+    && rm -rf /opt/worker-app/test-fixtures /opt/worker-app/src /opt/worker-app/build.mjs
 
 # ---------- stage 3: runtime ----------
 FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
@@ -99,11 +100,11 @@ COPY --from=app-build /opt/worker-app ./worker
 # launches each concurrent Orca through setpriv with a unique uid/gid and no
 # capabilities. Orca receives only a verified private scratch copy, preventing
 # it from reading DB/Redis secrets, the upload vault, or another active job.
-# Call the installed binary directly; runtime package-manager tooling is
-# intentionally absent.
+# The worker ships compiled JS (dist/); tsx and other build tooling are
+# intentionally absent from the runtime image.
 # Standalone `docker run` fails closed as the unprivileged worker. The reviewed
 # Compose service explicitly overrides this to root plus a narrow capability
 # allowlist so the trusted orchestrator can drop each Orca child to a private
 # credential-free UID and reap escaped descendants.
 USER worker
-CMD ["/app/worker/node_modules/.bin/tsx", "/app/worker/src/index.ts"]
+CMD ["node", "/app/worker/dist/index.js"]

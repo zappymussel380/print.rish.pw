@@ -26,7 +26,7 @@ const nextConfig = convertedNextConfig.map((config) => {
 
 export default tseslint.config(
   {
-    ignores: ["**/.next/**", "**/next-env.d.ts", "packages/db/generated/**"],
+    ignores: ["**/.next/**", "**/dist/**", "**/next-env.d.ts", "packages/db/generated/**"],
   },
   { ...js.configs.recommended, files: ["**/*.{js,mjs,cjs}"] },
   ...tseslint.configs.recommended,
