@@ -2,6 +2,7 @@ import { lstat, opendir, rm as removeTree, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Logger } from "pino";
 import { prisma } from "@print/db";
+import { UUID_PATTERN } from "@print/shared";
 import { config } from "./config.js";
 
 async function rm(path: string | null | undefined): Promise<void> {
@@ -13,8 +14,8 @@ async function rm(path: string | null | undefined): Promise<void> {
   }
 }
 
-const UUID_FILE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:stl|3mf|obj|amf)$/i;
-const UUID_THUMB_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/i;
+const UUID_FILE_RE = new RegExp(`^${UUID_PATTERN}\\.(?:stl|3mf|obj|amf)$`, "i");
+const UUID_THUMB_RE = new RegExp(`^${UUID_PATTERN}\\.png$`, "i");
 const PDF_RE = /^RSP-\d{4}-\d{4,}\.pdf$/;
 const ORPHAN_GRACE_MS = 2 * 60 * 60 * 1000;
 const FORMATS = new Set(["stl", "3mf", "obj", "amf"]);

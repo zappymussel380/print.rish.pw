@@ -1,4 +1,4 @@
-import type { ColourId, MaterialId } from "./quote-types";
+import type { BoundingBoxMm, ColourId, MaterialId } from "./quote-types";
 
 /**
  * Business configuration: printers, materials, rates.
@@ -82,3 +82,12 @@ export const CATALOG: Catalog = {
     bufferDays: 2,
   },
 };
+
+/** True when the bounding box fits the default printer's bed in some axis
+ * permutation (models can be rotated at print time). */
+export function fitsBed(bboxMm: BoundingBoxMm): boolean {
+  const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
+  const dims = [bboxMm.x, bboxMm.y, bboxMm.z].sort((a, b) => a - b);
+  const bedSorted = [...bed].sort((a, b) => a - b);
+  return dims.every((d, i) => d <= bedSorted[i]!);
+}

@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
+import { UUID_RE } from "@print/shared";
 import { jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { clientIp, rateLimitBytes, RATE_LIMITS } from "@/lib/security";
@@ -16,7 +17,6 @@ const MIME_BY_FORMAT: Record<string, string> = {
   obj: "model/obj",
   amf: "application/x-amf",
 };
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FORMATS = new Set(["stl", "3mf", "obj", "amf"]);
 
 function contentDispositionFilename(name: string): string {

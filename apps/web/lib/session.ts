@@ -1,5 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import {
+  ADMIN_AUDIENCE,
+  QUOTE_AUDIENCE,
+  TOKEN_ISSUER,
+  adminCookieName as sharedAdminCookieName,
+  quoteCookieName as sharedQuoteCookieName,
+} from "@print/shared";
 import { env } from "./env";
 
 /**
@@ -12,9 +19,6 @@ import { env } from "./env";
 
 const QUOTE_TTL_SECONDS = 48 * 3600;
 const ADMIN_TTL_SECONDS = 12 * 3600;
-const TOKEN_ISSUER = "print.rish.pw";
-const QUOTE_AUDIENCE = "quote-session";
-const ADMIN_AUDIENCE = "admin-session";
 
 const secretKey = () => new TextEncoder().encode(env.sessionSecret);
 
@@ -27,11 +31,11 @@ function secureCookies(): boolean {
 }
 
 function quoteCookieName(): string {
-  return secureCookies() ? "__Host-qsid" : "qsid";
+  return sharedQuoteCookieName(secureCookies());
 }
 
 function adminCookieName(): string {
-  return secureCookies() ? "__Host-admin_session" : "admin_session";
+  return sharedAdminCookieName(secureCookies());
 }
 
 function cookieBase() {

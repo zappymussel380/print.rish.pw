@@ -10,6 +10,7 @@ import {
   type ModelConfig,
 } from "./quote-types";
 import { type ModelFormat } from "./filename";
+import { UUID_PATTERN } from "./uuid";
 
 /** BullMQ queue name shared by the web producer and worker consumer. */
 export const INGEST_QUEUE = "ingest";
@@ -39,9 +40,7 @@ export const ingestJobDataSchema = z
     format: modelFormatSchema,
     sizeBytes: z.number().int().positive().max(1024 * 1024 * 1024),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
-    reservationMember: z
-      .string()
-      .regex(/^\d{1,15}:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+    reservationMember: z.string().regex(new RegExp(`^\\d{1,15}:${UUID_PATTERN}$`, "i")),
     /** Set by the worker only for customer-safe, expected failures. Raw
      * BullMQ failure reasons are never returned by the status endpoint. */
     publicFailure: publicFailureSchema.optional(),

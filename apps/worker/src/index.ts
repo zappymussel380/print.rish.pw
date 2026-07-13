@@ -11,6 +11,7 @@ import {
   INGEST_QUEUE,
   SLICE_QUEUE,
   SLICE_PIPELINE_VERSION,
+  UUID_RE,
   sliceArtifactKey,
   sliceSettingsSchema,
   type IngestJobData,
@@ -30,7 +31,6 @@ import {
 } from "./slice-state.js";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PLACEHOLDER_RE = /^(?:change-me|changeme|password|secret|example)(?:[-_].*)?$/i;
 
 if (!SLICE_PIPELINE_VERSION.includes(`orca-${config.slicerVersion}-`)) {

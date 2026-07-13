@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
+import { UUID_RE } from "@print/shared";
 import { jsonError } from "@/lib/api-util";
 import { getQuoteSessionId, isAdmin } from "@/lib/session";
 import { openPrivateFile, readPrivateFile, removeQuietly, thumbPath } from "@/lib/storage";
@@ -10,7 +11,6 @@ import { openPrivateFile, readPrivateFile, removeQuietly, thumbPath } from "@/li
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const MAX_THUMB_BYTES = 5 * 1024 * 1024;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function isRegularThumb(path: string): Promise<boolean> {
   try {

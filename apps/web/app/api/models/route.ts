@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
-import { CATALOG, modelConfigSchema, type BoundingBoxMm, type ModelConfig } from "@print/shared";
+import { fitsBed, modelConfigSchema, type ModelConfig } from "@print/shared";
 import { guardMutation, readJsonBody } from "@/lib/api-util";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
@@ -23,13 +23,6 @@ type RestorableModelRow = {
   sourceConfig: unknown;
   lockedConfig: unknown;
 };
-
-function fitsBed(bboxMm: BoundingBoxMm): boolean {
-  const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
-  const dims = [bboxMm.x, bboxMm.y, bboxMm.z].sort((a, b) => a - b);
-  const bedSorted = [...bed].sort((a, b) => a - b);
-  return dims.every((d, i) => d <= bedSorted[i]!);
-}
 
 function serializeModel(model: RestorableModelRow): UploadedModelDto {
   const bboxMm = {

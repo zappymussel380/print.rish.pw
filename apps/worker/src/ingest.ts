@@ -16,9 +16,11 @@ import type { Logger } from "pino";
 import { Prisma, prisma } from "@print/db";
 import { ModelParseError, renderThumbnail } from "@print/geometry";
 import {
-  CATALOG,
   INGEST_ADMISSION_KEY,
   UPLOAD_STORAGE_RESERVATION_KEY,
+  UUID_PATTERN,
+  UUID_RE,
+  fitsBed,
   formatFromFilename,
   ingestJobDataSchema,
   publicIngestFailure,
@@ -31,8 +33,7 @@ import {
 import { config } from "./config.js";
 import { prepareUploadModels, type PreparedUpload, type PreparedUploadModel } from "./upload-prepare.js";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const RESERVATION_RE = /^\d{1,15}:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RESERVATION_RE = new RegExp(`^\\d{1,15}:${UUID_PATTERN}$`, "i");
 const MAX_INLINE_THUMB_TRIANGLES = 1_000_000;
 
 /** Parsing is synchronous, so its BullMQ lock must comfortably exceed the old
@@ -164,15 +165,6 @@ async function readVerifiedTempFile(data: IngestJobData): Promise<Buffer> {
   }
 }
 
-function fitsBed(model: PreparedUploadModel): boolean {
-  const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
-  const dimensions = [model.parsed.bboxMm.x, model.parsed.bboxMm.y, model.parsed.bboxMm.z].sort(
-    (a, b) => a - b,
-  );
-  const bedDimensions = [...bed].sort((a, b) => a - b);
-  return dimensions.every((dimension, index) => dimension <= bedDimensions[index]!);
-}
-
 interface PendingModel {
   id: string;
   finalPath: string;
@@ -228,7 +220,7 @@ async function persistPreparedUpload(
         bboxMm: model.parsed.bboxMm,
         volumeCm3: Number(model.parsed.volumeCm3.toFixed(3)),
         triangleCount: model.parsed.triangleCount,
-        fitsBed: fitsBed(model),
+        fitsBed: fitsBed(model.parsed.bboxMm),
         ...(model.defaultConfig ? { defaultConfig: model.defaultConfig } : {}),
         ...(model.sourceConfig ? { sourceConfig: model.sourceConfig } : {}),
         ...(model.lockedConfig ? { lockedConfig: model.lockedConfig } : {}),

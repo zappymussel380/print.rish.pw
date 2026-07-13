@@ -1,9 +1,9 @@
 import { constants } from "node:fs";
 import { chmod, mkdir, open, rename, statfs, unlink, type FileHandle } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { UUID_RE } from "@print/shared";
 import { env } from "./env";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL_FORMATS = new Set(["stl", "3mf", "obj", "amf"]);
 const QUOTATION_NUMBER_RE = /^RSP-\d{4}-\d{4,}$/;
 

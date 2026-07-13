@@ -1,19 +1,17 @@
 import { jwtVerify } from "jose";
 import { NextResponse, type NextRequest } from "next/server";
+// Subpath import keeps the edge bundle free of the full shared barrel (zod etc.).
+import {
+  ADMIN_AUDIENCE,
+  TOKEN_ISSUER,
+  adminCookieName,
+} from "@print/shared/session-constants";
 
 /** Edge middleware: applies the Content-Security-Policy + security headers to
- *  every response, and gates the admin area. Self-contained (no next/headers
- *  import) so it stays edge-compatible; it re-verifies the same HS256 admin
- *  cookie that lib/session.ts issues. */
-
-const TOKEN_ISSUER = "print.rish.pw";
-const ADMIN_AUDIENCE = "admin-session";
-
-function adminCookieName(): string {
-  return process.env.APP_ORIGIN?.startsWith("https://")
-    ? "__Host-admin_session"
-    : "admin_session";
-}
+ *  every response, and gates the admin area. Keeps its own verification logic
+ *  (no next/headers import) so it stays edge-compatible; it re-verifies the
+ *  same HS256 admin cookie that lib/session.ts issues, sharing only the token
+ *  and cookie-name constants. */
 
 async function isAdminToken(token: string | undefined): Promise<boolean> {
   if (!token || !process.env.SESSION_SECRET) return false;
@@ -91,7 +89,9 @@ export async function middleware(request: NextRequest) {
   const isLogin = pathname === "/admin/login" || pathname === "/api/admin/login";
 
   if (isAdminPath && !isLogin) {
-    const authed = await isAdminToken(request.cookies.get(adminCookieName())?.value);
+    const authed = await isAdminToken(
+      request.cookies.get(adminCookieName(!!process.env.APP_ORIGIN?.startsWith("https://")))?.value,
+    );
     if (!authed) {
       if (pathname.startsWith("/api/admin")) {
         return withSecurityHeaders(
