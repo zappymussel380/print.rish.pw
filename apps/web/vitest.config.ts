@@ -7,6 +7,9 @@ const root = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   test: {
     environment: "node",
+    // Keep the ordinary workspace test command service-free. Real Postgres /
+    // Redis tests have their own config and are invoked explicitly in CI.
+    include: ["test/**/*.test.ts"],
     coverage: { provider: "v8", reporter: ["text"] },
   },
   resolve: {

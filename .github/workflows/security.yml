@@ -45,6 +45,37 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://print_web:ci-web-password-00000000000000000000000000@127.0.0.1:5432/print_integration
+      REDIS_URL: redis://:ci-redis-password-000000000000000000000@127.0.0.1:6379
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+        env:
+          POSTGRES_USER: print_owner
+          POSTGRES_PASSWORD: ci-owner-password-000000000000000000000000
+          POSTGRES_DB: print_integration
+        ports:
+          - "127.0.0.1:5432:5432"
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U print_owner -d print_integration"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+          --health-start-period 5s
+      redis:
+        image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+        env:
+          REDISCLI_AUTH: ci-redis-password-000000000000000000000
+        command: redis-server --requirepass ci-redis-password-000000000000000000000
+        ports:
+          - "127.0.0.1:6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+          --health-start-period 5s
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -98,6 +129,24 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify PostgreSQL client
+        run: psql --version
+
+      - name: Generate Prisma client
+        run: pnpm --filter @print/db generate
+
+      - name: Deploy integration database schema
+        env:
+          DATABASE_URL: postgresql://print_owner:ci-owner-password-000000000000000000000000@127.0.0.1:5432/print_integration
+        run: pnpm --filter @print/db migrate:deploy
+
+      - name: Provision integration database roles
+        env:
+          MIGRATION_DATABASE_URL: postgresql://print_owner:ci-owner-password-000000000000000000000000@127.0.0.1:5432/print_integration
+          WEB_DATABASE_URL: postgresql://print_web:ci-web-password-00000000000000000000000000@127.0.0.1:5432/print_integration
+          WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@127.0.0.1:5432/print_integration
+        run: node apps/web/scripts/provision-database.mjs
+
       - name: Audit dependencies
         run: pnpm audit --audit-level low
 
@@ -109,6 +158,11 @@ jobs:
 
       - name: Test
         run: pnpm -r test
+
+      - name: Integration test
+        env:
+          WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@127.0.0.1:5432/print_integration
+        run: pnpm --filter @print/web test:integration
 
       - name: Build
         run: pnpm build
