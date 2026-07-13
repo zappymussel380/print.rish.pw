@@ -161,6 +161,7 @@ jobs:
 
       - name: Integration test
         env:
+          MIGRATION_DATABASE_URL: postgresql://print_owner:ci-owner-password-000000000000000000000000@127.0.0.1:5432/print_integration
           WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@127.0.0.1:5432/print_integration
         run: pnpm --filter @print/web test:integration
 

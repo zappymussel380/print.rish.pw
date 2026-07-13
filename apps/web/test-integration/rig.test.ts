@@ -1,51 +1,21 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient, prisma } from "@print/db";
 import { redis } from "@/lib/redis";
-
-interface IntegrationConnection {
-  url: string;
-  username: string;
-  database: string;
-  endpoint: string;
-}
-
-function integrationConnection(name: string, expectedUsername: string): IntegrationConnection {
-  const raw = process.env[name];
-  if (!raw) throw new Error(`${name} is required for integration tests`);
-
-  const parsed = new URL(raw);
-  const username = decodeURIComponent(parsed.username);
-  const database = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
-    throw new Error(`${name} must be a PostgreSQL URL`);
-  }
-  if (username !== expectedUsername) {
-    throw new Error(`${name} must use the ${expectedUsername} runtime role`);
-  }
-  // This suite will become destructive when the Task 0.3 fixtures land. Refuse
-  // production-shaped databases from day one so a copied command stays safe.
-  if (!database.endsWith("_integration")) {
-    throw new Error(`${name} must target a dedicated *_integration database`);
-  }
-
-  return {
-    url: raw,
-    username,
-    database,
-    endpoint: `${parsed.hostname}:${parsed.port || "5432"}/${database}`,
-  };
-}
+import {
+  assertSameDatabaseEndpoint,
+  integrationConnection,
+} from "./support/connections";
 
 const webConnection = integrationConnection("DATABASE_URL", "print_web");
 const workerConnection = integrationConnection("WORKER_DATABASE_URL", "print_worker");
-if (webConnection.endpoint !== workerConnection.endpoint) {
-  throw new Error("Web and worker integration URLs must target the same database endpoint");
-}
+assertSameDatabaseEndpoint(webConnection, workerConnection);
 
 const workerPrisma = new PrismaClient({ datasourceUrl: workerConnection.url });
 
 afterAll(async () => {
   await Promise.all([prisma.$disconnect(), workerPrisma.$disconnect(), redis.quit()]);
+  delete (globalThis as { prisma?: unknown; redis?: unknown }).prisma;
+  delete (globalThis as { prisma?: unknown; redis?: unknown }).redis;
 });
 
 interface IdentityRow {
