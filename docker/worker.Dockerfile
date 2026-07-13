@@ -10,7 +10,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- stage 1: fetch + extract OrcaSlicer ----------
-FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS orca
+FROM ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e AS orca
 
 ARG ORCA_VERSION=2.4.1
 ARG ORCA_SHA256=7aff29a0ac6bb906f11c069eefe83459781c3364bac20ba9529eb9937a231402
@@ -46,7 +46,7 @@ RUN pnpm --filter @print/db generate \
     && rm -rf /opt/worker-app/test-fixtures /opt/worker-app/src /opt/worker-app/build.mjs
 
 # ---------- stage 3: runtime ----------
-FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+FROM ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
 
 ARG ORCA_VERSION=2.4.1
 ENV ORCA_VERSION=${ORCA_VERSION} \
