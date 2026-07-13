@@ -105,7 +105,7 @@ tests/build/smoke slicing before deployment.
 - Alert on disk/free-inode usage, PDF/upload growth, Postgres growth, Redis
   memory, checkout circuit-breaker events, worker restarts/timeouts, migration
   failures, and backup age.
-- Logs are structured and omit known capability query strings/customer fields,
+- Logs are structured and omit query strings and known customer fields,
   but still restrict access and retention; exceptions/upstream software can
   introduce sensitive data.
 

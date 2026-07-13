@@ -2,11 +2,7 @@ import { Readable } from "node:stream";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { jsonError } from "@/lib/api-util";
-import {
-  getQuotationAccessCookie,
-  quotationAccessMatches,
-  setQuotationAccessCookie,
-} from "@/lib/quotation-access";
+import { getQuotationAccessCookie, quotationAccessMatches } from "@/lib/quotation-access";
 import { RATE_LIMITS, clientIp, rateLimit } from "@/lib/security";
 import { isAdmin } from "@/lib/session";
 import { openPrivateFile, pdfPath } from "@/lib/storage";
@@ -37,7 +33,6 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ number:
   }
 
   const { number } = await ctx.params;
-  const legacyQueryToken = request.nextUrl.searchParams.get("token") ?? "";
   const cookieToken = await getQuotationAccessCookie(number);
   const notFound = () => jsonError(404, "NOT_FOUND", "Quotation not found");
 
@@ -46,13 +41,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ number:
     : null;
   const admin = await isAdmin();
 
-  // Always run both comparisons against dummies for missing rows, keeping
+  // Always run the comparison against dummies for missing rows, keeping
   // sequential quotation-number probes on the same authorization path.
   const verifier = quotation?.accessToken ?? DUMMY_VERIFIER;
   const expiresAt = quotation?.accessTokenExpiresAt ?? DUMMY_EXPIRY;
   const cookieOk = quotationAccessMatches(cookieToken, verifier, expiresAt);
-  const legacyQueryOk = quotationAccessMatches(legacyQueryToken, verifier, expiresAt);
-  const tokenOk = quotation !== null && (cookieOk || legacyQueryOk);
+  const tokenOk = quotation !== null && cookieOk;
   if (!admin && !tokenOk) return notFound();
   if (!quotation?.pdfPath) return notFound();
 
@@ -64,7 +58,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ number:
   }
 
   const stream = Readable.toWeb(opened.handle.createReadStream()) as ReadableStream;
-  const response = new NextResponse(stream, {
+  return new NextResponse(stream, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Length": String(opened.size),
@@ -72,13 +66,4 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ number:
       "Cache-Control": "private, no-store",
     },
   });
-  if (legacyQueryOk) {
-    setQuotationAccessCookie(
-      response,
-      quotation.number,
-      legacyQueryToken,
-      quotation.accessTokenExpiresAt,
-    );
-  }
-  return response;
 }

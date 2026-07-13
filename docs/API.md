@@ -110,9 +110,8 @@ quotation creation.
 ### `GET /api/quotations/:number/pdf`
 
 Streams a PDF for a valid quotation cookie or admin session. Limit:
-30/IP/10 minutes; maximum file size 20 MiB; response is private/no-store.
-`?token=` is accepted only to keep pre-migration links working and upgrades a
-valid token into the cookie. Do not generate new query-token links.
+30/IP/10 minutes; maximum file size 20 MiB; response is private/no-store. Query
+parameters never grant quotation access.
 
 Unknown number, invalid/expired access, and missing PDF deliberately share the
 same 404 for non-admin callers.

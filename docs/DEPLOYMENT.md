@@ -177,10 +177,11 @@ server {
 }
 ```
 
-Using `$uri` rather than `$request_uri` prevents legacy capability query values
-from entering access logs. Do not add `$http_referer` to this vhost's log
-format. Nginx error messages can contain the complete request target, so the
-example records only `crit` and higher; this trades routine proxy warnings for
+Using `$uri` rather than `$request_uri` prevents customer search values and
+other sensitive query data from entering access logs. Do not add
+`$http_referer` to this vhost's log format. Nginx error messages can contain
+the complete request target, so the example records only `crit` and higher;
+this trades routine proxy warnings for
 query privacy. Use web logs, edge health, and `docker compose ps` for ordinary
 diagnosis. Keep the 301 MiB streaming exception exact; granting it to `/` lets
 small JSON endpoints become buffering/slow-body targets at the edge.

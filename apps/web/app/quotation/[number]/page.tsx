@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { prisma } from "@print/db";
 import {
@@ -35,17 +34,10 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function ConfirmationPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ number: string }>;
-  searchParams: Promise<{ token?: string }>;
 }) {
   const { number } = await params;
-  const { token } = await searchParams;
-  // Backward compatibility for previously issued query-string links: move the
-  // capability into a fragment immediately. It will not be sent on subsequent
-  // requests or as a Referer.
-  if (token) redirect(`/quotation/${encodeURIComponent(number)}#token=${encodeURIComponent(token)}`);
 
   const access = await prisma.quotation.findUnique({
     where: { number },
