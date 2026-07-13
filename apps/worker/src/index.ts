@@ -52,7 +52,7 @@ for (const [name, raw, protocols] of [
 }
 
 const runningAsRoot = typeof process.getuid === "function" && process.getuid() === 0;
-if (!runningAsRoot && !config.allowInsecureSlicer) {
+if (!runningAsRoot && !config.allowInsecureSlicer && !config.stubSlicer) {
   throw new Error(
     "Refusing to run Orca under the credential-bearing worker UID; use the hardened container or explicitly set ALLOW_INSECURE_SLICER=true for local development",
   );
@@ -69,8 +69,11 @@ if (
 ) {
   throw new Error("Slicer UID/GID range must be non-root, bounded, and distinct from storage ownership");
 }
-if (!runningAsRoot) {
+if (!runningAsRoot && !config.stubSlicer) {
   log.warn("ALLOW_INSECURE_SLICER is enabled; Orca can access worker credentials and uploads");
+}
+if (config.stubSlicer) {
+  log.warn("STUB_SLICER is enabled; slice measurements are synthetic and must not be used for orders");
 }
 
 function redisOptions() {

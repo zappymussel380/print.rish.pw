@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { extractZipEntry, PREARRANGED_PLATE_STL_HEADER } from "@print/geometry";
 import type { SliceSettings } from "@print/shared";
 import { MACHINE_PROFILE, config, filamentProfile, processProfile } from "./config.js";
+import { runStubSlice } from "./stub-slicer.js";
 
 export interface SliceOutcome {
   ok: boolean;
@@ -289,13 +290,23 @@ export async function runSlice(
   }
 
   const inputDir = join(workDir, "input");
-  await mkdir(inputDir, { mode: 0o550 });
+  // Production creates this read-only because the root orchestrator can still
+  // place the staged file. The non-root test stub keeps its private directory
+  // owner-writable so processJob can recursively remove it; no child is spawned.
+  await mkdir(inputDir, { mode: config.stubSlicer ? 0o700 : 0o550 });
   if (typeof process.getuid === "function" && process.getuid() === 0) {
     await chown(inputDir, 0, identity.gid);
   }
-  await chmod(inputDir, 0o550);
+  if (!config.stubSlicer) await chmod(inputDir, 0o550);
   const stagedPath = join(inputDir, `model.${input.format}`);
   await stageModel(input, stagedPath, identity);
+
+  // The HTTP funnel test replaces only native Orca execution. Keeping staging
+  // above this branch exercises the worker's no-follow, size, and hash checks
+  // against the file produced by the real upload route.
+  if (config.stubSlicer) {
+    return runStubSlice(onProgress);
+  }
 
   const jobProcess = await writeJobProcess(workDir, settings);
   const machine = join(config.profilesDir, MACHINE_PROFILE);

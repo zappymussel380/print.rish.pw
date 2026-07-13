@@ -83,6 +83,12 @@ docker compose up -d --build
 Then use the private compose proxy on port 8080. See
 [DEPLOYMENT.md](DEPLOYMENT.md).
 
+CI also drives the complete HTTP funnel with a source-run worker and fixed
+synthetic measurements. `STUB_SLICER=true` is restricted to an explicit
+development/test process, is refused in production, and must point only at
+disposable integration PostgreSQL/Redis stores because its rows share the
+normal slice cache. It is not a substitute for a real Orca smoke test.
+
 ## Useful commands
 
 ```bash

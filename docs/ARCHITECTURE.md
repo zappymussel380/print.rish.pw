@@ -91,6 +91,10 @@ The quote page requests a slice per model+settings via `POST /api/slices`:
    environment. Concurrent jobs cannot read each other's scratch directories
    or the upload vault. CPU, memory, and PID ceilings apply to the aggregate
    worker container, while the slicer timeout applies per job.
+   CI's source-run HTTP funnel replaces only the native Orca invocation with
+   fixed synthetic measurements after this staging check. That process-level
+   mode is refused outside explicit development/test environments and is never
+   forwarded by production Compose.
 4. Orca's `--pipe` JSON reports real `total_percent` progress. The worker stores
    that percentage and stage in PostgreSQL, while the client polls every 1.5 s.
 5. The worker parses `Metadata/slice_info.config` from the exported 3MF for
@@ -119,8 +123,10 @@ stored. Confirmation/PDF responses are private/no-store/no-referrer.
 
 ## Design decisions
 
-- **No mathematical estimation.** Every price is backed by real toolpaths. This
-  is the whole point, and dictates the async worker + cache design.
+- **No mathematical estimation in production.** Every customer price is backed
+  by real toolpaths. This is the whole point, and dictates the async worker +
+  cache design. The disposable CI funnel's conspicuously synthetic result is a
+  test harness, not a pricing mode.
 - **Readable, versioned settings key.**
   `orca-2.4.1-a1-v1:stl:PLA:200:15:auto` is debuggable and collision-free by
   construction.

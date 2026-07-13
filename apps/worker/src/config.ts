@@ -11,6 +11,20 @@ function int(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+export function stubSlicerEnabled(
+  value = process.env.STUB_SLICER,
+  nodeEnv = process.env.NODE_ENV,
+): boolean {
+  if (value === undefined || value === "" || value === "false") return false;
+  if (value !== "true") throw new Error("STUB_SLICER must be either true or false");
+  if (nodeEnv !== "development" && nodeEnv !== "test") {
+    throw new Error(
+      "STUB_SLICER=true is restricted to NODE_ENV=development or test and is refused otherwise",
+    );
+  }
+  return true;
+}
+
 const MAX_QUOTATION_RETENTION_DAYS = 90;
 
 export const config = {
@@ -49,6 +63,9 @@ export const config = {
    * it can drop Orca to a distinct credential-free UID. */
   allowInsecureSlicer:
     process.env.NODE_ENV !== "production" && process.env.ALLOW_INSECURE_SLICER === "true",
+  /** Synthetic slice measurements for the HTTP full-flow test. This is
+   * deliberately refused unless NODE_ENV explicitly names development/test. */
+  stubSlicer: stubSlicerEnabled(),
 } as const;
 
 /** Flattened process profile filename for a given layer height (µm). */

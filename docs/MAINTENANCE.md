@@ -85,6 +85,9 @@ deletion policy. The sweep does not preserve a long-term reporting copy.
 
 Old cache rows remain in PostgreSQL but the versioned key makes them harmless
 misses. Never leave them active after a toolpath-affecting upgrade.
+The CI HTTP funnel uses a production-refused synthetic slicer to verify the app
+integration only; it does not validate Orca, profiles, or toolpaths and cannot
+replace step 3.
 
 ## Updating the app
 

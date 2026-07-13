@@ -89,6 +89,7 @@ one. Review vendor retention/access terms before enabling it.
 | `STORAGE_UID` / `STORAGE_GID` | `1001` / `1001` | Durable storage owner. |
 | `LOG_LEVEL` | `info` | Structured web/worker log level. |
 | `ALLOW_INSECURE_SLICER` | false | Dangerous local-development escape hatch. Ignored in production; never deploy it. |
+| `STUB_SLICER` | false | Source-run HTTP-flow harness only. Literal `true` requires `NODE_ENV=development` or `test`; worker startup refuses it otherwise. It writes synthetic cache rows, so use only disposable integration PostgreSQL and Redis stores. Intentionally absent from Compose. |
 
 ## Process exposure
 
@@ -104,4 +105,5 @@ one. Review vendor retention/access terms before enabling it.
   containing only process basics such as `PATH`, locale, `HOME`, and
   `XDG_RUNTIME_DIR`. Compose CPU, memory, and PID limits apply to the whole
   worker container and all concurrent slicers, not individually to each Orca
-  process; the slicer timeout is per job.
+  process; the slicer timeout is per job. Production Compose does not forward
+  `STUB_SLICER`.

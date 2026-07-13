@@ -165,6 +165,69 @@ jobs:
           WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@127.0.0.1:5432/print_integration
         run: pnpm --filter @print/web test:integration
 
+      - name: Full HTTP quotation flow
+        shell: bash
+        env:
+          APP_ORIGIN: http://127.0.0.1:3000
+          REDIS_URL: redis://:ci-redis-password-000000000000000000000@127.0.0.1:6379/1
+          WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@127.0.0.1:5432/print_integration
+          STORAGE_RESERVE_MB: "1"
+          MAX_UPLOAD_MB: "10"
+          MAX_SESSION_UPLOAD_MB: "20"
+          UPLOAD_WINDOW_MB: "20"
+          WORKER_CONCURRENCY: "1"
+        run: |
+          set -euo pipefail
+          flow_root="$(mktemp -d)"
+          web_log="$flow_root/web.log"
+          worker_log="$flow_root/worker.log"
+          web_pid=""
+          worker_pid=""
+
+          cleanup() {
+            status=$?
+            trap - EXIT
+            for pid in "$web_pid" "$worker_pid"; do
+              if [[ -n "$pid" ]]; then kill -TERM -- "-$pid" 2>/dev/null || true; fi
+            done
+            for _ in {1..50}; do
+              alive=0
+              for pid in "$web_pid" "$worker_pid"; do
+                if [[ -n "$pid" ]] && kill -0 -- "-$pid" 2>/dev/null; then alive=1; fi
+              done
+              if (( alive == 0 )); then break; fi
+              sleep 0.1
+            done
+            for pid in "$web_pid" "$worker_pid"; do
+              if [[ -n "$pid" ]]; then kill -KILL -- "-$pid" 2>/dev/null || true; fi
+            done
+            for pid in "$web_pid" "$worker_pid"; do
+              if [[ -n "$pid" ]]; then wait "$pid" 2>/dev/null || true; fi
+            done
+            if (( status != 0 )); then
+              tail -n 200 "$web_log" "$worker_log" >&2 || true
+            fi
+            rm -rf "$flow_root"
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          export UPLOAD_DIR="$flow_root/uploads"
+          export PDF_DIR="$flow_root/pdfs"
+          export SLICE_WORK_DIR="$flow_root/slice-jobs"
+
+          setsid pnpm --filter @print/web dev >"$web_log" 2>&1 &
+          web_pid=$!
+          setsid env \
+            NODE_ENV=test \
+            STUB_SLICER=true \
+            ORCA_BIN=/definitely-not-installed/orca \
+            DATABASE_URL="$WORKER_DATABASE_URL" \
+            pnpm --filter @print/worker start >"$worker_log" 2>&1 &
+          worker_pid=$!
+
+          STUB_SLICER=true pnpm --filter @print/web test:flow
+
       - name: Build
         run: pnpm build
 

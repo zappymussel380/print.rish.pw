@@ -84,3 +84,8 @@ PLA/0.20/15% is ~5 g. If weights come back empty or zero, the inheritance
 flattening is stale — re-run the flatten script.
 Only deploy after updating the pinned AppImage SHA-256 and cache pipeline
 version as well.
+
+The CI HTTP funnel deliberately uses fixed synthetic measurements to test the
+upload, BullMQ, checkout, and PDF integration without downloading Orca. It does
+not exercise profiles or toolpaths and never replaces this real calibration
+cube smoke/upgrade gate.
