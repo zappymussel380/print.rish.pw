@@ -17,8 +17,13 @@ export interface QuoteModel {
   key: string;
   fileName: string;
   sizeBytes: number;
-  status: "uploading" | "ready" | "error";
+  status: "uploading" | "queued" | "processing" | "ready" | "error";
   progress: number;
+  /** BullMQ ticket while inspection is queued/running. Never used as a path. */
+  ticket?: string;
+  /** Server-authoritative count of jobs ahead (zero means next). */
+  modelsAhead?: number;
+  processorOnline?: boolean;
   error?: string;
   server?: UploadedModelDto;
   config: ModelConfig;
@@ -59,9 +64,15 @@ interface QuoteState {
 
   addUploading: (key: string, fileName: string, sizeBytes: number) => void;
   setProgress: (key: string, progress: number) => void;
-  markReady: (key: string, server: UploadedModelDto) => void;
-  markReadyMany: (key: string, servers: UploadedModelDto[]) => void;
-  markError: (key: string, error: string) => void;
+  markQueued: (
+    key: string,
+    ticket: string,
+    position: number,
+    processorOnline?: boolean,
+  ) => void;
+  markProcessing: (key: string, ticket: string) => void;
+  markReadyMany: (key: string, servers: UploadedModelDto[], ticket: string) => void;
+  markError: (key: string, error: string, ticket?: string) => void;
   updateConfig: (key: string, patch: Partial<ModelConfig>) => void;
   restoreModels: (models: UploadedModelDto[]) => void;
   remove: (key: string) => void;
@@ -82,55 +93,104 @@ export const useQuoteStore = create<QuoteState>((set) => ({
         ...s.models,
         { key, fileName, sizeBytes, status: "uploading", progress: 0, config: { ...DEFAULT_MODEL_CONFIG } },
       ],
+      shipping: null,
     })),
 
   setProgress: (key, progress) =>
     set((s) => ({
-      models: s.models.map((m) => (m.key === key ? { ...m, progress } : m)),
+      models: s.models.map((m) =>
+        m.key === key && m.status === "uploading" ? { ...m, progress } : m,
+      ),
     })),
 
-  markReady: (key, server) =>
+  markQueued: (key, ticket, position, processorOnline) =>
+    set((s) => ({
+      models: s.models.map((m) => {
+        if (m.key !== key || !isIngestPending(m.status)) return m;
+        // The first transition installs the ticket. Thereafter it is the fence
+        // that prevents an older poll response from changing a reused row.
+        if (m.status === "uploading" ? !!m.ticket : m.ticket !== ticket) return m;
+        return {
+          ...m,
+          status: "queued",
+          progress: 1,
+          ticket,
+          modelsAhead: Math.max(0, Math.floor(position)),
+          processorOnline,
+          error: undefined,
+        };
+      }),
+    })),
+
+  markProcessing: (key, ticket) =>
     set((s) => ({
       models: s.models.map((m) =>
-        m.key === key
+        m.key === key && m.ticket === ticket && isIngestPending(m.status)
           ? {
               ...m,
-              key: server.id,
-              status: "ready",
-              progress: 1,
-              server,
+              status: "processing",
+              modelsAhead: undefined,
+              processorOnline: undefined,
               error: undefined,
-              config: { ...m.config, ...server.defaultConfig },
             }
           : m,
       ),
     })),
 
-  markReadyMany: (key, servers) =>
+  markReadyMany: (key, servers, ticket) =>
     set((s) => {
       if (servers.length === 0) return s;
-      const index = s.models.findIndex((m) => m.key === key);
+      const index = s.models.findIndex((m) => m.key === key && m.ticket === ticket);
       if (index === -1) return s;
 
       const current = s.models[index]!;
-      const ready = servers.map((server) => ({
-        key: server.id,
-        fileName: server.originalName,
-        sizeBytes: server.sizeBytes,
-        status: "ready" as const,
-        progress: 1,
-        server,
-        error: undefined,
-        config: { ...current.config, ...server.defaultConfig },
-      }));
+      if (!isIngestPending(current.status)) return s;
+
+      // A models refresh can race the final ticket poll. Keep each durable
+      // server id once while still removing the now-obsolete placeholder.
+      const existingIds = new Set(
+        s.models
+          .filter((_model, modelIndex) => modelIndex !== index)
+          .map((model) => model.server?.id)
+          .filter((id): id is string => !!id),
+      );
+      const ready: QuoteModel[] = [];
+      for (const server of servers) {
+        if (existingIds.has(server.id)) continue;
+        existingIds.add(server.id);
+        ready.push({
+          key: server.id,
+          fileName: server.originalName,
+          sizeBytes: server.sizeBytes,
+          status: "ready",
+          progress: 1,
+          ticket: undefined,
+          modelsAhead: undefined,
+          processorOnline: undefined,
+          server,
+          error: undefined,
+          config: { ...current.config, ...server.defaultConfig },
+        });
+      }
       const models = [...s.models];
       models.splice(index, 1, ...ready);
       return { models, shipping: null };
     }),
 
-  markError: (key, error) =>
+  markError: (key, error, ticket) =>
     set((s) => ({
-      models: s.models.map((m) => (m.key === key ? { ...m, status: "error", error } : m)),
+      models: s.models.map((m) => {
+        if (m.key !== key || (ticket !== undefined && m.ticket !== ticket)) return m;
+        if (ticket !== undefined && !isIngestPending(m.status)) return m;
+        return {
+          ...m,
+          status: "error",
+          ticket: undefined,
+          modelsAhead: undefined,
+          processorOnline: undefined,
+          error,
+        };
+      }),
     })),
 
   updateConfig: (key, patch) =>
@@ -176,4 +236,8 @@ function filterUnlocked(model: QuoteModel, patch: Partial<ModelConfig>): Partial
     delete next[key];
   }
   return next;
+}
+
+export function isIngestPending(status: QuoteModel["status"]): boolean {
+  return status === "uploading" || status === "queued" || status === "processing";
 }

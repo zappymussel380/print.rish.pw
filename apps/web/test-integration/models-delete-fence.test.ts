@@ -107,7 +107,7 @@ describe("DELETE /api/models real-database fence", () => {
     const racedHash = createHash("sha256").update("raced-model").digest("hex");
     const keptHash = createHash("sha256").update("kept-model").digest("hex");
     const orphanHash = createHash("sha256").update("orphan-model").digest("hex");
-    await prisma.uploadedModel.createMany({
+    await ownerPrisma.uploadedModel.createMany({
       data: [
         {
           id: racedModelId,

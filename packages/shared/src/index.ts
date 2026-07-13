@@ -1,6 +1,7 @@
 export * from "./catalog";
 export * from "./completion-date";
 export * from "./filename";
+export * from "./ingest-job";
 export * from "./money";
 export * from "./order-summary";
 export * from "./pricing";

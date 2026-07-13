@@ -94,7 +94,7 @@ describe("worker retention real-database fence", () => {
     const fileHash = createHash("sha256").update("retention-race-model").digest("hex");
     const orphanHash = createHash("sha256").update("retention-orphan-model").digest("hex");
     const staleCreatedAt = new Date(Date.now() - 7 * 86_400_000);
-    await webPrisma.uploadedModel.createMany({
+    await workerPrisma.uploadedModel.createMany({
       data: [
         {
           id: modelId,

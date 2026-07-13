@@ -147,8 +147,9 @@ async function reconcileOrphans(now: number): Promise<number> {
     },
   );
 
-  // Temp files have no DB row by design. Age is the ownership boundary: normal
-  // uploads finish within the proxy timeout, while crash leftovers age out.
+  // Temp files have no DB row by design. An accepted ingest ticket owns its
+  // file until terminal worker cleanup; the bounded FIFO should transit far
+  // inside this two-hour grace, while producer/worker crash leftovers age out.
   const tmpDir = resolve(config.uploadDir, "tmp");
   try {
     const dir = await opendir(tmpDir);

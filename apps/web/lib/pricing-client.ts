@@ -10,6 +10,8 @@ import { type QuoteModel, type SliceState, sliceCacheKey } from "./quote-store";
 
 export interface LivePricing {
   breakdown: QuoteBreakdown | null;
+  /** Models whose upload is still transferring, queued, or being inspected. */
+  ingesting: number;
   /** Models still waiting on a slice result. */
   pending: number;
   /** Models whose slice failed. */
@@ -26,10 +28,15 @@ export function computePricing(
   slices: Record<string, SliceState>,
 ): LivePricing {
   const inputs: QuoteLineInput[] = [];
+  let ingesting = 0;
   let pending = 0;
   let failed = 0;
 
   for (const m of models) {
+    if (m.status === "uploading" || m.status === "queued" || m.status === "processing") {
+      ingesting++;
+      continue;
+    }
     if (m.status !== "ready" || !m.server) continue;
     const slice = slices[sliceCacheKey(m.server.id, settingsKey(m.config))];
     if (!slice || slice.status === "queued" || slice.status === "slicing") {
@@ -44,10 +51,10 @@ export function computePricing(
   }
 
   if (inputs.length === 0) {
-    return { breakdown: null, pending, failed, priced: 0, completion: null };
+    return { breakdown: null, ingesting, pending, failed, priced: 0, completion: null };
   }
 
   const breakdown = priceQuote(inputs, CATALOG);
   const completion = estimateCompletionDate(breakdown.totals.printSeconds, CATALOG.leadTime);
-  return { breakdown, pending, failed, priced: inputs.length, completion };
+  return { breakdown, ingesting, pending, failed, priced: inputs.length, completion };
 }

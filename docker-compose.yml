@@ -194,7 +194,10 @@ services:
       SLICER_GID: 3000
       STORAGE_UID: 1001
       STORAGE_GID: 1001
-      MAX_UPLOAD_MB: 300
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-300}
+      MAX_SESSION_UPLOAD_MB: ${MAX_SESSION_UPLOAD_MB:-900}
+      MAX_MODELS_PER_SESSION: ${MAX_MODELS_PER_SESSION:-20}
+      STORAGE_RESERVE_MB: ${STORAGE_RESERVE_MB:-2048}
     depends_on:
       migrate:
         condition: service_completed_successfully

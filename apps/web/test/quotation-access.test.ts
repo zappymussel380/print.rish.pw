@@ -26,8 +26,15 @@ describe("quotation access capabilities", () => {
   it("rejects tampered/malformed bearers and raw stored capabilities", () => {
     const now = new Date("2026-07-12T00:00:00Z");
     const access = issueQuotationAccess(now);
+    // Flip the last hex digit so the tampered token always differs.
+    const flipped = access.token.endsWith("0") ? "1" : "0";
     expect(
-      quotationAccessMatches(`${access.token.slice(0, -1)}0`, access.verifier, access.expiresAt, now),
+      quotationAccessMatches(
+        `${access.token.slice(0, -1)}${flipped}`,
+        access.verifier,
+        access.expiresAt,
+        now,
+      ),
     ).toBe(false);
     expect(quotationAccessMatches("not-a-token", access.verifier, access.expiresAt, now)).toBe(false);
     expect(quotationAccessMatches(access.token, access.token, access.expiresAt, now)).toBe(false);

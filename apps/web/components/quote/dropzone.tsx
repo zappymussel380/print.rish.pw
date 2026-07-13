@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Files, Plus, UploadCloud, X } from "lucide-react";
 import { MAX_QUANTITY } from "@print/shared";
 import { useQuoteStore } from "@/lib/quote-store";
@@ -38,11 +38,19 @@ async function runPooled<T>(items: T[], limit: number, task: (item: T) => Promis
 
 export function Dropzone({ maxModels, maxUploadMb }: { maxModels: number; maxUploadMb: number }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadsRef = useRef(new Map<string, AbortController>());
   const [dragging, setDragging] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicatePrompt[]>([]);
-  const { models, addUploading, setProgress, markReadyMany, markError, updateConfig } =
+  const { models, addUploading, setProgress, markQueued, markError, updateConfig } =
     useQuoteStore();
+
+  useEffect(
+    () => () => {
+      for (const controller of uploadsRef.current.values()) controller.abort();
+      uploadsRef.current.clear();
+    },
+  );
 
   // Upload a set of files, honouring the per-quote model limit at call time.
   const startUploads = useCallback(
@@ -62,19 +70,27 @@ export function Dropzone({ maxModels, maxUploadMb }: { maxModels: number; maxUpl
       for (const { file, key } of tagged) addUploading(key, file.name, file.size);
 
       await runPooled(tagged, MAX_PARALLEL, async ({ file, key }) => {
+        const controller = new AbortController();
+        uploadsRef.current.set(key, controller);
         try {
-          const uploadedModels = await uploadModel(file, (frac) => setProgress(key, frac));
-          markReadyMany(key, uploadedModels);
+          const accepted = await uploadModel(
+            file,
+            (frac) => setProgress(key, frac),
+            controller.signal,
+          );
+          markQueued(key, accepted.ticket, accepted.position);
         } catch (err) {
           const message =
             err && typeof err === "object" && "message" in err
               ? String((err as { message: unknown }).message)
               : "Upload failed";
           markError(key, message);
+        } finally {
+          uploadsRef.current.delete(key);
         }
       });
     },
-    [addUploading, markError, markReadyMany, maxModels, setProgress],
+    [addUploading, markError, markQueued, maxModels, setProgress],
   );
 
   const accept = useCallback(

@@ -87,7 +87,7 @@ describe("integration service rig", () => {
     `;
 
     expect(privileges).toEqual({
-      uploadedModelInsert: true,
+      uploadedModelInsert: false,
       sliceResultSelect: true,
       sliceStatusInsert: true,
       sliceStatusUpdate: true,
@@ -128,7 +128,7 @@ describe("integration service rig", () => {
 
     expect(privileges).toEqual({
       uploadedModelSelect: true,
-      uploadedModelInsert: false,
+      uploadedModelInsert: true,
       uploadedModelUpdate: true,
       uploadedModelDelete: true,
       sliceMeasurementUpdate: true,

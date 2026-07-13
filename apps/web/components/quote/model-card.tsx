@@ -12,9 +12,15 @@ import {
   settingsKey,
 } from "@print/shared";
 import { formatDimensions, formatBytes, formatVolume } from "@/lib/format";
-import { type QuoteModel, sliceCacheKey, useQuoteStore } from "@/lib/quote-store";
-import { deleteModel } from "@/lib/upload-client";
+import {
+  type QuoteModel,
+  isIngestPending,
+  sliceCacheKey,
+  useQuoteStore,
+} from "@/lib/quote-store";
+import { deleteModel, uploadQueueMessage } from "@/lib/upload-client";
 import { useSliceSync } from "@/hooks/use-slice-sync";
+import { useUploadSync } from "@/hooks/use-upload-sync";
 import { SettingsPanel } from "./settings-panel";
 
 const ModelViewer = dynamic(() => import("./model-viewer"), {
@@ -27,6 +33,7 @@ const ModelViewer = dynamic(() => import("./model-viewer"), {
 });
 
 export function ModelCard({ model }: { model: QuoteModel }) {
+  useUploadSync(model);
   useSliceSync(model);
 
   const remove = useQuoteStore((s) => s.remove);
@@ -34,6 +41,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
   const [removing, setRemoving] = useState(false);
   const [view3d, setView3d] = useState(false);
   const [wireframe, setWireframe] = useState(false);
+  const ingestPending = isIngestPending(model.status);
 
   const server = model.server;
   const hasSlicedOnce =
@@ -112,14 +120,16 @@ export function ModelCard({ model }: { model: QuoteModel }) {
                 {model.fileName}
               </p>
               <p className="mt-0.5 text-xs text-faint">
-                {server ? server.format.toUpperCase() : ""} · {formatBytes(model.sizeBytes)}
+                {server ? `${server.format.toUpperCase()} · ` : ""}
+                {formatBytes(model.sizeBytes)}
               </p>
             </div>
             <button
               type="button"
               onClick={onRemove}
-              disabled={removing || model.status === "uploading"}
+              disabled={removing || ingestPending}
               aria-label={`Remove ${model.fileName}`}
+              title={ingestPending ? "Available after model checking finishes" : undefined}
               className="shrink-0 rounded-md p-2 text-faint transition-colors hover:text-accent disabled:opacity-40"
             >
               {removing ? (
@@ -131,6 +141,16 @@ export function ModelCard({ model }: { model: QuoteModel }) {
           </div>
 
           {model.status === "uploading" && <UploadProgress progress={model.progress} />}
+
+          {model.status === "queued" && (
+            <IngestStatus>
+              {uploadQueueMessage(model.modelsAhead ?? 0, model.processorOnline)}
+            </IngestStatus>
+          )}
+
+          {model.status === "processing" && (
+            <IngestStatus>Checking your model.</IngestStatus>
+          )}
 
           {model.status === "error" && (
             <p className="mt-3 text-sm text-accent" aria-live="polite">
@@ -169,9 +189,22 @@ export function ModelCard({ model }: { model: QuoteModel }) {
   );
 }
 
+function IngestStatus({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      className="mt-3 text-sm text-muted"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {children}
+    </p>
+  );
+}
+
 function UploadProgress({ progress }: { progress: number }) {
   const pct = Math.round(progress * 100);
-  const label = pct >= 100 ? "Checking model" : "Uploading";
+  const label = pct >= 100 ? "Finishing upload" : "Uploading";
   return (
     <div className="mt-4">
       <div

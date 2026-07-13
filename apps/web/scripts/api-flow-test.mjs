@@ -139,15 +139,37 @@ const upload = await jsonResponse(
     headers: mutationHeaders(),
     body: form,
   }),
-  201,
+  202,
   "upload",
 );
-const model = upload.model;
-if (!model || typeof model.id !== "string" || model.format !== "stl" || model.fitsBed !== true) {
-  throw new Error(`upload returned an unexpected model: ${JSON.stringify(upload)}`);
+if (
+  typeof upload.ticket !== "string" ||
+  !Number.isInteger(upload.position) ||
+  upload.position < 0
+) {
+  throw new Error(`upload returned an unexpected ticket: ${JSON.stringify(upload)}`);
 }
 if (![...cookies.keys()].some((name) => name.endsWith("qsid"))) {
   throw new Error("upload did not establish the anonymous quote-session cookie");
+}
+
+let ingest = { status: "queued" };
+const ingestDeadline = Date.now() + 30_000;
+while (!["done", "failed"].includes(ingest.status) && Date.now() < ingestDeadline) {
+  await delay(250);
+  ingest = await jsonResponse(
+    await request(`/api/uploads/status/${encodeURIComponent(upload.ticket)}`),
+    200,
+    "upload poll",
+  );
+}
+if (ingest.status === "failed") {
+  throw new Error(`upload ingest failed: ${JSON.stringify(ingest.error)}`);
+}
+if (ingest.status !== "done") throw new Error("upload ingest did not finish within 30 seconds");
+const model = ingest.model;
+if (!model || typeof model.id !== "string" || model.format !== "stl" || model.fitsBed !== true) {
+  throw new Error(`upload ingest returned an unexpected model: ${JSON.stringify(ingest)}`);
 }
 
 const sliceSettings = {

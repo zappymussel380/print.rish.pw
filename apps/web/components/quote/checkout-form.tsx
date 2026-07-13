@@ -48,7 +48,7 @@ export function CheckoutForm() {
   const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => void (emailTimer.current && clearTimeout(emailTimer.current)), []);
 
-  const { breakdown, pending, completion } = computePricing(models, slices);
+  const { breakdown, ingesting, pending, completion } = computePricing(models, slices);
 
   const items = useMemo(
     () =>
@@ -59,11 +59,13 @@ export function CheckoutForm() {
     [models, slices],
   );
 
-  if (!breakdown || items.length === 0) {
+  if (!breakdown || items.length === 0 || ingesting > 0) {
     return (
       <div className="mx-auto mt-12 max-w-lg text-center">
         <p className="text-muted">
-          {pending > 0
+          {ingesting > 0
+            ? "A model is still being checked. Head back and wait for it to finish."
+            : pending > 0
             ? "Your models are still being sliced. Head back and wait for pricing to finish."
             : "There are no priced models in your quote yet."}
         </p>

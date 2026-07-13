@@ -8,14 +8,18 @@ import pino from "pino";
 import { Prisma, prisma } from "@print/db";
 import { parseModel, renderThumbnail } from "@print/geometry";
 import {
+  INGEST_QUEUE,
   SLICE_QUEUE,
   SLICE_PIPELINE_VERSION,
   sliceArtifactKey,
   sliceSettingsSchema,
+  type IngestJobData,
+  type IngestJobResult,
   type SliceJobData,
   type SliceProgressStage,
 } from "@print/shared";
 import { config } from "./config.js";
+import { INGEST_WORKER_OPTIONS, processIngestJob } from "./ingest.js";
 import { runSlice, type SlicerIdentity } from "./orca.js";
 import { runRetention } from "./retention.js";
 import {
@@ -76,7 +80,7 @@ if (config.stubSlicer) {
   log.warn("STUB_SLICER is enabled; slice measurements are synthetic and must not be used for orders");
 }
 
-function redisOptions() {
+function redisOptions(maxRetriesPerRequest: number | null = null) {
   const u = new URL(config.redisUrl);
   const dbText = u.pathname.replace(/^\//, "");
   if (dbText && !/^\d+$/.test(dbText)) throw new Error("REDIS_URL has an invalid database index");
@@ -87,7 +91,7 @@ function redisOptions() {
     password: u.password ? decodeURIComponent(u.password) : undefined,
     db: dbText ? Number(dbText) : 0,
     tls: u.protocol === "rediss:" ? { servername: u.hostname } : undefined,
-    maxRetriesPerRequest: null as null,
+    maxRetriesPerRequest,
   };
 }
 
@@ -368,6 +372,26 @@ worker.on("failed", (job, err) => {
 });
 worker.on("ready", () => log.info({ concurrency: config.concurrency }, "slice worker ready"));
 
+// Upload parsing is a separate FIFO with one active job across every worker
+// replica. BullMQ's Worker concurrency is process-local, so persist the global
+// limit on the queue as well before any ingest consumer starts.
+// Cleanup is best-effort and backed by TTLs. Keep this non-BullMQ connection
+// bounded so a Redis outage cannot hold a successfully persisted job forever.
+const ingestRedis = new IORedis(redisOptions(2));
+const ingestQueue = new Queue<IngestJobData, IngestJobResult>(INGEST_QUEUE, {
+  connection: redisOptions(),
+});
+await ingestQueue.setGlobalConcurrency(1);
+const ingestWorker = new Worker<IngestJobData, IngestJobResult>(
+  INGEST_QUEUE,
+  (job) => processIngestJob(job, { redis: ingestRedis, log }),
+  { connection: redisOptions(), ...INGEST_WORKER_OPTIONS },
+);
+ingestWorker.on("failed", (job, error) => {
+  log.error({ jobId: job?.id, errorType: error.constructor.name }, "ingest job failed");
+});
+ingestWorker.on("ready", () => log.info("ingest worker ready"));
+
 // --- daily data-retention sweep (repeatable) ---
 const MAINTENANCE_QUEUE = "maintenance";
 const maintenanceQueue = new Queue(MAINTENANCE_QUEUE, { connection: redisOptions() });
@@ -406,10 +430,15 @@ const beat = setInterval(() => {
 async function shutdown(signal: string) {
   log.info({ signal }, "shutting down");
   clearInterval(beat);
-  await worker.close();
-  await maintenanceWorker.close();
-  await maintenanceQueue.close();
-  await heartbeat.quit().catch(() => {});
+  // Start every consumer close together so one long slice cannot leave another
+  // queue accepting fresh work during shutdown.
+  await Promise.all([worker.close(), ingestWorker.close(), maintenanceWorker.close()]);
+  await Promise.all([
+    ingestQueue.close(),
+    maintenanceQueue.close(),
+    ingestRedis.quit().catch(() => {}),
+    heartbeat.quit().catch(() => {}),
+  ]);
   await prisma.$disconnect().catch(() => {});
   process.exit(0);
 }

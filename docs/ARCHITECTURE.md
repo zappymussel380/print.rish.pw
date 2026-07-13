@@ -6,8 +6,8 @@ Two long-running application containers and one short-lived migration task
 share a pnpm workspace:
 
 - **web** (`apps/web`) — Next.js 15. Serves the UI and all API route handlers.
-- **worker** (`apps/worker`) — a BullMQ consumer that runs OrcaSlicer, renders
-  thumbnails, and performs the daily retention sweep.
+- **worker** (`apps/worker`) — BullMQ consumers that inspect uploads, run
+  OrcaSlicer, render thumbnails, and perform the daily retention sweep.
 - **migrate** (one-shot target from the web Dockerfile) — applies Prisma
   migrations and provisions separate least-privilege web/worker database roles.
   Its psql client and schema-owner credential are absent from the public runner.
@@ -21,7 +21,7 @@ They share three workspace packages:
   returns a triangle soup, bounding box and volume (no three.js in Node).
 
 Backing services: **PostgreSQL** (Prisma) and authenticated **Redis** (BullMQ
-queue, slice cache coordination, rate limits, worker heartbeat).
+ingest/slice queues, slice cache coordination, rate limits, worker heartbeat).
 
 ```
           ┌────────── VPS host nginx (print.rish.pw, TLS) ──────────┐
@@ -34,8 +34,8 @@ queue, slice cache coordination, rate limits, worker heartbeat).
                          └──────────┘   │  redis   │
                               ▲         └──────────┘        ▲
                               │              ▲              │
-                              └── uploads ───┴── slice jobs ┘
-                                   volume        (BullMQ)
+                              └── uploads ───┴── ingest/slice jobs ┘
+                                   volume          (BullMQ)
 ```
 
 Only the **proxy** publishes a port. The VPS host nginx terminates TLS for
@@ -47,27 +47,37 @@ Only the **proxy** publishes a port. The VPS host nginx terminates TLS for
 ### Upload
 `POST /api/uploads` streams the multipart body through busboy to an exclusively
 created private temporary file, hashing (sha256) as it flows. It has a
-10-minute absolute deadline in addition to proxy idle timeouts. Geometry is
-then parsed under a non-renewing cross-replica ingest lease — a successful parse
-is a far stronger validity check than magic bytes — and checked against the
-printer bed. The lease normally reduces overlap but is not a fencing guarantee
-if work outlives it. Original STL/OBJ/raw-AMF bytes are atomically renamed to a
-server-derived UUID path. Every 3MF and zipped AMF is instead converted from the
-app-selected triangle stream to bounded binary STL before persistence, so the
-original attacker-controlled ZIP namespace never reaches the native slicer.
-Downstream STL parsing remains a separate parser boundary. Supported model units
-are normalized to millimetres. Rows are scoped to an anonymous signed `qsid`
+10-minute absolute deadline in addition to proxy idle timeouts. After transport
+checks, the web process enqueues a UUID ticket and returns `202` with the real
+count of jobs ahead. The session-owned status endpoint reports queued,
+processing, done, or a customer-safe failure without disclosing another
+customer's filename or job data.
+
+The backend-only worker consumes ingest tickets in FIFO order. BullMQ global
+concurrency and local worker concurrency are both one, preserving strict
+one-at-a-time geometry inspection even if a worker replica is accidentally
+added. It re-derives the UUID temp path under `UPLOAD_DIR`, opens it without
+following symlinks, and verifies its queued size and SHA-256 before parsing.
+Original STL/OBJ/raw-AMF bytes are copied from the verified descriptor to an
+exclusively created server-derived UUID path. Every 3MF and zipped AMF is
+instead converted from the app-selected triangle stream to bounded binary STL
+before persistence, so the original
+attacker-controlled ZIP namespace never reaches the native slicer. Downstream
+STL parsing remains a separate parser boundary. Supported model units are
+normalized to millimetres. Rows are scoped to an anonymous signed `qsid`
 session cookie.
 The route enforces a 300 MiB hard file limit, byte and session quotas, a storage
 reserve, archive/XML expansion limits, at most 20 3MF plates, and a global
 four-million-triangle/one-million-vertex budget. XML element/depth and OBJ line
 budgets prevent small-input structural explosions. Relevant 3MF entries share
 one aggregate decompression budget; storage reservations and session quotas use
-the final expanded STL byte count. Persistence normally uses a per-session
-Redis lease to keep parallel uploads from racing aggregate model-count or byte
-limits, but the non-renewing lease is advisory if finalization outlives it.
+the final expanded STL byte count. The sole global consumer rechecks session
+model/byte limits immediately before persistence, so no per-session advisory
+lock is needed. Atomic admission caps outstanding uploads at 25; each accepted
+job retains its worst-case expansion reservation until terminal cleanup.
 Cross-replica byte reservations and a final filesystem check preserve the
-configured free-space reserve independently.
+configured free-space reserve independently. A worker crash leaves bounded
+state for the reservation TTL and the two-hour temp-file sweeper.
 
 ### Slice + live pricing
 The quote page requests a slice per model+settings via `POST /api/slices`:

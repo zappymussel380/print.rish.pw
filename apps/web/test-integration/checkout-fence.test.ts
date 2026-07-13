@@ -70,7 +70,7 @@ beforeAll(async () => {
   process.env.PDF_DIR = join(storageRoot, "pdfs");
   ({ POST: checkoutPost } = await import("@/app/api/quotations/route"));
 
-  await prisma.uploadedModel.create({
+  await workerPrisma.uploadedModel.create({
     data: {
       id: modelId,
       sessionId: checkoutFixture.sessionId,

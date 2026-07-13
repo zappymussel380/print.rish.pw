@@ -145,7 +145,7 @@ describe("quotation PII retention against real services", () => {
       writeFile(activePdfPath, "aged-active-pdf"),
     ]);
 
-    await webPrisma.uploadedModel.createMany({
+    await workerPrisma.uploadedModel.createMany({
       data: [
         {
           id: exclusiveModelId,

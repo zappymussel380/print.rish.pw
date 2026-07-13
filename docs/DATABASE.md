@@ -53,9 +53,14 @@ Production does not migrate from the web process. Compose runs the same image
 in one-shot `migrate` mode with `MIGRATION_DATABASE_URL`, then provisions two
 distinct runtime roles:
 
-- web: DML on application tables, no schema/DDL privileges
-- worker: model read/update/delete, slice read/update, quotation read/delete,
-  and quotation-item read grants only
+- web: application DML except `UploadedModel` insert and trusted slice-output
+  columns; no schema/DDL privileges
+- worker: model select/insert/update/delete, slice read/update, quotation
+  read/delete, and quotation-item read grants only
+
+Upload row creation belongs exclusively to the FIFO ingest consumer. Moving
+`UploadedModel INSERT` from web to worker makes the single global consumer the
+database-enforced session-limit fence; the privilege is moved, not duplicated.
 
 Public database/schema creation is revoked. Web and worker start only after the
 migration service exits successfully. Every deployment reapplies grants so a

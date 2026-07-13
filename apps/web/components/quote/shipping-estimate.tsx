@@ -22,7 +22,7 @@ export function ShippingEstimate() {
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
   const setShipping = useQuoteStore((s) => s.setShipping);
-  const { breakdown } = computePricing(models, slices);
+  const { breakdown, ingesting } = computePricing(models, slices);
 
   const [pincode, setPincode] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -44,7 +44,7 @@ export function ShippingEstimate() {
   const sigRef = useRef(currentKey);
   sigRef.current = currentKey;
 
-  if (!breakdown) return null;
+  if (!breakdown || ingesting > 0) return null;
 
   const showResult = status === "done" && result && resultKey === currentKey;
 

@@ -91,6 +91,13 @@ one. Review vendor retention/access terms before enabling it.
 | `ALLOW_INSECURE_SLICER` | false | Dangerous local-development escape hatch. Ignored in production; never deploy it. |
 | `STUB_SLICER` | false | Source-run HTTP-flow harness only. Literal `true` requires `NODE_ENV=development` or `test`; worker startup refuses it otherwise. It writes synthetic cache rows, so use only disposable integration PostgreSQL and Redis stores. Intentionally absent from Compose. |
 
+The worker also receives `MAX_UPLOAD_MB`, `MAX_SESSION_UPLOAD_MB`,
+`MAX_MODELS_PER_SESSION`, and `STORAGE_RESERVE_MB`, because the ingest consumer
+rechecks those limits authoritatively before it creates `UploadedModel` rows.
+Ingest concurrency (globally one), queue admission (25), ticket retention
+(about one hour), and temp ownership (at most two hours) are safety constants,
+not deployment tuning knobs.
+
 ## Process exposure
 
 - `migrate`: only the owner URL plus the two runtime URLs; exits after migrations

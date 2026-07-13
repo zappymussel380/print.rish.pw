@@ -132,8 +132,13 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${webRole}, ${workerRo
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${webRole}, ${workerRole};
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-  "UploadedModel", "Quotation", "QuotationItem", "StatusHistory", "QuotationCounter"
+  "Quotation", "QuotationItem", "StatusHistory", "QuotationCounter"
   TO ${webRole};
+
+-- Upload transport is public-facing, but parsing and durable model creation run
+-- only in the single-concurrency ingest worker. Move INSERT rather than widening
+-- both roles; the web keeps lifecycle/config updates and guarded deletion.
+GRANT SELECT, UPDATE, DELETE ON TABLE "UploadedModel" TO ${webRole};
 
 -- Slice measurements feed pricing and are trusted worker output. The web role
 -- may create cache rows and rotate/requeue lifecycle metadata, but cannot
@@ -149,7 +154,7 @@ GRANT UPDATE (
   "attemptId", "status", "progressPct", "progressStage", "progressMessage",
   "progressUpdatedAt", "errorCode", "errorMessage", "completedAt"
 ) ON TABLE "SliceResult" TO ${webRole};
-GRANT SELECT, UPDATE, DELETE ON TABLE "UploadedModel" TO ${workerRole};
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "UploadedModel" TO ${workerRole};
 GRANT SELECT, UPDATE ON TABLE "SliceResult" TO ${workerRole};
 -- Quotation DELETE powers the retention sweep. Cascading foreign keys remove
 -- items/history, so the worker does not need direct DELETE on either child.

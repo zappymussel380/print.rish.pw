@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { isIP } from "node:net";
+import { UPLOAD_STORAGE_RESERVATION_KEY } from "@print/shared";
 import { env } from "./env";
 import { redis } from "./redis";
 
@@ -144,7 +145,7 @@ export async function reserveStorageBytes(
       return ARGV[5]
     `,
     1,
-    "storage:upload-reservations",
+    UPLOAD_STORAGE_RESERVATION_KEY,
     now,
     Math.ceil(costBytes),
     Math.floor(capacityBytes),
@@ -156,7 +157,7 @@ export async function reserveStorageBytes(
 }
 
 export async function releaseStorageReservation(member: string): Promise<void> {
-  await redis.zrem("storage:upload-reservations", member);
+  await redis.zrem(UPLOAD_STORAGE_RESERVATION_KEY, member);
 }
 
 /**
@@ -241,6 +242,10 @@ export const RATE_LIMITS = {
   modelMutation: { max: 60, windowSeconds: 600 },
   slice: { max: 60, windowSeconds: 600 },
   slicePoll: { max: 3000, windowSeconds: 600 },
+  // One quote can legitimately poll all twenty upload tickets every ~1.5 s.
+  // Keep this generous, but key it by IP + session (not attacker-chosen ticket)
+  // so rotating random UUIDs cannot create an unbounded Redis-key bypass.
+  uploadPoll: { max: 10_000, windowSeconds: 600 },
   checkout: { max: 5, windowSeconds: 600 },
   // Cross-IP circuit breaker for permanent PII rows, PDFs, and external
   // notifications. It bounds botnet/storage amplification; upstream bot

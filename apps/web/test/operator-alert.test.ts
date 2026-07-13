@@ -126,12 +126,12 @@ describe("operator alerts", () => {
   it("rate-limits each alert kind independently", async () => {
     const { sendOperatorAlert } = await sender();
 
-    await sendOperatorAlert("ingest_busy", "Model inspection is busy.");
-    await sendOperatorAlert("upload_busy", "An upload session is busy.");
+    await sendOperatorAlert("ingest_queue_depth", "The ingest queue is nearly full.");
+    await sendOperatorAlert("shipping_daily_cap", "The shipping daily cap was reached.");
 
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
-    expect(sentText(0)).toContain("Operator alert: ingest_busy");
-    expect(sentText(1)).toContain("Operator alert: upload_busy");
+    expect(sentText(0)).toContain("Operator alert: ingest_queue_depth");
+    expect(sentText(1)).toContain("Operator alert: shipping_daily_cap");
   });
 
   it("falls back to a local cap when Redis is unavailable", async () => {

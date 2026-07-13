@@ -120,7 +120,9 @@ The worker runs cleanup once at startup and then daily:
    those model files will normally already be gone.
 4. Model/thumbnail/PDF directories are reconciled in bounded batches. Files
    with no matching authoritative row/pointer and temporary crash leftovers
-   older than two hours are removed.
+   older than two hours are removed. Accepted ingest tickets own their temp
+   files until completion/failure; the queue cap and capacity reservations
+   bound that live set, while this grace period handles worker crashes.
 
 Database scans and filesystem reconciliation are paginated so historical row
 growth does not require materializing the entire dataset. Cleanup errors are
@@ -188,7 +190,7 @@ tests/build/smoke slicing before deployment.
   receive neither Telegram credentials nor an internet route.
 - When Telegram is configured, unexpected checkout exceptions, checkout
   capacity 503s, quotation-PDF failures, the Shiprocket daily cap, and
-  upload/ingest lock timeouts also send static alerts without customer data.
+  ingest queue saturation also send static alerts without customer data.
   Each alert kind is limited to one send per 15 minutes across web replicas;
   the next send reports how many similar alerts were suppressed. A
   process-local fallback keeps the cap during Redis outages.
@@ -230,6 +232,8 @@ both clients; expect queued/rate-limit state disruption if replacing its data.
 | --- | --- |
 | Upload returns 413 below 300 MiB | An edge proxy does not have an exact `/api/uploads` 301 MiB exception. |
 | Upload returns 408 | The absolute 10-minute body deadline elapsed. |
+| Upload is queued at 0 but not processing | Check `worker:heartbeat`, worker logs, and authenticated Redis; the UI reports when the processor is offline. |
+| Upload returns `INGEST_QUEUE_FULL` | The bounded FIFO already has 25 outstanding uploads. Check worker health/latency and disk before raising capacity elsewhere; the bound is intentional. |
 | Admin login always fails after Compose edit | Bcrypt `$` was not doubled to `$$` in root `.env`. |
 | Web/worker wait indefinitely | Inspect the one-shot `migrate` exit/log and role URLs. |
 | Slice stays queued | Check worker health, authenticated Redis, and pipeline/Orca version match. |

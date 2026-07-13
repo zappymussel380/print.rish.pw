@@ -10,20 +10,39 @@ byte ceilings, including chunked requests. Errors use
 
 ### `POST /api/uploads`
 
-Streams one multipart model to a private temporary file, hashes/interprets it
-with the bounded application parser, checks bed fit and quotas, and creates
-session-owned model row(s). Geometry selected from every 3MF and zipped AMF is
+Streams one multipart model to a private temporary file, hashes it, performs
+transport/early quota checks, and enqueues a session-owned ingest ticket. The
+worker subsequently interprets it with the bounded application parser and
+creates model row(s). Geometry selected from every 3MF and zipped AMF is
 normalized to bounded binary STL before persistence; downstream code and Orca
 receive that STL rather than the attacker-supplied archive. Multi-plate 3MF can
-return several STL-backed models. The original archive metadata and textures
+produce several STL-backed models. The original archive metadata and textures
 are not retained or returned by the model download endpoint.
 
 - 300 MiB hard file limit and 10-minute absolute body deadline
 - 20 requests and 900 MiB accepted bytes per IP/10 minutes by default
 - session model/byte quotas apply to final canonical bytes; the shared
   free-space reservation covers worst-case archive expansion
-- `201 { model, models }`
-- `408 UPLOAD_TIMEOUT`, `413`, `422`, `429`, or `507 STORAGE_LOW`
+- a FIFO admission cap bounds accepted/in-flight files to 25; the disk
+  reservation transfers to the worker and is released on terminal processing
+- `202 { ticket, position }`, where `position` is the count of jobs ahead
+- `408 UPLOAD_TIMEOUT`, `413`, `422`, `429`, `503 INGEST_QUEUE_FULL`, or
+  `507 STORAGE_LOW`
+
+### `GET /api/uploads/status/:ticket`
+
+Polls an ingest ticket owned by the current quote session. Unknown, expired,
+malformed, and other-session tickets share the same 404. The endpoint validates
+worker results before returning them and never exposes raw BullMQ failure text,
+paths, session IDs, or another customer's job data.
+
+- queued: `{ status: "queued", position, processorOnline }`
+- processing: `{ status: "processing" }`
+- done: `{ status: "done", model, models }`
+- failed: `{ status: "failed", error: { code, message } }`
+
+Completed and failed tickets remain pollable for about one hour. The browser
+polls around every 1.5 seconds through a ticket-scoped rate-limit bucket.
 
 ### `GET /api/models`
 

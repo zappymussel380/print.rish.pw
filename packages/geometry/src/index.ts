@@ -4,6 +4,11 @@ import { parseStl } from "./stl";
 import { parse3mf } from "./threemf";
 import { ModelParseError, type ParsedModel } from "./types";
 
+/** Largest combined canonical STL output a maximally complex multi-plate
+ * archive can produce. The web reserves this before streaming; the worker is
+ * the only process that actually creates those canonical files. */
+export { MAX_CANONICAL_ARCHIVE_BYTES } from "./limits";
+
 export {
   BINARY_STL_HEADER_BYTES,
   looksLikeAsciiStl,

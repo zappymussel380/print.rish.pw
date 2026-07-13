@@ -47,6 +47,9 @@ export const config = {
   storageUid: int("STORAGE_UID", 1001),
   storageGid: int("STORAGE_GID", 1001),
   maxUploadBytes: Math.min(int("MAX_UPLOAD_MB", 300), 300) * 1024 * 1024,
+  maxSessionUploadBytes: int("MAX_SESSION_UPLOAD_MB", 900) * 1024 * 1024,
+  maxModelsPerSession: int("MAX_MODELS_PER_SESSION", 20),
+  storageReserveBytes: int("STORAGE_RESERVE_MB", 2048) * 1024 * 1024,
   slicerVersion: str("ORCA_VERSION", "2.4.1"),
   thumbSize: Math.min(int("THUMB_SIZE", 512), 1024),
   /** Hours to keep uploads never attached to a submitted quotation. */

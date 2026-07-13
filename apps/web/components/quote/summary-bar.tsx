@@ -16,8 +16,8 @@ export function SummaryBar() {
   const readyModels = models.filter((m) => m.status === "ready");
   if (readyModels.length === 0) return null;
 
-  const { breakdown, pending, failed, priced, completion } = computePricing(models, slices);
-  const canContinue = !!breakdown && pending === 0;
+  const { breakdown, ingesting, pending, failed, priced, completion } = computePricing(models, slices);
+  const canContinue = !!breakdown && ingesting === 0 && pending === 0;
 
   return (
     <div className="sticky bottom-0 z-30 mt-8 border-t border-line bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] backdrop-blur-[18px]">
@@ -39,9 +39,15 @@ export function SummaryBar() {
         </div>
 
         <div className="flex items-center gap-3">
-          {pending > 0 && (
+          {ingesting > 0 && (
+            <span className="flex items-center gap-1.5 text-xs text-muted" role="status">
+              <Loader2 strokeWidth={1.65} className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              {ingesting} {ingesting === 1 ? "model" : "models"} being checked…
+            </span>
+          )}
+          {ingesting === 0 && pending > 0 && (
             <span className="flex items-center gap-1.5 text-xs text-muted">
-              <Loader2 strokeWidth={1.65} className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 strokeWidth={1.65} className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
               {pending} slicing…
             </span>
           )}

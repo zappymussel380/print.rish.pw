@@ -13,8 +13,7 @@ export type OperatorAlertKind =
   | "checkout_5xx"
   | "quotation_pdf_failure"
   | "shipping_daily_cap"
-  | "ingest_busy"
-  | "upload_busy"
+  | "ingest_queue_depth"
   | "worker_heartbeat";
 
 interface LocalAlertState {

@@ -71,7 +71,7 @@ describe("slice retry generation fence", () => {
     const clientIp = "192.0.2.173";
 
     try {
-      await webPrisma.uploadedModel.create({
+      await ownerPrisma.uploadedModel.create({
         data: {
           id: modelId,
           sessionId: requestSession.id,

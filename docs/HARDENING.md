@@ -35,6 +35,7 @@ Both issues are now closed with enforcement outside the original proposal.
 | Web validation and Orca could interpret archive entries differently | The bounded application parser selects geometry from every 3MF and zipped AMF and serializes that triangle stream to binary STL. The selected triangle stream drives the upload preview, while the serialized STL is hashed, queued, and supplied to Orca, so Orca never receives the original attacker-controlled ZIP namespace. Tests use archives whose local and central filenames deliberately disagree. 3MF/AMF units are normalized to millimetres before serialization; downstream STL interpretation remains a separate parser boundary. |
 | Terminal quotation status could be reopened by concurrent stale writes | Status transitions now conditionally claim the exact observed state in a transaction; history is written only for the winning transition. |
 | Concurrent slice repair/retry could overwrite terminal work | A failed retry conditionally claims the exact prior attempt and creates a fresh attempt UUID/job ID. Worker claims, progress, result, completion, and asynchronous-failure writes must match that generation and a live DB status. Missing/non-live job repair rechecks authoritative status and generation before queue mutation. |
+| Geometry parsing blocked the web tier behind advisory locks | Upload transport now hands a UUID ticket to a bounded BullMQ FIFO. The backend-only ingest consumer has local and global concurrency one, verifies the no-follow temp descriptor's size/hash, enforces session limits immediately before worker-only inserts, and returns only runtime-validated results/customer-safe failures. The old global and per-session locks are gone. |
 | Datastore root filesystems did not match the documented container posture | PostgreSQL and Redis now use read-only root filesystems, explicit writable volume/tmpfs mounts, `no-new-privileges`, and tested capability allowlists. |
 | Runtime Node images contained vulnerable, unused package-manager tooling | The pinned package manager was upgraded from pnpm 9 to pnpm 11.12.0, newly published dependencies have a 24-hour review delay, and npm/Corepack/pnpm are removed from final web/worker images. |
 | The public web image inherited migration-only psql and its larger OS dependency tree | The Dockerfile now emits separate `runner` and `migrate` targets. Only the short-lived, internal migration target contains psql and receives the schema-owner URL. Web health uses Node directly instead of wget. |
@@ -103,12 +104,11 @@ administrators receive the canonical STL, not an archival source project.
   JWTs. The new global failure cap bounds guesses but can itself be exhausted to
   delay an administrator. MFA or an external identity provider is the next
   meaningful improvement.
-- Geometry inspection is bounded and normally serialized, but its Redis lease
-  is non-renewing and provides no fencing after expiry. Per-session upload
-  finalization uses the same advisory pattern. Move parsing to a dedicated
-  no-network ingest service/VM for stronger availability and parser isolation;
-  use renewable fenced or database advisory locks where strict serialization
-  is required.
+- Geometry inspection is bounded, globally serialized by BullMQ, and no longer
+  runs on the public web event loop. It still runs synchronously in the trusted
+  worker orchestrator; a worst-case parser bug can disrupt slicing/heartbeat in
+  that container. A short-lived credential-free child process or dedicated
+  ingest VM remains the stronger crash/OOM and kernel-isolation boundary.
 - Orca remains native code sharing the worker kernel. A disposable VM per job
   is the stronger boundary; CPU/RAM/PID ceilings are aggregate container limits,
   not per-slicer quotas. Continue manual review of high-value/outlier quotes.
