@@ -112,8 +112,9 @@ administrators receive the canonical STL, not an archival source project.
 - Orca remains native code sharing the worker kernel. A disposable VM per job
   is the stronger boundary; CPU/RAM/PID ceilings are aggregate container limits,
   not per-slicer quotas. Continue manual review of high-value/outlier quotes.
-- Establish a maximum retention/deletion policy for quotation PII and PDFs,
-  review third-party data handling, and test encrypted off-host restores.
+- Enforce the local 90-day deletion threshold for terminal quotation PII and
+  PDFs, review third-party and backup retention separately, and test encrypted
+  off-host restores.
 - Keep weekly source and runtime-image scans, including unfixed findings rather
   than only the fix-available CI gate. Advisory databases and pinned artifacts
   can become stale between checks; refresh the pinned Debian base as fixes land.

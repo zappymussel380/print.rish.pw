@@ -205,6 +205,16 @@ export function CheckoutForm() {
             )}
           </label>
         </div>
+
+        <p className="mt-4 max-w-2xl text-xs leading-5 text-muted">
+          We store and use your contact and delivery details only to process this order. Our live
+          quotation record, PDF and remaining local files have a retention period of at most 90 days
+          after the order is completed or cancelled, then the next daily cleanup removes them. We
+          never analyze or sell these details, or use them for marketing. Processing may share them
+          with the operator&apos;s WhatsApp, Telegram and email accounts, and with the shipping
+          provider. Provider and backup copies follow their own retention schedules.
+        </p>
+
         <label className="mt-4 block">
           <span className="mb-2 block text-[0.7rem] font-[650] uppercase tracking-[0.14em] text-muted">
             Notes <span className="normal-case text-faint">(optional)</span>

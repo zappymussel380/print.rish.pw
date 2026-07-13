@@ -29,6 +29,11 @@ function expectedThumbPath(modelId: string): string {
   return resolve(config.uploadDir, "thumbs", `${modelId}.png`);
 }
 
+function expectedPdfPath(quotationNumber: string): string | null {
+  const filename = `${quotationNumber}.pdf`;
+  return PDF_RE.test(filename) ? resolve(config.pdfDir, filename) : null;
+}
+
 async function cleanOrphanFiles(
   directory: string,
   namePattern: RegExp,
@@ -169,6 +174,8 @@ async function reconcileOrphans(now: number): Promise<number> {
  *     UPLOAD_RETENTION_HOURS — files, thumbnails and DB rows.
  *  2. Remove the model files of quotations in a terminal state older than
  *     FILE_RETENTION_DAYS, keeping the DB rows and PDFs for the record.
+ *  3. Delete terminal quotations and their customer data once they exceed
+ *     QUOTATION_RETENTION_DAYS, then remove their unreferenced storage.
  */
 export async function runRetention(log: Logger): Promise<void> {
   const now = Date.now();
@@ -278,10 +285,85 @@ export async function runRetention(log: Logger): Promise<void> {
     }
   }
 
+  const quotationCutoff = new Date(
+    now - config.quotationRetentionDays * 86_400_000,
+  );
+  let deletedQuotations = 0;
+  let deletedQuotationModels = 0;
+  let afterExpiredQuotationId: string | undefined;
+  while (true) {
+    const expired = await prisma.quotation.findMany({
+      where: {
+        status: { in: ["COMPLETED", "DELIVERED", "CANCELLED"] },
+        updatedAt: { lt: quotationCutoff },
+        ...(afterExpiredQuotationId ? { id: { gt: afterExpiredQuotationId } } : {}),
+      },
+      include: { items: { select: { modelId: true } } },
+      orderBy: { id: "asc" },
+      take: 200,
+    });
+    if (expired.length === 0) break;
+    afterExpiredQuotationId = expired.at(-1)!.id;
+
+    for (const quotation of expired) {
+      const modelIds = [...new Set(quotation.items.map((item) => item.modelId))];
+
+      // Reassert the terminal state and age while claiming the destructive
+      // action. A concurrent manual delete wins with count=0; no files are
+      // touched unless this sweep deleted the quotation row and its cascades.
+      const { count } = await prisma.quotation.deleteMany({
+        where: {
+          id: quotation.id,
+          status: { in: ["COMPLETED", "DELIVERED", "CANCELLED"] },
+          updatedAt: { lt: quotationCutoff },
+        },
+      });
+      if (count === 0) continue;
+      deletedQuotations += 1;
+
+      try {
+        await rm(expectedPdfPath(quotation.number));
+      } catch (err) {
+        log.error(
+          { quotationId: quotation.id, err: String(err) },
+          "expired quotation PDF cleanup failed; orphan reconciliation will retry",
+        );
+      }
+
+      for (const modelId of modelIds) {
+        const model = await prisma.uploadedModel.findUnique({ where: { id: modelId } });
+        if (!model) continue;
+
+        // A model shared with another quotation remains durable. Claim the
+        // orphan atomically before unlinking so a concurrent attachment wins.
+        const { count: deletedModels } = await prisma.uploadedModel.deleteMany({
+          where: { id: modelId, items: { none: {} } },
+        });
+        if (deletedModels === 0) continue;
+        deletedQuotationModels += 1;
+        try {
+          await rm(expectedModelPath(model));
+          await rm(expectedThumbPath(model.id));
+        } catch (err) {
+          log.error(
+            { quotationId: quotation.id, modelId, err: String(err) },
+            "expired quotation model cleanup failed; orphan reconciliation will retry",
+          );
+        }
+      }
+    }
+  }
+
   const orphanFiles = await reconcileOrphans(now);
 
   log.info(
-    { staleUploads: deletedUploads, purgedFiles, orphanFiles },
+    {
+      staleUploads: deletedUploads,
+      purgedFiles,
+      deletedQuotations,
+      deletedQuotationModels,
+      orphanFiles,
+    },
     "retention sweep complete",
   );
 }

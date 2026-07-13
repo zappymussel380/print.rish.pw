@@ -11,6 +11,8 @@ function int(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+const MAX_QUOTATION_RETENTION_DAYS = 90;
+
 export const config = {
   redisUrl: str("REDIS_URL", "redis://localhost:6379"),
   /** OrcaSlicer AppRun entrypoint inside the worker image. */
@@ -35,8 +37,14 @@ export const config = {
   thumbSize: Math.min(int("THUMB_SIZE", 512), 1024),
   /** Hours to keep uploads never attached to a submitted quotation. */
   uploadRetentionHours: int("UPLOAD_RETENTION_HOURS", 48),
-  /** Days to keep model files of terminal-state quotations (rows/PDFs kept). */
+  /** Days to keep model files of terminal-state quotations before row retention ends. */
   fileRetentionDays: int("FILE_RETENTION_DAYS", 30),
+  /** Deletion threshold after an order reaches a terminal state. Policy permits
+   * configuration to shorten, but never extend, the 90-day threshold. */
+  quotationRetentionDays: Math.min(
+    int("QUOTATION_RETENTION_DAYS", MAX_QUOTATION_RETENTION_DAYS),
+    MAX_QUOTATION_RETENTION_DAYS,
+  ),
   /** Local-only escape hatch. Production must run the orchestrator as root so
    * it can drop Orca to a distinct credential-free UID. */
   allowInsecureSlicer:

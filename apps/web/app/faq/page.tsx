@@ -49,8 +49,8 @@ const faqs: { q: string; a: string }[] = [
     a: "There's no online payment here — submitting a quotation costs nothing and commits you to nothing. We confirm details on WhatsApp first; payment is UPI or bank transfer once you approve the final quote.",
   },
   {
-    q: "How long do you keep my uploaded files?",
-    a: "Files that never become a quotation request are deleted automatically within 48 hours. Files attached to an order are kept for 30 days after completion, then removed; the quotation record and PDF are retained.",
+    q: "How long do you keep my files and details?",
+    a: "Uploads that never become a quotation request are deleted automatically within 48 hours. Model files attached to an order are removed 30 days after completion. Our live quotation record, PDF, contact details, delivery details and remaining local files have a retention period of at most 90 days after completion or cancellation, then the next daily cleanup removes them. We store and use those details only to process the order. We never analyze or sell them, or use them for marketing. Processing may share them with the operator's WhatsApp, Telegram and email accounts and the shipping provider; provider and backup copies follow their own retention schedules.",
   },
 ];
 

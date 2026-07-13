@@ -44,9 +44,18 @@ The worker runs cleanup once at startup and then daily:
    by a conditional delete, then their derived model/thumbnail paths are
    removed.
 2. Model files referenced only by immutable terminal quotations older than
-   `FILE_RETENTION_DAYS` (30 days) are purged; DB rows and PDFs remain. The model
-   endpoint then returns `410 FILE_EXPIRED`.
-3. Model/thumbnail/PDF directories are reconciled in bounded batches. Files
+   `FILE_RETENTION_DAYS` (30 days) are purged; DB rows and PDFs remain until the
+   quotation-retention step below. The model endpoint then returns `410
+   FILE_EXPIRED`.
+3. Quotations in `COMPLETED`, `DELIVERED`, or `CANCELLED` whose `updatedAt` is
+   older than the `QUOTATION_RETENTION_DAYS` threshold (90 days by default and
+   at most) are deleted by the next daily sweep. The quotation row, including
+   customer contact and address fields, is deleted first; schema cascades
+   remove its items and status history. Cleanup then unlinks its PDF,
+   conditionally deletes models that now have no quotation items, and unlinks
+   any remaining model/thumbnail files. The earlier 30-day file sweep means
+   those model files will normally already be gone.
+4. Model/thumbnail/PDF directories are reconciled in bounded batches. Files
    with no matching authoritative row/pointer and temporary crash leftovers
    older than two hours are removed.
 
@@ -54,9 +63,12 @@ Database scans and filesystem reconciliation are paginated so historical row
 growth does not require materializing the entire dataset. Cleanup errors are
 logged and retried; paths are derived from IDs rather than trusted DB text.
 
-Quotation rows and PDFs currently have no automatic maximum lifetime. Define a
-legal/business deletion policy and implement it before customer PII retention
-exceeds that policy.
+Non-terminal quotations are never automatically deleted. The operator must move
+each order to a terminal state before its stable retention window begins.
+Deletion also removes revenue history from the app. If records older than the
+configured threshold (90 days by default and at most) are needed, download the
+admin CSV export periodically and retain it under an appropriate access and
+deletion policy. The sweep does not preserve a long-term reporting copy.
 
 ## Upgrading OrcaSlicer or profiles
 

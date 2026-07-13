@@ -54,7 +54,8 @@ in one-shot `migrate` mode with `MIGRATION_DATABASE_URL`, then provisions two
 distinct runtime roles:
 
 - web: DML on application tables, no schema/DDL privileges
-- worker: selected model/slice/quotation read/update/delete grants only
+- worker: model read/update/delete, slice read/update, quotation read/delete,
+  and quotation-item read grants only
 
 Public database/schema creation is revoked. Web and worker start only after the
 migration service exits successfully. Every deployment reapplies grants so a
@@ -75,6 +76,8 @@ Debian web image and Ubuntu worker runtime.
 ## PII
 
 Customer fields are denormalized on `Quotation`; there is no account/customer
-table. Rows and PDFs currently have no automatic maximum retention. Define an
-operational deletion policy before production use and treat dumps as sensitive
-PII.
+table. The daily worker deletes terminal quotation rows, their cascaded items
+and history, PDFs, and now-orphaned models after the
+`QUOTATION_RETENTION_DAYS` threshold (90 days by default and at most).
+Non-terminal quotations remain until the operator closes or cancels them.
+Treat database dumps and any exports as sensitive PII.

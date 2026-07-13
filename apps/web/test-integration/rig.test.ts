@@ -41,6 +41,11 @@ interface WorkerPrivileges {
   sliceMeasurementUpdate: boolean;
   quotationSelect: boolean;
   quotationInsert: boolean;
+  quotationUpdate: boolean;
+  quotationDelete: boolean;
+  quotationItemSelect: boolean;
+  quotationItemDelete: boolean;
+  statusHistoryDelete: boolean;
 }
 
 describe("integration service rig", () => {
@@ -108,7 +113,17 @@ describe("integration service rig", () => {
         has_table_privilege(current_user, '"Quotation"', 'SELECT')
           AS "quotationSelect",
         has_table_privilege(current_user, '"Quotation"', 'INSERT')
-          AS "quotationInsert"
+          AS "quotationInsert",
+        has_table_privilege(current_user, '"Quotation"', 'UPDATE')
+          AS "quotationUpdate",
+        has_table_privilege(current_user, '"Quotation"', 'DELETE')
+          AS "quotationDelete",
+        has_table_privilege(current_user, '"QuotationItem"', 'SELECT')
+          AS "quotationItemSelect",
+        has_table_privilege(current_user, '"QuotationItem"', 'DELETE')
+          AS "quotationItemDelete",
+        has_table_privilege(current_user, '"StatusHistory"', 'DELETE')
+          AS "statusHistoryDelete"
     `;
 
     expect(privileges).toEqual({
@@ -119,6 +134,11 @@ describe("integration service rig", () => {
       sliceMeasurementUpdate: true,
       quotationSelect: true,
       quotationInsert: false,
+      quotationUpdate: false,
+      quotationDelete: true,
+      quotationItemSelect: true,
+      quotationItemDelete: false,
+      statusHistoryDelete: false,
     });
   });
 

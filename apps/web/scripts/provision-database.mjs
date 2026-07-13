@@ -151,7 +151,10 @@ GRANT UPDATE (
 ) ON TABLE "SliceResult" TO ${webRole};
 GRANT SELECT, UPDATE, DELETE ON TABLE "UploadedModel" TO ${workerRole};
 GRANT SELECT, UPDATE ON TABLE "SliceResult" TO ${workerRole};
-GRANT SELECT ON TABLE "Quotation", "QuotationItem" TO ${workerRole};
+-- Quotation DELETE powers the retention sweep. Cascading foreign keys remove
+-- items/history, so the worker does not need direct DELETE on either child.
+GRANT SELECT, DELETE ON TABLE "Quotation" TO ${workerRole};
+GRANT SELECT ON TABLE "QuotationItem" TO ${workerRole};
 
 ALTER ROLE ${webRole} SET search_path = public;
 ALTER ROLE ${workerRole} SET search_path = public;
