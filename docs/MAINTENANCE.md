@@ -36,6 +36,69 @@ alert on backup age/failure. Same-host snapshots help recovery but are not
 backups. Restore a sample regularly into an isolated database and verify rows,
 PDFs, and model files; an untested backup is unverified.
 
+A complete point-in-time set contains the PostgreSQL custom dump,
+`uploads.tar.gz`, `pdfs.tar.gz`, and a checksum manifest. A database-only dump
+is incomplete. Quiesce writes by stopping proxy, web, and worker while leaving
+PostgreSQL running; create all three artifacts in that window, then restart the
+services immediately. The transfer commands in
+[STORAGE_VAULT_LXC.md](STORAGE_VAULT_LXC.md#6-move-data-from-the-current-lxc)
+show the archive shape. Publish artifacts only after non-empty checks,
+`pg_restore --list`, tar listing, and `sha256sum -c` all pass.
+
+## Restore drills
+
+Use a fresh isolated PostgreSQL instance and fresh upload/PDF storage, never the
+live volumes. Verify the manifest before extraction, restore numeric ownership
+to `1001:1001`, directories to `0700`, and files to `0600`. Run `pg_restore`
+from the target PostgreSQL image/version rather than an arbitrary host client;
+then run current migrations and the database-role provisioner. Redis starts
+empty because it is coordination state, not the source of truth.
+
+Before starting a restored worker (whose startup retention sweep may
+legitimately delete old data), verify table/migration counts, zero broken
+foreign keys, every model file's size and SHA-256 against `UploadedModel`, every
+expected thumbnail, and every non-null quotation PDF (non-empty with a `%PDF-`
+header). Check restored file counts, bytes, ownership, and modes. Destroy the
+isolated target after recording non-sensitive evidence.
+
+### Verification record — 2026-07-13
+
+Task 2.3 was drilled against a new coherent set created at
+`2026-07-13T13:11:15Z`. With operator-approved maintenance, proxy/web/worker
+were quiesced for **13 seconds** (under the five-minute limit); PostgreSQL and
+Redis remained running. Production returned healthy afterward through the
+public `/api/health` path (`db=true`, `redis=true`). The root-owned set is mode
+`0700`; each artifact is mode `0600`:
+
+- `postgres.dump` — SHA-256
+  `b1dd181d6800d6a587d5904051762d4a4357e6b113f5f34ffcbabb5937e77815`.
+- `uploads.tar.gz` — SHA-256
+  `2ad0447b70e0411b4f4589649b470f74d703a25e98c28a4bbfb378d3225b5325`.
+- `pdfs.tar.gz` — SHA-256
+  `9323a3bd93d9bbb4b34c00038515e6b1032e11204998b0bb5aa74c89c00dedff`.
+- `SHA256SUMS` verified all three before the successful restore.
+
+The accepted clean target was a same-host, loopback-only throwaway PostgreSQL
+16.14 container with fresh PostgreSQL/upload/PDF named volumes. Its bundled
+PG16 `pg_restore --exit-on-error --clean --if-exists --no-owner
+--no-privileges` completed successfully. Current migrations reported all eight
+applied, and least-privilege web/worker roles were reprovisioned.
+
+Before and after migration/provisioning the restored database held 3 models,
+75 slice results, 0 quotations, 0 quotation items, 0 status-history rows, and 1
+quotation counter; foreign-key orphan count was zero. All 3 model files matched
+their database sizes and SHA-256 hashes, all 3 expected thumbnails were
+non-empty, and the restored upload volume contained exactly 6 files / 18,397,389
+bytes with the documented ownership and modes. The PDF archive restored as an
+empty volume, matching 0 database PDF pointers (0/0); a future drill after a
+real PDF exists must provide the positive `%PDF-` recovery check.
+
+Peak disposable-target use was about 67 MB while the host filesystem was 90%
+used. The throwaway container and all three drill volumes were deleted; no
+`task23-*` resources remained. The coherent backup set remains root-only on
+this host, so it still must be encrypted and copied off-host to become a
+disaster-resilient backup rather than a same-host recovery copy.
+
 ## Automatic retention and reconciliation
 
 The worker runs cleanup once at startup and then daily:
