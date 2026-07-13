@@ -89,6 +89,10 @@ model UploadedModel {
 /// Survives sessions and duplicate uploads of identical files.
 model SliceResult {
   id            String      @id @default(uuid()) @db.Uuid
+  /// Generation token for the current queue attempt. A retry rotates this
+  /// value so a late worker/event from an older attempt cannot overwrite the
+  /// new attempt's state.
+  attemptId     String      @default(uuid()) @db.Uuid
   fileHash      String      @db.Char(64)
   /// Versioned pipeline + format + settings key. Including format prevents
   /// identical polyglot bytes from sharing incompatible slices; the pipeline

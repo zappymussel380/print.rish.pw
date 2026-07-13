@@ -64,4 +64,5 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full walkthrough and
 - [Orca profiles](docs/ORCA-PROFILES.md) — the slicing profiles and re-flattening
 - [Maintenance](docs/MAINTENANCE.md) — backups, retention, upgrades
 - [Security](docs/SECURITY.md) — threat model, mitigations, residual risks
+- [Hardening review](docs/HARDENING.md) — independent findings and remediation status
 - [Storage vault + LXC](docs/STORAGE_VAULT_LXC.md) — encrypted `/dev/sde1` layout and migration

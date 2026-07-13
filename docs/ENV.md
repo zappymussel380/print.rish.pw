@@ -10,10 +10,10 @@ Passwords embedded in URLs must be percent-encoded.
 | --- | --- | --- | --- |
 | `APP_ORIGIN` | production | local HTTP origin | Exact public origin used for CSRF, cookies, CSP/HSTS, and generated links. Production requires HTTPS and no path/query. |
 | `PROXY_BIND` | deployment | `127.0.0.1` | Host address for compose port 8080. Use only the private address reached by the public proxy; never `0.0.0.0`. |
-| `TRUSTED_PROXY_CIDR` | deployment | `127.0.0.1` | Sole source allowed to assert client IP and public scheme. Use one exact proxy address/CIDR. |
+| `TRUSTED_PROXY_CIDR` | compose | none | Required exact transport source allowed to assert client IP/scheme. Accepts one IPv4 host (no prefix or `/32`) or unbracketed IPv6 host (no prefix or `/128`); startup rejects subnets, lists, hostnames, and invalid/config syntax. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | compose | none | Schema owner created by the Postgres image. Use a long random owner password. |
 | `MIGRATION_DATABASE_URL` | production | none | Schema-owner URL used only by the short-lived `migrate` service. |
-| `DATABASE_URL` | yes | none | Distinct `print_web`-style runtime URL. The migration task provisions broad DML but no DDL rights. |
+| `DATABASE_URL` | yes | none | Distinct `print_web`-style runtime URL. The migration task provisions broad business-table DML, column-scoped `SliceResult` writes that exclude slicer measurements/raw metadata, and no DDL rights. |
 | `WORKER_DATABASE_URL` | compose | none | Distinct worker runtime URL. It receives only model/slice/retention table grants. |
 | `REDIS_PASSWORD` | compose | none | Long random Redis server password. |
 | `REDIS_URL` | local/non-compose | local Redis | Authenticated Redis URL. Compose constructs service-specific URLs from `REDIS_PASSWORD`. |
@@ -22,6 +22,13 @@ Migration, web, and worker database usernames and passwords must all be
 different and each password must be at least 32 bytes. On every deployment the
 migration task reapplies least-privilege grants before long-running services
 start.
+
+Despite its historical name, `TRUSTED_PROXY_CIDR` is deliberately a single-host
+allowlist, not a network. It must match the outer proxy's transport address as
+shown by the compose proxy's `peer=` access-log field. Firewall port 8080 to the
+same source; compose nginx also returns 403 to every other transport peer. The
+compose proxy overwrites `X-Real-IP` and `X-Forwarded-For` and passes the original
+transport peer internally as `X-Proxy-Peer-IP`.
 
 ## Session/admin secrets
 
@@ -40,7 +47,7 @@ to `$$`. The container receives the intended single-dollar value.
 | `WHATSAPP_NUMBER` | empty | International digits only. Empty disables the pre-filled handoff. Customer/order details are sent to WhatsApp when used. |
 | `CONTACT_EMAIL` | empty | Public address shown on the contact page. |
 | `GOOGLE_MAPS_EMBED_URL` | empty | Optional exact Google Maps HTTPS embed URL; enables Google in CSP `frame-src`. |
-| `RESEND_API_KEY` / `MAIL_TO` | none | Both are required for contact-form delivery. Messages contain the submitted name/email/phone/message. |
+| `RESEND_API_KEY` / `MAIL_TO` | none | Both are required for contact-form delivery. Messages contain the submitted name, email, subject, and message; the contact form has no phone field. |
 | `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender. |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | empty | Both enable order notifications containing customer/order details. |
 | `TELEGRAM_MESSAGE_THREAD_ID` | empty | Optional positive Telegram forum topic ID. |
@@ -91,4 +98,8 @@ one. Review vendor retention/access terms before enabling it.
   migration/worker database URLs or the PostgreSQL owner password.
 - `worker`: worker DB URL, authenticated Redis URL, storage paths, and worker
   knobs only. It receives no session/admin/provider secrets. Each Orca process
-  gets an empty environment and a private model copy.
+  gets a private model copy and a minimal explicit, credential-free environment
+  containing only process basics such as `PATH`, locale, `HOME`, and
+  `XDG_RUNTIME_DIR`. Compose CPU, memory, and PID limits apply to the whole
+  worker container and all concurrent slicers, not individually to each Orca
+  process; the slicer timeout is per job.

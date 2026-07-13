@@ -6,15 +6,28 @@ Durable state includes PostgreSQL (quotation/customer PII and slice cache),
 uploads/thumbnails, and PDFs. Database dumps and PDFs are sensitive even when
 model files have expired.
 
-Create backups with private permissions and no fragile shell pipeline:
+Create backups through a same-directory temporary file, publishing the dump by
+atomic rename only after `pg_dump` succeeds and produces non-empty output:
 
 ```bash
-umask 077
-backup="postgres-$(date -u +%F).dump"
-docker compose exec -T postgres sh -c \
-  'exec pg_dump --format=custom -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-  > "$backup"
-test -s "$backup"
+(
+  set -eu
+  umask 077
+  backup="postgres-$(date -u +%FT%H%M%SZ).dump"
+  tmp="$(mktemp "./.${backup}.tmp.XXXXXX")"
+  trap 'rm -f -- "$tmp"' EXIT
+  trap 'exit 1' HUP INT TERM
+
+  if docker compose exec -T postgres sh -c \
+      'exec pg_dump --format=custom -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+      > "$tmp" && test -s "$tmp"; then
+    mv -- "$tmp" "$backup"
+    trap - EXIT HUP INT TERM
+  else
+    echo "PostgreSQL backup failed; no final dump was published" >&2
+    exit 1
+  fi
+)
 ```
 
 Encrypt uploads/PDFs and the dump, copy them to immutable/off-host storage whose
@@ -51,10 +64,12 @@ exceeds that policy.
 2. Update `ORCA_VERSION` and `ORCA_SHA256` in `docker/worker.Dockerfile`.
 3. Re-flatten committed profiles and run the calibration-cube smoke gate in
    [ORCA-PROFILES.md](ORCA-PROFILES.md).
-4. Bump `SLICE_PIPELINE_VERSION` in
+4. Scan the extracted runtime and confirm any GUI-only vulnerable assets pruned
+   by the Dockerfile remain unnecessary to headless slicing.
+5. Bump `SLICE_PIPELINE_VERSION` in
    `packages/shared/src/settings-key.ts`. This is mandatory for any slicer,
    machine, process, or filament change that can affect toolpaths.
-5. Rebuild and deploy the worker.
+6. Rebuild and deploy the worker.
 
 Old cache rows remain in PostgreSQL but the versioned key makes them harmless
 misses. Never leave them active after a toolpath-affecting upgrade.
@@ -75,8 +90,13 @@ migrations as a release decision; checking out old code does not reverse data
 changes.
 
 Pinned image digests, pnpm dependencies, Actions, CodeQL, and Trivy are tracked
-by CI/Dependabot. Review updates and rerun tests/build/smoke slicing before
-deployment.
+by CI/Dependabot. Builds use pinned pnpm 11 and reject dependency releases less
+than 24 hours old; review any exception instead of disabling that policy.
+Release checks should also scan the final web, migration, and worker images,
+including advisories without a current fix, because base-image tools are not
+visible in a lockfile-only scan. The fix-available CI gate is actionable but
+does not imply that the all-advisory report is empty. Review updates and rerun
+tests/build/smoke slicing before deployment.
 
 ## Monitoring
 

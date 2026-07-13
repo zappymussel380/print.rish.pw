@@ -8,7 +8,10 @@ import { extractZipEntry, isZip } from "./zip";
 const UNIT_TO_MM: Record<string, number> = {
   millimeter: 1,
   millimetre: 1,
+  centimeter: 10,
+  centimetre: 10,
   inch: 25.4,
+  foot: 304.8,
   feet: 304.8,
   meter: 1000,
   metre: 1000,
@@ -32,7 +35,11 @@ export function parseAmf(buf: Buffer): ParsedModel {
   if (!root || root.localName !== "amf") {
     throw new ModelParseError("Not an AMF file (missing <amf> root)");
   }
-  const scale = UNIT_TO_MM[(root.getAttribute("unit") ?? "millimeter").toLowerCase()] ?? 1;
+  const declaredUnit = (root.getAttribute("unit") ?? "millimeter").toLowerCase();
+  const scale = UNIT_TO_MM[declaredUnit];
+  if (scale === undefined) {
+    throw new ModelParseError(`AMF uses unsupported unit ${declaredUnit}`, "MALFORMED");
+  }
 
   const parts: Float32Array[] = [];
   let totalTriangles = 0;

@@ -7,6 +7,15 @@ import { extractZipEntries, isZip } from "./zip";
 
 export const PREARRANGED_PLATE_STL_HEADER = "print.rish.pw prearranged plate";
 
+const UNIT_TO_MM: Record<string, number> = {
+  micron: 0.001,
+  millimeter: 1,
+  centimeter: 10,
+  inch: 25.4,
+  foot: 304.8,
+  meter: 1000,
+};
+
 interface MeshObject {
   kind: "mesh";
   mesh: Float32Array;
@@ -266,13 +275,18 @@ function parseModelDocument(name: string, xml: Buffer, budget: GeometryBudget): 
   const doc = parseXmlBuffer(xml, `3MF model ${name}`);
   const root = doc.documentElement;
   if (!root) throw new ModelParseError("3MF model has no root element");
+  const declaredUnit = (root.getAttribute("unit") ?? "millimeter").toLowerCase();
+  const unitScale = UNIT_TO_MM[declaredUnit];
+  if (unitScale === undefined) {
+    throw new ModelParseError(`3MF model uses unsupported unit ${declaredUnit}`, "MALFORMED");
+  }
 
   const objects = new Map<string, ObjectDef>();
   for (const object of elements(root, "object")) {
     const id = object.getAttribute("id") ?? "";
     const mesh = firstElement(object, "mesh");
     if (mesh) {
-      objects.set(id, { kind: "mesh", mesh: meshToTriangles(mesh, budget) });
+      objects.set(id, { kind: "mesh", mesh: meshToTriangles(mesh, budget, unitScale) });
       continue;
     }
 
@@ -283,7 +297,7 @@ function parseModelDocument(name: string, xml: Buffer, budget: GeometryBudget): 
         components: childElements(components, "component").map((component) => ({
           id: component.getAttribute("objectid") ?? "",
           path: packagePathAttr(component),
-          transform: parseTransform(component.getAttribute("transform")),
+          transform: parseTransform(component.getAttribute("transform"), unitScale),
         })),
       });
     }
@@ -293,7 +307,7 @@ function parseModelDocument(name: string, xml: Buffer, budget: GeometryBudget): 
   const buildItems = build
     ? childElements(build, "item").map((item) => ({
         objectId: item.getAttribute("objectid") ?? "",
-        transform: parseTransform(item.getAttribute("transform")),
+        transform: parseTransform(item.getAttribute("transform"), unitScale),
         printable: item.getAttribute("printable") !== "0",
       }))
     : [];
@@ -614,7 +628,11 @@ function normalizeToOrigin(positions: Float32Array): Float32Array {
   return out;
 }
 
-function meshToTriangles(mesh: Element, budget: GeometryBudget): Float32Array {
+function meshToTriangles(
+  mesh: Element,
+  budget: GeometryBudget,
+  unitScale: number,
+): Float32Array {
   const verticesEl = firstElement(mesh, "vertices");
   const trianglesEl = firstElement(mesh, "triangles");
   if (!verticesEl || !trianglesEl) throw new ModelParseError("3MF mesh missing vertices/triangles");
@@ -622,9 +640,9 @@ function meshToTriangles(mesh: Element, budget: GeometryBudget): Float32Array {
   const verts: number[] = [];
   for (const v of elements(verticesEl, "vertex")) {
     verts.push(
-      Number(v.getAttribute("x")),
-      Number(v.getAttribute("y")),
-      Number(v.getAttribute("z")),
+      Number(v.getAttribute("x")) * unitScale,
+      Number(v.getAttribute("y")) * unitScale,
+      Number(v.getAttribute("z")) * unitScale,
     );
     budget.vertices += 1;
     if (budget.vertices > MAX_VERTICES) {
@@ -652,11 +670,17 @@ function meshToTriangles(mesh: Element, budget: GeometryBudget): Float32Array {
   return positions;
 }
 
-/** 3MF transform: 12 space-separated numbers, row-major 4x3. */
-function parseTransform(attr: string | null): number[] | null {
+/** 3MF transform: 12 space-separated numbers, row-major 4x3. Translation is
+ * expressed in the containing model part's declared unit. */
+function parseTransform(attr: string | null, unitScale: number): number[] | null {
   if (!attr) return null;
   const nums = attr.trim().split(/\s+/).map(Number);
-  if (nums.length === 12 && nums.every(Number.isFinite)) return nums;
+  if (nums.length === 12 && nums.every(Number.isFinite)) {
+    nums[9] = nums[9]! * unitScale;
+    nums[10] = nums[10]! * unitScale;
+    nums[11] = nums[11]! * unitScale;
+    return nums;
+  }
   if (nums.length === 16 && nums.every(Number.isFinite)) {
     return [
       nums[0]!,
@@ -668,9 +692,9 @@ function parseTransform(attr: string | null): number[] | null {
       nums[8]!,
       nums[9]!,
       nums[10]!,
-      nums[12]!,
-      nums[13]!,
-      nums[14]!,
+      nums[12]! * unitScale,
+      nums[13]! * unitScale,
+      nums[14]! * unitScale,
     ];
   }
   return null;

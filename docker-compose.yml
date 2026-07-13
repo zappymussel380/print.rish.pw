@@ -21,10 +21,14 @@ services:
       # never 0.0.0.0 (see docs/DEPLOYMENT.md).
       - "${PROXY_BIND:-127.0.0.1}:8080:8080"
     environment:
-      # Only this source may assert the real client IP via X-Real-IP (the
-      # forwarder the VPS reaches us through). Default trusts nobody.
-      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-127.0.0.1}
+      # Only this exact transport peer may assert the real client IP. Startup
+      # rejects anything except one IPv4 host (/32 optional) or IPv6 host (/128
+      # optional); broad subnets and the former implicit default are forbidden.
+      # Nginx returns 403 to every other transport peer even if the host firewall
+      # is accidentally opened.
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:?Set TRUSTED_PROXY_CIDR to the exact outer proxy host}
     volumes:
+      - ./docker/proxy/05-validate-trusted-proxy.sh:/docker-entrypoint.d/05-validate-trusted-proxy.sh:ro
       - ./docker/proxy/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     networks:
       - edge
@@ -56,9 +60,11 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      target: runner
     environment:
       # Explicit allowlist: never pass the migration-owner/worker credentials,
-      # Postgres/Redis server passwords, or unrelated host settings here.
+      # standalone server-password variables, or unrelated host settings here.
+      # The web role and Redis credentials remain scoped inside their URLs.
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       UPLOAD_DIR: /data/uploads
@@ -110,7 +116,11 @@ services:
           memory: 2g
           pids: 256
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
       interval: 15s
       timeout: 5s
       retries: 10
@@ -127,6 +137,7 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      target: migrate
     command: ["migrate"]
     environment:
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set MIGRATION_DATABASE_URL}
@@ -242,6 +253,10 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777
+      - /var/run/postgresql:rw,nosuid,nodev,noexec,size=16m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -259,6 +274,14 @@ services:
           pids: 256
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
 
   redis:
     image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
@@ -269,6 +292,9 @@ services:
       - redisdata:/data
     networks:
       - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=32m,mode=1777
     healthcheck:
       test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli ping >/dev/null"]
       interval: 10s

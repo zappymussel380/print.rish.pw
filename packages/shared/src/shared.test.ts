@@ -118,12 +118,20 @@ describe("estimateCompletionDate", () => {
 
 describe("sliceJobId", () => {
   it("is colon-free so BullMQ never splits it into Redis key segments", () => {
-    const id = sliceJobId("a".repeat(64), "PLA:200:15:auto");
+    const attemptId = "11111111-1111-4111-8111-111111111111";
+    const id = sliceJobId("a".repeat(64), "PLA:200:15:auto", attemptId);
     expect(id).not.toContain(":");
-    expect(id).toBe(`slice_${"a".repeat(64)}_PLA-200-15-auto`);
+    expect(id).toBe(`slice_${"a".repeat(64)}_PLA-200-15-auto_${attemptId}`);
   });
-  it("is deterministic for identical (file, settings)", () => {
-    expect(sliceJobId("abc", "PLA:200:15:auto")).toBe(sliceJobId("abc", "PLA:200:15:auto"));
+  it("deduplicates one attempt but separates retry generations", () => {
+    const first = "11111111-1111-4111-8111-111111111111";
+    const second = "22222222-2222-4222-8222-222222222222";
+    expect(sliceJobId("abc", "PLA:200:15:auto", first)).toBe(
+      sliceJobId("abc", "PLA:200:15:auto", first),
+    );
+    expect(sliceJobId("abc", "PLA:200:15:auto", first)).not.toBe(
+      sliceJobId("abc", "PLA:200:15:auto", second),
+    );
   });
 });
 

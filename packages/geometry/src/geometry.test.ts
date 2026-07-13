@@ -91,6 +91,42 @@ describe("parseModel", () => {
     expect(model.bboxMm).toEqual({ x: 20, y: 20, z: 0 });
   });
 
+  it("normalizes 3MF coordinates and translations from declared units to millimetres", () => {
+    const inchModel = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="inch" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources><object id="1" type="model"><mesh>
+          <vertices>
+            <vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/>
+          </vertices>
+          <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+        </mesh></object></resources>
+        <build>
+          <item objectid="1"/>
+          <item objectid="1" transform="1 0 0 0 1 0 0 0 1 2 0 0"/>
+        </build>
+      </model>`;
+    const archive = Buffer.from(zipSync({ "3D/3dmodel.model": strToU8(inchModel) }));
+
+    const parsed = parseModel(archive, "3mf");
+
+    expect(parsed.triangleCount).toBe(2);
+    expect(parsed.bboxMm.x).toBeCloseTo(76.2, 4);
+    expect(parsed.bboxMm.y).toBeCloseTo(25.4, 4);
+  });
+
+  it("rejects an unknown 3MF unit instead of silently changing print scale", () => {
+    const model = `<?xml version="1.0"?>
+      <model unit="parsec" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources><object id="1" type="model"><mesh>
+          <vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices>
+          <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+        </mesh></object></resources><build><item objectid="1"/></build>
+      </model>`;
+    const archive = Buffer.from(zipSync({ "3D/3dmodel.model": strToU8(model) }));
+
+    expect(() => parseModel(archive, "3mf")).toThrowError(/unsupported unit/);
+  });
+
   it("extracts Bambu-style 3MF plates as normalized STL models", () => {
     const mainModel = `<?xml version="1.0" encoding="UTF-8"?>
       <model unit="millimeter"

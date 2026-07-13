@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { isIP } from "node:net";
 import { env } from "./env";
 import { redis } from "./redis";
 
@@ -25,17 +26,28 @@ export function assertSameOrigin(request: NextRequest): boolean {
 }
 
 /**
- * Client IP for rate limiting. Mirrors contact_api.py's posture: prefer the
- * proxy-set X-Real-IP, else the last X-Forwarded-For hop (appended by our own
- * proxy and therefore trustworthy), else a fixed fallback.
+ * Client IP for rate limiting. The compose proxy always overwrites X-Real-IP;
+ * X-Forwarded-For is deliberately ignored because it is a multi-hop audit
+ * field, not an authenticated identity. Validation/canonicalization keeps
+ * malformed and equivalent textual addresses from creating arbitrary Redis
+ * keys. It is hygiene only: proxy trust and firewall configuration establish
+ * provenance.
  */
 export function clientIp(request: NextRequest): string {
-  const real = request.headers.get("x-real-ip");
-  if (real) return real.trim();
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) {
-    const parts = fwd.split(",");
-    return parts[parts.length - 1]!.trim();
+  const value = request.headers.get("x-real-ip")?.trim();
+  if (!value || value.length > 64 || value.includes("%")) return "unknown";
+
+  const version = isIP(value);
+  if (version === 4) return value;
+  if (version === 6) {
+    // WHATWG URL serialization gives one compressed, lower-case IPv6 form.
+    // Zone identifiers are rejected above because they are local interface
+    // annotations, not meaningful public-client identities.
+    try {
+      return new URL(`http://[${value}]/`).hostname.slice(1, -1);
+    } catch {
+      return "unknown";
+    }
   }
   return "unknown";
 }
@@ -235,6 +247,11 @@ export const RATE_LIMITS = {
   // controls remain necessary because exhausting it can deny service.
   checkoutGlobal: { max: 200, windowSeconds: 86_400 },
   adminLogin: { max: 5, windowSeconds: 900 },
+  // IP-independent backstop for the single administrator account. Successful
+  // and lock-busy attempts are refunded; failed password guesses retain their
+  // reservation. This remains effective if client-IP attribution is broken or
+  // an attacker rotates addresses, at the cost of a bounded login-DoS lever.
+  adminLoginGlobal: { max: 25, windowSeconds: 900 },
   pdf: { max: 30, windowSeconds: 600 },
   quotationAccess: { max: 10, windowSeconds: 900 },
   contact: { max: 5, windowSeconds: 600 },

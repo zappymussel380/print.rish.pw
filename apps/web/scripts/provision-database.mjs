@@ -78,15 +78,6 @@ const workerRoleLiteral = quoteLiteral(worker.username);
 const webVerifierLiteral = quoteLiteral(scramVerifier(web.password));
 const workerVerifierLiteral = quoteLiteral(scramVerifier(worker.password));
 
-const applicationTables = [
-  "UploadedModel",
-  "SliceResult",
-  "Quotation",
-  "QuotationItem",
-  "StatusHistory",
-  "QuotationCounter",
-].map(quoteIdentifier).join(", ");
-
 const sql = `
 SET client_min_messages = warning;
 
@@ -140,7 +131,24 @@ GRANT USAGE ON SCHEMA public TO ${webRole}, ${workerRole};
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${webRole}, ${workerRole};
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${webRole}, ${workerRole};
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${applicationTables} TO ${webRole};
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+  "UploadedModel", "Quotation", "QuotationItem", "StatusHistory", "QuotationCounter"
+  TO ${webRole};
+
+-- Slice measurements feed pricing and are trusted worker output. The web role
+-- may create cache rows and rotate/requeue lifecycle metadata, but cannot
+-- insert or alter measurements, raw slicer output, or the recorded slicer
+-- version after creation.
+GRANT SELECT ON TABLE "SliceResult" TO ${webRole};
+GRANT INSERT (
+  "id", "attemptId", "fileHash", "settingsKey", "settingsJson", "status",
+  "progressPct", "progressStage", "progressMessage", "progressUpdatedAt",
+  "slicerVersion", "createdAt"
+) ON TABLE "SliceResult" TO ${webRole};
+GRANT UPDATE (
+  "attemptId", "status", "progressPct", "progressStage", "progressMessage",
+  "progressUpdatedAt", "errorCode", "errorMessage", "completedAt"
+) ON TABLE "SliceResult" TO ${webRole};
 GRANT SELECT, UPDATE, DELETE ON TABLE "UploadedModel" TO ${workerRole};
 GRANT SELECT, UPDATE ON TABLE "SliceResult" TO ${workerRole};
 GRANT SELECT ON TABLE "Quotation", "QuotationItem" TO ${workerRole};

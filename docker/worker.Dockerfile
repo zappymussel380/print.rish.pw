@@ -5,6 +5,9 @@
 # extracted at build time because FUSE is unavailable inside containers.
 
 FROM node:24-bookworm-slim@sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5 AS node-runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # ---------- stage 1: fetch + extract OrcaSlicer ----------
 FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS orca
@@ -12,16 +15,21 @@ FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebff
 ARG ORCA_VERSION=2.4.1
 ARG ORCA_SHA256=7aff29a0ac6bb906f11c069eefe83459781c3364bac20ba9529eb9937a231402
 ADD https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v${ORCA_VERSION}/OrcaSlicer_Linux_AppImage_Ubuntu2404_V${ORCA_VERSION}.AppImage /tmp/orca.AppImage
+# The headless worker never opens Orca's bundled GUI guide/include pages. Their
+# Swiper 7 copy is affected by GHSA-hmx5-qpq5-p643; remove the unused JavaScript
+# instead of carrying an exploitable package into the runtime.
 RUN echo "${ORCA_SHA256}  /tmp/orca.AppImage" | sha256sum -c - \
     && chmod +x /tmp/orca.AppImage \
     && cd /tmp \
     && /tmp/orca.AppImage --appimage-extract >/dev/null \
+    && rm -rf /tmp/squashfs-root/resources/web/guide/swiper \
+        /tmp/squashfs-root/resources/web/include/swiper \
     && mv /tmp/squashfs-root /opt/orca \
     && rm /tmp/orca.AppImage
 
 # ---------- stage 2: production worker dependency tree ----------
 FROM node-runtime AS app-build
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+RUN corepack enable && corepack prepare pnpm@11.12.0 --activate
 WORKDIR /build
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY packages/db/package.json packages/db/
@@ -32,7 +40,7 @@ RUN pnpm install --frozen-lockfile --filter "@print/worker..."
 COPY packages ./packages
 COPY apps/worker ./apps/worker
 RUN pnpm --filter @print/db generate \
-    && pnpm --filter @print/worker deploy --prod /opt/worker-app \
+    && pnpm --filter @print/worker deploy --legacy --prod /opt/worker-app \
     && find /opt/worker-app -type f \( -name '*.test.ts' -o -name '*.test.js' \) -delete \
     && rm -rf /opt/worker-app/test-fixtures
 
@@ -69,7 +77,9 @@ ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # Copy the official Node image runtime instead of executing a remote repository
 # setup script during the build.
 COPY --from=node-runtime /usr/local /usr/local
-RUN rm -f /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/pnpm /usr/local/bin/pnpx
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 COPY --from=orca /opt/orca /opt/orca
 
@@ -89,8 +99,8 @@ COPY --from=app-build /opt/worker-app ./worker
 # launches each concurrent Orca through setpriv with a unique uid/gid and no
 # capabilities. Orca receives only a verified private scratch copy, preventing
 # it from reading DB/Redis secrets, the upload vault, or another active job.
-# Call the installed binary directly. Runtime Corepack resolution may attempt a
-# registry download, which is intentionally unavailable on the internal network.
+# Call the installed binary directly; runtime package-manager tooling is
+# intentionally absent.
 # Standalone `docker run` fails closed as the unprivileged worker. The reviewed
 # Compose service explicitly overrides this to root plus a narrow capability
 # allowlist so the trusted orchestrator can drop each Orca child to a private

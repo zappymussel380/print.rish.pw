@@ -1,3 +1,21 @@
 packages:
   - apps/*
   - packages/*
+
+# Keep newly published packages out of automated resolutions for a review
+# window. Pin the one very recent transitive release already present in the old
+# lockfile back to its reviewed predecessor so pnpm 11's policy passes today.
+minimumReleaseAge: 1440
+
+overrides:
+  "postcss@<8.5.10": ">=8.5.10"
+  nanoid: 3.3.15
+
+# pnpm 11 blocks dependency lifecycle scripts unless explicitly approved.
+allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  sharp: true

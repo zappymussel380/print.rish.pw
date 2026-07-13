@@ -4,7 +4,13 @@ import { parseStl } from "./stl";
 import { parse3mf } from "./threemf";
 import { ModelParseError, type ParsedModel } from "./types";
 
-export { looksLikeAsciiStl, looksLikeBinaryStl } from "./stl";
+export {
+  BINARY_STL_HEADER_BYTES,
+  looksLikeAsciiStl,
+  looksLikeBinaryStl,
+  MAX_BINARY_STL_BYTES,
+  serializeBinaryStl,
+} from "./stl";
 export {
   extract3mfPlates,
   extract3mfSourceConfig,

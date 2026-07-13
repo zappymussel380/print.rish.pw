@@ -51,13 +51,49 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Verify proxy trust guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          valid=(
+            "192.0.2.10"
+            "192.0.2.10/32"
+            "2001:db8::10"
+            "2001:db8::10/128"
+            "::ffff:192.0.2.10/128"
+          )
+          invalid=(
+            ""
+            "192.0.2.0/24"
+            "2001:db8::/64"
+            "999.0.0.1"
+            "proxy.internal"
+            "192.0.2.10;include bad.conf"
+            $'192.0.2.10\nset_real_ip_from 0.0.0.0/0;'
+          )
+          for value in "${valid[@]}"; do
+            TRUSTED_PROXY_CIDR="$value" docker/proxy/05-validate-trusted-proxy.sh >/dev/null
+          done
+          for value in "${invalid[@]}"; do
+            if TRUSTED_PROXY_CIDR="$value" docker/proxy/05-validate-trusted-proxy.sh >/dev/null 2>&1; then
+              echo "Proxy validator accepted an unsafe value" >&2
+              exit 1
+            fi
+          done
+
+          docker run --rm --add-host web:127.0.0.1 \
+            -e TRUSTED_PROXY_CIDR=192.0.2.10/32 \
+            -v "$PWD/docker/proxy/05-validate-trusted-proxy.sh:/docker-entrypoint.d/05-validate-trusted-proxy.sh:ro" \
+            -v "$PWD/docker/proxy/nginx.conf:/etc/nginx/templates/default.conf.template:ro" \
+            nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa nginx -t
+
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
 
       - name: Enable pinned pnpm
-        run: corepack enable && corepack prepare pnpm@9.15.9 --activate
+        run: corepack enable && corepack prepare pnpm@11.12.0 --activate
 
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
@@ -72,7 +108,7 @@ jobs:
         run: pnpm -r test
 
       - name: Build
-        run: pnpm -r build
+        run: pnpm build
 
   codeql:
     if: github.event_name != 'pull_request'
@@ -100,9 +136,9 @@ jobs:
       - name: Install and build
         run: |
           corepack enable
-          corepack prepare pnpm@9.15.9 --activate
+          corepack prepare pnpm@11.12.0 --activate
           pnpm install --frozen-lockfile
-          pnpm -r build
+          pnpm build
 
       - name: Analyze
         uses: github/codeql-action/analyze@e5d2f324924c57b6cabef9bdd7a1c85d62a89be2 # v3.37.0

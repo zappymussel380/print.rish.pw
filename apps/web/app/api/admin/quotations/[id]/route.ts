@@ -48,12 +48,29 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
   }
 
   if (current.status !== status) {
-    await prisma.$transaction([
-      prisma.quotation.update({ where: { id }, data: { status } }),
-      prisma.statusHistory.create({
+    const transitioned = await prisma.$transaction(async (tx) => {
+      // Claim the exact state observed above. Without this predicate, two admin
+      // requests can both read a non-terminal status, then a stale request can
+      // overwrite a concurrently committed terminal status and reopen an order
+      // whose retained files are already eligible for deletion.
+      const claimed = await tx.quotation.updateMany({
+        where: { id, status: current.status },
+        data: { status },
+      });
+      if (claimed.count !== 1) return false;
+
+      await tx.statusHistory.create({
         data: { quotationId: id, fromStatus: current.status, toStatus: status, note },
-      }),
-    ]);
+      });
+      return true;
+    });
+    if (!transitioned) {
+      return jsonError(
+        409,
+        "STATUS_CONFLICT",
+        "Quotation status changed concurrently. Refresh and try again",
+      );
+    }
   }
   return NextResponse.json({ id, status });
 }

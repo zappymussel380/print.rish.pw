@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
   findFirst: vi.fn(),
-  update: vi.fn(),
+  updateMany: vi.fn(),
   create: vi.fn(),
   guardMutation: vi.fn(),
   getQuoteSessionId: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock("@print/db", () => ({
     },
     sliceResult: {
       findUnique: mocks.findUnique,
-      update: mocks.update,
+      updateMany: mocks.updateMany,
       create: mocks.create,
     },
   },
@@ -112,6 +112,7 @@ describe("POST /api/slices", () => {
     const modelId = "33333333-3333-4333-8333-333333333333";
     const failed = {
       id: "44444444-4444-4444-8444-444444444444",
+      attemptId: "55555555-5555-4555-8555-555555555555",
       fileHash: "a".repeat(64),
       settingsKey: "orca-2.4.1-a1-v1:stl:PLA:200:15:auto",
       settingsJson: {},
@@ -140,7 +141,7 @@ describe("POST /api/slices", () => {
       lockedConfig: null,
     });
     mocks.findUnique.mockResolvedValueOnce(failed);
-    mocks.update.mockResolvedValueOnce(undefined);
+    mocks.updateMany.mockResolvedValueOnce({ count: 1 });
 
     const request = new Request("http://localhost/api/slices", {
       method: "POST",
@@ -159,16 +160,148 @@ describe("POST /api/slices", () => {
       progress: { percent: 0, stage: "queued", message: "Waiting for a slicer" },
       error: null,
     });
-    expect(mocks.update).toHaveBeenCalledWith(
+    expect(mocks.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: failed.id },
-        data: expect.objectContaining({ status: "QUEUED", progressPct: 0, errorCode: null }),
+        where: { id: failed.id, attemptId: failed.attemptId, status: "FAILED" },
+        data: expect.objectContaining({
+          attemptId: expect.any(String),
+          status: "QUEUED",
+          progressPct: 0,
+          errorCode: null,
+        }),
       }),
     );
     expect(mocks.queueAdd).toHaveBeenCalledWith(
       "slice",
-      expect.not.objectContaining({ storedPath: expect.anything() }),
+      expect.objectContaining({
+        attemptId: expect.not.stringMatching(new RegExp(`^${failed.attemptId}$`)),
+      }),
       expect.any(Object),
     );
+    expect(mocks.queueGetJob).not.toHaveBeenCalled();
+    expect(mocks.queueRemove).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a concurrent winner when retrying a failed slice", async () => {
+    const modelId = "33333333-3333-4333-8333-333333333333";
+    const failed = {
+      id: "44444444-4444-4444-8444-444444444444",
+      attemptId: "55555555-5555-4555-8555-555555555555",
+      fileHash: "a".repeat(64),
+      settingsKey: "orca-2.4.1-a1-v1:stl:PLA:200:15:auto",
+      settingsJson: {},
+      status: "FAILED",
+      progressPct: 97,
+      progressStage: "failed",
+      progressMessage: "Slicing failed",
+      progressUpdatedAt: new Date(),
+      filamentGrams: null,
+      filamentMm: null,
+      printSeconds: null,
+      supportGrams: null,
+      slicerVersion: "2.4.1",
+      rawMeta: null,
+      errorCode: "NO_OUTPUT",
+      errorMessage: "Slicer did not produce output",
+      createdAt: new Date(),
+      completedAt: new Date(),
+    };
+    const completed = {
+      ...failed,
+      status: "DONE",
+      progressPct: 100,
+      progressStage: "complete",
+      progressMessage: "Slicing complete",
+      filamentGrams: 12.5,
+      filamentMm: 4200,
+      printSeconds: 3600,
+      errorCode: null,
+      errorMessage: null,
+    };
+    mocks.findFirst.mockResolvedValueOnce({
+      id: modelId,
+      fileHash: failed.fileHash,
+      storedPath: `/data/uploads/${modelId}.stl`,
+      format: "stl",
+      defaultConfig: null,
+      lockedConfig: null,
+    });
+    mocks.findUnique.mockResolvedValueOnce(failed).mockResolvedValueOnce(completed);
+    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    const request = new Request("http://localhost/api/slices", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        modelId,
+        settings: { material: "PLA", layerHeightUm: 200, infillPct: 15, supports: "auto" },
+      }),
+    });
+    const res = await POST(request as never);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ sliceId: failed.id, status: "done" });
+    expect(mocks.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: failed.id, attemptId: failed.attemptId, status: "FAILED" },
+      }),
+    );
+    expect(mocks.queueRemove).not.toHaveBeenCalled();
+    expect(mocks.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("does not requeue when a worker completes after the initial status read", async () => {
+    const modelId = "33333333-3333-4333-8333-333333333333";
+    const running = {
+      id: "44444444-4444-4444-8444-444444444444",
+      attemptId: "55555555-5555-4555-8555-555555555555",
+      fileHash: "a".repeat(64),
+      settingsKey: "orca-2.4.1-a1-v1:stl:PLA:200:15:auto",
+      settingsJson: {},
+      status: "RUNNING",
+      progressPct: 90,
+      progressStage: "slicing",
+      progressMessage: "Slicing",
+      progressUpdatedAt: new Date(),
+      filamentGrams: null,
+      filamentMm: null,
+      printSeconds: null,
+      supportGrams: null,
+      slicerVersion: "2.4.1",
+      rawMeta: null,
+      errorCode: null,
+      errorMessage: null,
+      createdAt: new Date(),
+      completedAt: null,
+    };
+    mocks.findFirst.mockResolvedValueOnce({
+      id: modelId,
+      fileHash: running.fileHash,
+      storedPath: `/data/uploads/${modelId}.stl`,
+      format: "stl",
+      defaultConfig: null,
+      lockedConfig: null,
+    });
+    mocks.findUnique
+      .mockResolvedValueOnce(running)
+      .mockResolvedValueOnce({ ...running, status: "DONE", completedAt: new Date() });
+    mocks.queueGetJob.mockResolvedValueOnce({
+      getState: vi.fn().mockResolvedValueOnce("completed"),
+    });
+
+    const request = new Request("http://localhost/api/slices", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        modelId,
+        settings: { material: "PLA", layerHeightUm: 200, infillPct: 15, supports: "auto" },
+      }),
+    });
+    const res = await POST(request as never);
+
+    expect(res.status).toBe(200);
+    expect(mocks.findUnique).toHaveBeenCalledTimes(2);
+    expect(mocks.queueRemove).not.toHaveBeenCalled();
+    expect(mocks.queueAdd).not.toHaveBeenCalled();
   });
 });

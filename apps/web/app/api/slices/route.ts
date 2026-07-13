@@ -57,32 +57,53 @@ export async function POST(request: NextRequest) {
     // A previously failed slice is retried on explicit re-request.
     if (existing.status !== "FAILED") {
       if (existing.status === "QUEUED" || existing.status === "RUNNING") {
-        await enqueue(existing.id, model, key, settings, { ensureLiveJob: true });
+        await enqueue(existing.id, existing.attemptId, model, key, settings, {
+          ensureLiveJob: true,
+        });
       }
       return NextResponse.json(serializeSlice(existing));
     }
-    await prisma.sliceResult.update({
-      where: { id: existing.id },
+    const attemptId = crypto.randomUUID();
+    const progressUpdatedAt = new Date();
+    const retry = await prisma.sliceResult.updateMany({
+      where: { id: existing.id, attemptId: existing.attemptId, status: "FAILED" },
       data: {
+        attemptId,
         status: "QUEUED",
         progressPct: 0,
         progressStage: "queued",
         progressMessage: "Waiting for a slicer",
-        progressUpdatedAt: new Date(),
+        progressUpdatedAt,
         errorCode: null,
         errorMessage: null,
         completedAt: null,
       },
     });
-    await enqueue(existing.id, model, key, settings, { replaceExistingJob: true });
+    if (retry.count !== 1) {
+      const current = await prisma.sliceResult.findUnique({ where: { id: existing.id } });
+      if (!current) {
+        return jsonError(409, "SLICE_CHANGED", "Slice state changed; retry the request");
+      }
+      if (current.status === "QUEUED" || current.status === "RUNNING") {
+        await enqueue(current.id, current.attemptId, model, key, settings, {
+          ensureLiveJob: true,
+        });
+      }
+      return NextResponse.json(serializeSlice(current));
+    }
+    // A retry has a fresh generation/job id. The prior BullMQ job may still be
+    // leaving its active state, but its worker writes are generation-gated and
+    // cannot overwrite this attempt.
+    await enqueue(existing.id, attemptId, model, key, settings);
     return NextResponse.json(
       serializeSlice({
         ...existing,
+        attemptId,
         status: "QUEUED",
         progressPct: 0,
         progressStage: "queued",
         progressMessage: "Waiting for a slicer",
-        progressUpdatedAt: new Date(),
+        progressUpdatedAt,
         errorCode: null,
         errorMessage: null,
       }),
@@ -96,6 +117,7 @@ export async function POST(request: NextRequest) {
   try {
     row = await prisma.sliceResult.create({
       data: {
+        attemptId: crypto.randomUUID(),
         fileHash: model.fileHash,
         settingsKey: key,
         settingsJson: settings as unknown as Prisma.InputJsonValue,
@@ -108,42 +130,65 @@ export async function POST(request: NextRequest) {
       const winner = await prisma.sliceResult.findUnique({
         where: { fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: key } },
       });
-      if (winner) return NextResponse.json(serializeSlice(winner));
+      if (winner) {
+        if (winner.status === "QUEUED" || winner.status === "RUNNING") {
+          await enqueue(winner.id, winner.attemptId, model, key, settings, {
+            ensureLiveJob: true,
+          });
+        }
+        return NextResponse.json(serializeSlice(winner));
+      }
     }
     throw err;
   }
 
-  await enqueue(row.id, model, key, settings);
+  await enqueue(row.id, row.attemptId, model, key, settings);
   return NextResponse.json(serializeSlice(row), { status: 202 });
 }
 
 async function enqueue(
   sliceResultId: string,
+  attemptId: string,
   model: { id: string; fileHash: string; storedPath: string; format: string },
   key: string,
   settings: SliceJobData["settings"],
-  options: { replaceExistingJob?: boolean; ensureLiveJob?: boolean } = {},
+  options: { ensureLiveJob?: boolean } = {},
 ) {
   const queue = getSliceQueue();
-  const jobId = sliceJobId(model.fileHash, key);
+  const jobId = sliceJobId(model.fileHash, key, attemptId);
 
-  if (options.replaceExistingJob) {
-    await queue.remove(jobId).catch(() => {});
-  } else if (options.ensureLiveJob) {
+  if (options.ensureLiveJob) {
     const existingJob = await queue.getJob(jobId);
     if (existingJob) {
       const state = await existingJob.getState();
       if (["active", "delayed", "prioritized", "waiting", "waiting-children"].includes(state)) {
         return;
       }
-      await queue.remove(jobId).catch(() => {});
     }
+
+    // The worker writes the terminal database state before BullMQ marks the job
+    // completed. Re-check after observing a non-live (or missing) queue job so a
+    // request with a stale RUNNING snapshot cannot remove/requeue completed work.
+    const current = await prisma.sliceResult.findUnique({
+      where: { id: sliceResultId },
+      select: { status: true, attemptId: true },
+    });
+    if (
+      !current ||
+      current.attemptId !== attemptId ||
+      (current.status !== "QUEUED" && current.status !== "RUNNING")
+    ) {
+      return;
+    }
+
+    if (existingJob) await queue.remove(jobId).catch(() => {});
   }
 
   await queue.add(
     "slice",
     {
       sliceResultId,
+      attemptId,
       modelId: model.id,
       fileHash: model.fileHash,
       settingsKey: key,

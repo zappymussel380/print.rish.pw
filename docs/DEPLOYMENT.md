@@ -68,7 +68,8 @@ Also set:
 - `APP_ORIGIN=https://print.rish.pw`
 - `PROXY_BIND` to the private host address reached by the edge, never
   `0.0.0.0`
-- `TRUSTED_PROXY_CIDR` to the exact source address/CIDR seen from the edge
+- `TRUSTED_PROXY_CIDR` to the exact source host seen from the edge: one IPv4
+  address (no prefix or `/32`) or unbracketed IPv6 address (no prefix or `/128`)
 - optional provider/business values documented in [ENV.md](ENV.md)
 
 ## 3. Build, migrate, and start
@@ -79,6 +80,10 @@ docker compose up -d --build
 docker compose ps
 docker compose logs migrate
 ```
+
+Compose fails interpolation when `TRUSTED_PROXY_CIDR` is empty. The proxy then
+validates it again before nginx template expansion and refuses broad prefixes,
+hostnames, lists, malformed addresses, and configuration metacharacters.
 
 The one-shot `migrate` service must exit with status 0 before web or worker can
 start. It applies Prisma migrations and least-privilege grants. To deliberately
@@ -93,19 +98,28 @@ The worker image is large because it includes OrcaSlicer. For encrypted
 bind-mounted storage, include `docker-compose.vault.yml` as described in
 [STORAGE_VAULT_LXC.md](STORAGE_VAULT_LXC.md).
 
-Check service health through the private bind:
+Check service health from inside the compose proxy, where the published-port
+transport allowlist does not apply:
 
 ```bash
-curl --fail --silent --show-error \
-  "http://${PROXY_BIND:-127.0.0.1}:8080/api/health"
+docker compose exec -T proxy wget -qO- http://web:3000/api/health
 ```
+
+After the outer edge is configured, also verify the complete trusted path with
+`curl --fail --silent --show-error https://print.rish.pw/api/health`. A host-side
+curl to the private bind may correctly receive 403 because compose nginx accepts
+HTTP only from `TRUSTED_PROXY_CIDR`.
 
 ## 4. Public reverse proxy
 
 There must be only one public ingress. Firewall compose port 8080 so only that
-proxy can reach it. The edge must redirect HTTP, terminate TLS, set the original
-scheme/IP headers, omit query strings and referrers from logs, and grant the
-large body allowance only to the exact upload endpoint.
+exact proxy host can reach it. The outer edge must redirect HTTP, terminate TLS,
+**overwrite** (not append or preserve) `X-Real-IP` and `X-Forwarded-For` with the
+TCP client's address, set the original scheme, omit query strings and referrers
+from logs, and grant the large body allowance only to the exact upload endpoint.
+The compose proxy independently overwrites both IP headers before they reach the
+application and returns 403 to any transport peer other than the configured
+outer edge host. The firewall remains mandatory as the first boundary.
 
 ### Plain nginx example
 
@@ -126,6 +140,9 @@ server {
     # ssl_certificate / ssl_certificate_key managed by your ACME client
 
     access_log /var/log/nginx/print.access.log print_no_args;
+    # Routine nginx errors can include the full request target/query. Preserve
+    # only critical events; use service health and application logs for diagnosis.
+    error_log /var/log/nginx/print.error.log crit;
     add_header Strict-Transport-Security "max-age=31536000" always;
     server_tokens off;
 
@@ -143,7 +160,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Connection "";
     }
@@ -153,7 +170,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Connection "";
     }
@@ -162,7 +179,10 @@ server {
 
 Using `$uri` rather than `$request_uri` prevents legacy capability query values
 from entering access logs. Do not add `$http_referer` to this vhost's log
-format. Keep the 301 MiB streaming exception exact; granting it to `/` lets
+format. Nginx error messages can contain the complete request target, so the
+example records only `crit` and higher; this trades routine proxy warnings for
+query privacy. Use web logs, edge health, and `docker compose ps` for ordinary
+diagnosis. Keep the 301 MiB streaming exception exact; granting it to `/` lets
 small JSON endpoints become buffering/slow-body targets at the edge.
 
 ### Nginx Proxy Manager
@@ -173,8 +193,42 @@ small JSON endpoints become buffering/slow-body targets at the edge.
   `client_body_timeout 120s`, and `proxy_request_buffering off`.
 - Configure an access log that excludes query strings and referrers, or disable
   access logging for this host if NPM cannot provide a safe format.
-- Set `TRUSTED_PROXY_CIDR` and the port-8080 firewall allowlist to the NPM source
-  address as observed by the compose host.
+- Suppress request-level error logging (retain only critical events) if NPM's
+  error format includes full request targets. This reduces proxy diagnostics but
+  prevents legacy query capabilities or PII entering error logs.
+- Confirm NPM's generated location overwrites both `X-Real-IP` and
+  `X-Forwarded-For` with `$remote_addr`; it must not pass a browser-supplied
+  forwarding chain through unchanged.
+- Set `TRUSTED_PROXY_CIDR` and the port-8080 firewall allowlist to the one NPM
+  source host as observed by the compose proxy.
+
+### Verify the proxy trust cutover
+
+Perform this before opening production traffic:
+
+1. Firewall port 8080 to the expected outer edge source first. Do not temporarily
+   expose it publicly to discover the source address. Set the expected exact host
+   in `TRUSTED_PROXY_CIDR`; if NAT makes it uncertain, use a deliberately
+   nonmatching host such as `127.0.0.1` for this short discovery window.
+2. Send a request with a unique path through the outer edge. A wrong provisional
+   value safely returns 403 but still writes an access entry. Inspect
+   `docker compose logs proxy`: each line records `peer=<transport>` and
+   `client=<adopted browser>`, without query strings or referrers. Set
+   `TRUSTED_PROXY_CIDR` to that exact `peer` host and recreate the proxy with
+   `docker compose up -d --force-recreate proxy`.
+3. Request through the edge from two known client networks. Their log entries
+   must have the same expected `peer` but distinct, correct `client` addresses.
+   If `peer` and `client` remain identical, the trusted host is wrong or the
+   outer edge did not overwrite `X-Real-IP`.
+4. From the trusted edge host only, make a direct probe to port 8080 with a
+   reserved test address such as `X-Real-IP: 192.0.2.123`; the compose log should
+   show the edge as `peer` and the marker as `client`. Then confirm a non-edge
+   host cannot connect to port 8080 at all. If a controlled firewall test does
+   let that host connect, compose nginx must return 403 without proxying it.
+
+Trust a NAT/subnet-router address only when the firewall guarantees that other
+clients sharing that source cannot reach port 8080. The validator intentionally
+does not permit trusting an entire Docker, LAN, or tailnet subnet.
 
 For local-only routing use a separate LAN name or split DNS. Do not create a
 second publicly reachable path to port 8080.

@@ -18,6 +18,12 @@ import {
 import { config } from "./config.js";
 import { runSlice, type SlicerIdentity } from "./orca.js";
 import { runRetention } from "./retention.js";
+import {
+  claimSliceAttempt,
+  failLiveSliceAttempt,
+  updateRunningSliceAttempt,
+  type SliceAttemptIdentity,
+} from "./slice-state.js";
 
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -98,8 +104,8 @@ function releaseSlicerIdentity(identity: SlicerIdentity): void {
 }
 
 async function processJob(job: Job<SliceJobData>): Promise<void> {
-  const { sliceResultId, modelId, fileHash, settingsKey: queuedSettingsKey } = job.data;
-  if (!UUID_RE.test(sliceResultId) || !UUID_RE.test(modelId)) {
+  const { sliceResultId, attemptId, modelId, fileHash, settingsKey: queuedSettingsKey } = job.data;
+  if (!UUID_RE.test(sliceResultId) || !UUID_RE.test(attemptId) || !UUID_RE.test(modelId)) {
     throw new Error("Queue job contains invalid identifiers");
   }
   const parsedSettings = sliceSettingsSchema.safeParse(job.data.settings);
@@ -119,6 +125,12 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
   ) {
     throw new Error("Queue job slice result does not match the database");
   }
+  // A retry deliberately has a new queue generation. An older job can still
+  // be finishing BullMQ bookkeeping; treating it as a no-op is expected.
+  if (sliceResult.attemptId !== attemptId) {
+    log.info({ sliceResultId, attemptId }, "ignored stale slice attempt");
+    return;
+  }
   const storedPath = resolve(model.storedPath);
   const expectedPath = resolve(config.uploadDir, `${model.id}.${model.format}`);
   if (storedPath !== expectedPath || !["stl", "3mf", "obj", "amf"].includes(model.format)) {
@@ -134,18 +146,25 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
   }
   // BullMQ job ids are Redis-controlled input. Never place one in a filesystem
   // path: a forged "../../..." id would otherwise reach recursive rm as root.
-  const workDir = join(config.workRoot, sliceResultId);
+  const workDir = join(config.workRoot, `${sliceResultId}-${attemptId}`);
+  const attempt: SliceAttemptIdentity = {
+    id: sliceResultId,
+    attemptId,
+    fileHash,
+    settingsKey: queuedSettingsKey,
+  };
 
-  await prisma.sliceResult.update({
-    where: { id: sliceResultId },
-    data: {
-      status: "RUNNING",
-      progressPct: 1,
-      progressStage: "preparing",
-      progressMessage: "Preparing model",
-      progressUpdatedAt: new Date(),
-    },
+  const claimed = await claimSliceAttempt(attempt, {
+    status: "RUNNING",
+    progressPct: 1,
+    progressStage: "preparing",
+    progressMessage: "Preparing model",
+    progressUpdatedAt: new Date(),
   });
+  if (!claimed) {
+    log.info({ sliceResultId, attemptId }, "ignored non-live slice attempt");
+    return;
+  }
 
   let lastProgress = 1;
   let queuedProgress: { percent: number; message: string; stage: SliceProgressStage } | null = null;
@@ -159,14 +178,11 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
       const delay = Math.max(0, 1000 - (Date.now() - lastProgressWriteAt));
       if (delay > 0) await new Promise((resolveDelay) => setTimeout(resolveDelay, delay));
       try {
-        await prisma.sliceResult.update({
-          where: { id: sliceResultId },
-          data: {
-            progressPct: next.percent,
-            progressStage: next.stage,
-            progressMessage: next.message,
-            progressUpdatedAt: new Date(),
-          },
+        await updateRunningSliceAttempt(attempt, {
+          progressPct: next.percent,
+          progressStage: next.stage,
+          progressMessage: next.message,
+          progressUpdatedAt: new Date(),
         });
       } catch (err) {
         log.warn({ sliceResultId, err: String(err) }, "slice progress update failed");
@@ -213,54 +229,57 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
     while (progressWriter) await progressWriter;
 
     if (!outcome.ok) {
-      await prisma.sliceResult.update({
-        where: { id: sliceResultId },
-        data: {
-          status: "FAILED",
-          slicerVersion: outcome.slicerVersion,
-          errorCode: outcome.errorCode,
-          errorMessage: outcome.errorMessage,
-          progressStage: "failed",
-          progressMessage: "Slicing failed",
-          progressUpdatedAt: new Date(),
-          rawMeta: outcome.rawMeta as Prisma.InputJsonValue,
-          completedAt: new Date(),
-        },
+      const persisted = await updateRunningSliceAttempt(attempt, {
+        status: "FAILED",
+        slicerVersion: outcome.slicerVersion,
+        errorCode: outcome.errorCode,
+        errorMessage: outcome.errorMessage,
+        progressStage: "failed",
+        progressMessage: "Slicing failed",
+        progressUpdatedAt: new Date(),
+        rawMeta: outcome.rawMeta as Prisma.InputJsonValue,
+        completedAt: new Date(),
       });
-      log.warn({ modelId, sliceResultId, code: outcome.errorCode }, "slice failed");
+      if (persisted) {
+        log.warn({ modelId, sliceResultId, code: outcome.errorCode }, "slice failed");
+      } else {
+        log.info({ sliceResultId, attemptId }, "discarded stale slice failure");
+      }
       return;
     }
 
-    await prisma.sliceResult.update({
-      where: { id: sliceResultId },
-      data: {
-        status: "RUNNING",
-        progressPct: 98,
-        progressStage: "finalizing",
-        progressMessage: "Building model preview",
-        progressUpdatedAt: new Date(),
-        filamentGrams: outcome.filamentGrams,
-        filamentMm: outcome.filamentMm,
-        printSeconds: outcome.printSeconds,
-        supportGrams: outcome.supportGrams,
-        slicerVersion: outcome.slicerVersion,
-        rawMeta: outcome.rawMeta as Prisma.InputJsonValue,
-      },
+    const finalizing = await updateRunningSliceAttempt(attempt, {
+      status: "RUNNING",
+      progressPct: 98,
+      progressStage: "finalizing",
+      progressMessage: "Building model preview",
+      progressUpdatedAt: new Date(),
+      filamentGrams: outcome.filamentGrams,
+      filamentMm: outcome.filamentMm,
+      printSeconds: outcome.printSeconds,
+      supportGrams: outcome.supportGrams,
+      slicerVersion: outcome.slicerVersion,
+      rawMeta: outcome.rawMeta as Prisma.InputJsonValue,
     });
+    if (!finalizing) {
+      log.info({ sliceResultId, attemptId }, "discarded stale slice result");
+      return;
+    }
 
     await ensureThumbnail(modelId, storedPath, model.format);
-    await prisma.sliceResult.update({
-      where: { id: sliceResultId },
-      data: {
-        status: "DONE",
-        progressPct: 100,
-        progressStage: "complete",
-        progressMessage: "Quote data ready",
-        progressUpdatedAt: new Date(),
-        completedAt: new Date(),
-      },
+    const completed = await updateRunningSliceAttempt(attempt, {
+      status: "DONE",
+      progressPct: 100,
+      progressStage: "complete",
+      progressMessage: "Quote data ready",
+      progressUpdatedAt: new Date(),
+      completedAt: new Date(),
     });
-    log.info({ modelId, sliceResultId, grams: outcome.filamentGrams }, "slice done");
+    if (completed) {
+      log.info({ modelId, sliceResultId, grams: outcome.filamentGrams }, "slice done");
+    } else {
+      log.info({ sliceResultId, attemptId }, "discarded stale slice completion");
+    }
   } finally {
     try {
       await rm(workDir, { recursive: true, force: true });
@@ -322,25 +341,24 @@ const worker = new Worker<SliceJobData>(SLICE_QUEUE, processJob, {
 worker.on("failed", (job, err) => {
   log.error({ jobId: job?.id, err: err.message }, "job errored");
   if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
-  if (!UUID_RE.test(job.data.sliceResultId)) return;
-  void prisma.sliceResult
-    .updateMany({
-      // A forged Redis job must not mark an unrelated cache row failed.
-      where: {
-        id: job.data.sliceResultId,
-        fileHash: job.data.fileHash,
-        settingsKey: job.data.settingsKey,
-      },
-      data: {
-        status: "FAILED",
-        errorCode: "WORKER_ERROR",
-        errorMessage: "The slicer worker stopped unexpectedly",
-        progressStage: "failed",
-        progressMessage: "Slicing failed",
-        progressUpdatedAt: new Date(),
-        completedAt: new Date(),
-      },
-    })
+  if (!UUID_RE.test(job.data.sliceResultId) || !UUID_RE.test(job.data.attemptId)) return;
+  void failLiveSliceAttempt(
+    {
+      id: job.data.sliceResultId,
+      attemptId: job.data.attemptId,
+      fileHash: job.data.fileHash,
+      settingsKey: job.data.settingsKey,
+    },
+    {
+      status: "FAILED",
+      errorCode: "WORKER_ERROR",
+      errorMessage: "The slicer worker stopped unexpectedly",
+      progressStage: "failed",
+      progressMessage: "Slicing failed",
+      progressUpdatedAt: new Date(),
+      completedAt: new Date(),
+    },
+  )
     .catch((updateErr) =>
       log.error({ jobId: job.id, err: String(updateErr) }, "could not persist worker failure"),
     );

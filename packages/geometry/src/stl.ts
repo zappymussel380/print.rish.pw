@@ -6,13 +6,16 @@ import {
   type ParsedModel,
 } from "./types";
 
-const BINARY_HEADER_BYTES = 84;
+export const BINARY_STL_HEADER_BYTES = 84;
 const BYTES_PER_TRIANGLE = 50;
+/** Largest binary STL this package can emit under the shared triangle budget. */
+export const MAX_BINARY_STL_BYTES =
+  BINARY_STL_HEADER_BYTES + MAX_TRIANGLES * BYTES_PER_TRIANGLE;
 
 export function looksLikeBinaryStl(buf: Buffer): boolean {
-  if (buf.length < BINARY_HEADER_BYTES) return false;
+  if (buf.length < BINARY_STL_HEADER_BYTES) return false;
   const declared = buf.readUInt32LE(80);
-  return buf.length === BINARY_HEADER_BYTES + declared * BYTES_PER_TRIANGLE;
+  return buf.length === BINARY_STL_HEADER_BYTES + declared * BYTES_PER_TRIANGLE;
 }
 
 export function looksLikeAsciiStl(buf: Buffer): boolean {
@@ -38,13 +41,13 @@ export function serializeBinaryStl(positions: Float32Array, name = "model"): Buf
     throw new ModelParseError(`STL exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
   }
 
-  const buf = Buffer.alloc(BINARY_HEADER_BYTES + count * BYTES_PER_TRIANGLE);
+  const buf = Buffer.alloc(BINARY_STL_HEADER_BYTES + count * BYTES_PER_TRIANGLE);
   buf.write(name.slice(0, 80), 0, "ascii");
   buf.writeUInt32LE(count, 80);
 
   for (let t = 0; t < count; t++) {
     const src = t * 9;
-    const dst = BINARY_HEADER_BYTES + t * BYTES_PER_TRIANGLE;
+    const dst = BINARY_STL_HEADER_BYTES + t * BYTES_PER_TRIANGLE;
     const normal = triangleNormal(positions, src);
     buf.writeFloatLE(normal[0], dst);
     buf.writeFloatLE(normal[1], dst + 4);
@@ -91,7 +94,7 @@ function parseBinaryStl(buf: Buffer): ParsedModel {
   const positions = new Float32Array(count * 9);
   for (let t = 0; t < count; t++) {
     // Skip the 12-byte normal; read 9 vertex floats.
-    const base = BINARY_HEADER_BYTES + t * BYTES_PER_TRIANGLE + 12;
+    const base = BINARY_STL_HEADER_BYTES + t * BYTES_PER_TRIANGLE + 12;
     for (let f = 0; f < 9; f++) {
       positions[t * 9 + f] = buf.readFloatLE(base + f * 4);
     }

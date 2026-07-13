@@ -10,19 +10,26 @@ byte ceilings, including chunked requests. Errors use
 
 ### `POST /api/uploads`
 
-Streams one multipart model to a private temporary file, hashes/parses it,
-checks bed fit and quotas, and creates session-owned model row(s). Multi-plate
-3MF can return several normalized STL-backed models.
+Streams one multipart model to a private temporary file, hashes/interprets it
+with the bounded application parser, checks bed fit and quotas, and creates
+session-owned model row(s). Geometry selected from every 3MF and zipped AMF is
+normalized to bounded binary STL before persistence; downstream code and Orca
+receive that STL rather than the attacker-supplied archive. Multi-plate 3MF can
+return several STL-backed models. The original archive metadata and textures
+are not retained or returned by the model download endpoint.
 
 - 300 MiB hard file limit and 10-minute absolute body deadline
 - 20 requests and 900 MiB accepted bytes per IP/10 minutes by default
-- session model/byte quotas and shared free-space reservation
+- session model/byte quotas apply to final canonical bytes; the shared
+  free-space reservation covers worst-case archive expansion
 - `201 { model, models }`
 - `408 UPLOAD_TIMEOUT`, `413`, `422`, `429`, or `507 STORAGE_LOW`
 
 ### `GET /api/models`
 
-Lists active unattached models owned by the quote session.
+Returns `{ count }` for active unattached models owned by the quote session.
+Use `?include=models` to return `{ count, models }` with the restorable model
+descriptors.
 
 ### `DELETE /api/models`
 
@@ -46,17 +53,23 @@ Atomically removes an unattached model from the current session.
 ### `POST /api/slices`
 
 Body `{ modelId, settings }`. The model must belong to the current session.
-Cache identity includes pipeline/profile version, declared model format, file
+Cache identity includes pipeline/profile version, stored model format, file
 hash, and canonical settings. A miss creates a `SliceResult` and enqueues one
-validated job; a hit returns immediately. Limit: 60/IP/10 minutes.
+validated job. A `DONE` hit returns immediately; a queued/running hit repairs a
+missing non-live queue job when authoritative state still permits it. An
+explicit request for a `FAILED` result conditionally changes it back to
+`QUEUED` with a fresh attempt/job generation and returns 202; worker writes are
+bound to that generation, so an older job cannot overwrite it. A concurrent
+loser returns the current state. Limit: 60/IP/10 minutes.
 
-- `200` cache hit or `202` queued
+- `200` existing/current state or `202` newly created/retried queue attempt
 - `{ sliceId, status, result, error }`
 
 ### `GET /api/slices/:id`
 
 Polls a slice owned indirectly by this session (the session must own a model
-with the same hash). Limit: 3,000/IP/10 minutes. Status is
+with the same hash). Limit: 3,000 per observed IP plus quote-session pair per
+10 minutes. Status is
 `queued | slicing | done | failed`.
 
 ### `POST /api/shipping`
@@ -89,9 +102,10 @@ do not reach HTTP servers/logs. Client code immediately calls:
 ### `POST /api/quotations/:number/access`
 
 Body `{ token }` (4 KiB), same-origin and limited to 10/IP/15 minutes. A valid
-capability sets a per-quotation `Secure`, `HttpOnly`, `SameSite=Strict`,
-host-only cookie and returns `{ ok: true }`. The fragment is then removed from
-history. Capabilities/cookies expire 30 days after quotation creation.
+capability sets a per-quotation `HttpOnly`, `SameSite=Strict`, host-only cookie
+(`Secure` and `__Host-` prefixed in production) and returns `{ ok: true }`. The
+fragment is then removed from history. Capabilities/cookies expire 30 days after
+quotation creation.
 
 ### `GET /api/quotations/:number/pdf`
 
@@ -108,8 +122,9 @@ same 404 for non-admin callers.
 ### `POST /api/contact`
 
 Body `{ name, email, subject, message }` (8 KiB). Validates allowlisted subjects,
-lengths, email shape, and control characters, then sends through Resend with a
-10-second upstream timeout. Limit: 5/IP/10 minutes.
+lengths and email shape, and normalizes control characters in the name, email,
+and subject fields used in outbound mail headers. It then sends through Resend
+with a 10-second upstream timeout. Limit: 5/IP/10 minutes.
 
 ### `GET /api/health`
 
@@ -119,15 +134,21 @@ database/Redis amplification path.
 
 ## Admin
 
-Middleware is an outer gate; every admin API independently verifies the signed
-admin session. Sensitive responses are private/no-store/noindex.
+Middleware is an outer gate; every authenticated admin API independently
+verifies the signed admin session. Sensitive responses are
+private/no-store/noindex.
 
-- `POST /api/admin/login` — `{ password }` (4 KiB), bcrypt and 5/IP/15 minutes;
-  sets the 12-hour admin cookie.
+- `POST /api/admin/login` — `{ password }` (4 KiB), bcrypt checks admitted
+  through a five-second cross-replica Redis lease; limits are 5/IP/15 minutes
+  and 25 syntactically valid failed password checks/15 minutes across all IPs.
+  Malformed/oversized input is rejected before that global account budget.
+  Successes and attempts that cannot acquire the bcrypt lock are refunded. Sets
+  the 12-hour admin cookie.
 - `POST /api/admin/logout` — clears the cookie.
 - `PATCH /api/admin/quotations/:id` — `{ status, note? }` (8 KiB), records
   history. Terminal statuses (`COMPLETED`, `DELIVERED`, `CANCELLED`) cannot be
-  reopened because retained model files may be purged.
+  reopened because retained model files may be purged. A stale concurrent
+  transition returns `409 STATUS_CONFLICT`.
 - `DELETE /api/admin/quotations/:id` — deletes the row/cascades, derived PDF,
   and now-unreferenced derived model/thumbnail files.
 - `GET /api/admin/quotations/export` — protected CSV export.

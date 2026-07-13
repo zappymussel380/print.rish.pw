@@ -33,13 +33,16 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   if (!UUID_RE.test(id)) return jsonError(404, "NOT_FOUND", "Model not found");
 
   const model = await prisma.uploadedModel.findUnique({ where: { id } });
-  if (!model || !model.storedPath || !FORMATS.has(model.format)) {
+  if (!model || !FORMATS.has(model.format)) {
     return jsonError(404, "NOT_FOUND", "Model not found");
   }
 
   const sessionId = await getQuoteSessionId();
   const authorised = model.sessionId === sessionId || (await isAdmin());
   if (!authorised) return jsonError(404, "NOT_FOUND", "Model not found");
+  if (!model.storedPath) {
+    return jsonError(410, "FILE_EXPIRED", "The file has been removed by the retention policy");
+  }
 
   const budget = await rateLimitBytes(
     "model-download",
