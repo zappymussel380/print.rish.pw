@@ -22,6 +22,7 @@ import {
   UUID_RE,
   fitsBed,
   formatFromFilename,
+  looksWrongScale,
   ingestJobDataSchema,
   publicIngestFailure,
   sanitizeOriginalName,
@@ -323,6 +324,18 @@ async function processValidatedJob(
     rejectUpload(
       "FILE_TOO_LARGE",
       `Canonical model files are limited to ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB each`,
+    );
+  }
+
+  const wrongScale = prepared.models.find((model) =>
+    looksWrongScale(model.parsed.bboxMm, model.parsed.triangleCount),
+  );
+  if (wrongScale) {
+    const { x, y, z } = wrongScale.parsed.bboxMm;
+    rejectUpload(
+      "MODEL_WRONG_SCALE",
+      `This model measures only ${x.toFixed(1)} × ${y.toFixed(1)} × ${z.toFixed(1)} mm — too small to print. ` +
+        "It was likely exported at the wrong scale; scale it to the intended size (or re-export in millimetres) and upload it again.",
     );
   }
 

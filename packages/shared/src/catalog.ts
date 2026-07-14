@@ -91,3 +91,21 @@ export function fitsBed(bboxMm: BoundingBoxMm): boolean {
   const bedSorted = [...bed].sort((a, b) => a - b);
   return dims.every((d, i) => d <= bedSorted[i]!);
 }
+
+/** Below this longest-side length an FDM model has no printable geometry at
+ * all — the slicer fails on it regardless of settings. */
+export const MIN_PRINTABLE_DIMENSION_MM = 3;
+/** A model smaller than this in every direction while carrying sculpt-level
+ * triangle counts is a detailed figurine exported at the wrong unit scale
+ * (desktop slicers silently offer to rescale these; a CLI slicer cannot). */
+export const WRONG_SCALE_MAX_DIMENSION_MM = 20;
+export const WRONG_SCALE_TRIANGLE_COUNT = 100_000;
+
+/** True when the model is either physically unprintable or overwhelmingly
+ * likely to be a wrong-scale export. Calibrated against real rejects: every
+ * such file failed the slicer, while a plain 33 mm/467k-triangle part passed. */
+export function looksWrongScale(bboxMm: BoundingBoxMm, triangleCount: number): boolean {
+  const maxDim = Math.max(bboxMm.x, bboxMm.y, bboxMm.z);
+  if (maxDim < MIN_PRINTABLE_DIMENSION_MM) return true;
+  return maxDim < WRONG_SCALE_MAX_DIMENSION_MM && triangleCount > WRONG_SCALE_TRIANGLE_COUNT;
+}
