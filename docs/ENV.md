@@ -79,7 +79,7 @@ one. Review vendor retention/access terms before enabling it.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `WORKER_CONCURRENCY` | `2` | Parallel slicers; hard maximum 8. |
-| `SLICE_TIMEOUT_SECONDS` | `180` | Per-slice timeout; hard maximum 900 seconds. |
+| `SLICE_TIMEOUT_SECONDS` | `600` | Per-slice timeout; hard maximum 900 seconds. Sized for sculpt-detail models sharing the worker CPU quota with a concurrent job. |
 | `THUMB_SIZE` | `512` | Square PNG size; hard maximum 1024 px. |
 | `ORCA_BIN` | `/opt/orca/AppRun` | Baked-in executable. |
 | `ORCA_VERSION` | `2.4.1` | Must agree with the pinned image/cache pipeline version. |

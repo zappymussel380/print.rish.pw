@@ -38,7 +38,7 @@ export const config = {
   pdfDir: str("PDF_DIR", "./data/pdfs"),
   /** Per-job scratch root (fast local disk / tmpfs in production). */
   workRoot: str("SLICE_WORK_DIR", "/tmp/slice-jobs"),
-  sliceTimeoutMs: Math.min(int("SLICE_TIMEOUT_SECONDS", 180), 900) * 1000,
+  sliceTimeoutMs: Math.min(int("SLICE_TIMEOUT_SECONDS", 600), 900) * 1000,
   concurrency: Math.min(int("WORKER_CONCURRENCY", 2), 8),
   /** Base numeric uid/gid for untrusted Orca subprocesses. Each concurrent
    * job gets a distinct offset identity and a private staged model copy. */
