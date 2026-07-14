@@ -29,6 +29,16 @@ vi.mock("@/lib/security", () => ({
 vi.mock("@/lib/session", () => ({ createAdminSession: mocks.createAdminSession }));
 
 const { POST } = await import("@/app/api/admin/login/route");
+const bcrypt = await vi.importActual<typeof import("bcryptjs")>("bcryptjs");
+
+describe("bcryptjs stored-hash compatibility", () => {
+  it.each([
+    "$2a$12$abcdefghijklmnopqrstuu0sDWleciW5uGBGYwxpcgAsh9WK4bWNy",
+    "$2b$12$abcdefghijklmnopqrstuu0sDWleciW5uGBGYwxpcgAsh9WK4bWNy",
+  ])("accepts a pre-generated %s hash", async (hash) => {
+    await expect(bcrypt.default.compare("correct horse battery staple", hash)).resolves.toBe(true);
+  });
+});
 
 function loginRequest(password = "correct horse battery staple") {
   return new Request("http://localhost/api/admin/login", {
