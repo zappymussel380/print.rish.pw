@@ -269,6 +269,14 @@ verified; rasterization math not re-derived), `docker-compose.vault.yml`,
 | 3.3 | Major upgrades as separate PRs when Dependabot offers: Next 16, zod 4, bcryptjs 3. Each PR must pass the integration suite (0.3). | lockfile + code as needed | CI fully green per upgrade | L | Medium |
 | 3.4 | Add a "scale triggers" note to `docs/ARCHITECTURE.md`: revisit ingest capacity (queue consumer concurrency, child-process or dedicated ingest service) when queue-wait alerts from 2.1/2.4 become regular; revisit poll-path caching at ~10× quote-page concurrency. | `docs/ARCHITECTURE.md` | Note present; no code change | S | Low |
 
+**2026-07-14 dependency deferrals for Task 3.3:** Prisma 7 remains a deliberate
+paired CLI/client migration (the open Dependabot PR updates `prisma` to 7.8.0
+without `@prisma/client`); revisit when that migration is scheduled and can run
+against the integration fences. TypeScript 7's native-port toolchain support is
+still immature; revisit when the repository's lint/build/test stack declares
+compatibility. Keep Node 26 deferred until it becomes LTS in October 2026, and
+Ubuntu 26.04 deferred until the OrcaSlicer image passes a slicing smoke test.
+
 ### Quick wins (do first)
 
 0.1 (lint), 0.4 (three one-liners), 0.5 (verification stamp), 1.3 (legacy token

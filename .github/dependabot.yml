@@ -5,6 +5,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # Prisma 7 needs a deliberate paired migration; revisit when prisma and
+      # @prisma/client can be upgraded together (the current PR bumps only the CLI).
+      - dependency-name: prisma
+        update-types: ["version-update:semver-major"]
+      # Prisma 7 needs a deliberate paired migration; revisit when the client and
+      # CLI migration is scheduled and verified against the integration fences.
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 uses the native port while toolchain compatibility is still
+      # immature; revisit once the repository's lint/build/test stack supports it.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /
@@ -17,6 +30,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Node 26 is not LTS until October 2026; revisit after it enters LTS.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+      # Ubuntu 26.04 can affect the native OrcaSlicer runtime; revisit after an
+      # image-level Orca slicing smoke test succeeds on the new base.
+      - dependency-name: ubuntu
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
