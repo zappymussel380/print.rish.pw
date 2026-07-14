@@ -45,12 +45,16 @@ export function Dropzone({ maxModels, maxUploadMb }: { maxModels: number; maxUpl
   const { models, addUploading, setProgress, markQueued, markError, updateConfig } =
     useQuoteStore();
 
-  useEffect(
-    () => () => {
-      for (const controller of uploadsRef.current.values()) controller.abort();
-      uploadsRef.current.clear();
-    },
-  );
+  // Abort in-flight uploads only on unmount — an empty dependency array is
+  // load-bearing here. Without it the cleanup runs on every re-render, and
+  // the first progress update would cancel the upload that caused it.
+  useEffect(() => {
+    const uploads = uploadsRef.current;
+    return () => {
+      for (const controller of uploads.values()) controller.abort();
+      uploads.clear();
+    };
+  }, []);
 
   // Upload a set of files, honouring the per-quote model limit at call time.
   const startUploads = useCallback(
