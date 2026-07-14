@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
     // three.js and react-pdf are large; keep them out of the server bundle graph
     // where possible.
     optimizePackageImports: ["lucide-react"],
+    // With middleware configured, Next truncates request bodies at 10MB by
+    // default, breaking model uploads mid-stream. Sized to clear the 300 MiB
+    // hard file cap plus multipart framing; the upload route enforces the
+    // real per-file/session/storage limits itself.
+    middlewareClientMaxBodySize: "301mb",
   },
   async headers() {
     return [
