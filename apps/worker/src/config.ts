@@ -39,7 +39,9 @@ export const config = {
   /** Per-job scratch root (fast local disk / tmpfs in production). */
   workRoot: str("SLICE_WORK_DIR", "/tmp/slice-jobs"),
   sliceTimeoutMs: Math.min(int("SLICE_TIMEOUT_SECONDS", 600), 900) * 1000,
-  concurrency: Math.min(int("WORKER_CONCURRENCY", 2), 8),
+  /** Sequential by default: concurrent Orca jobs contend for the container's
+   * shared CPU/memory quota, turning heavy sculpt slices into timeouts. */
+  concurrency: Math.min(int("WORKER_CONCURRENCY", 1), 8),
   /** Base numeric uid/gid for untrusted Orca subprocesses. Each concurrent
    * job gets a distinct offset identity and a private staged model copy. */
   slicerUid: int("SLICER_UID", 1002),
