@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { CATALOG } from "./catalog";
 import { estimateCompletionDate } from "./completion-date";
 import { formatFromFilename, sanitizeOriginalName } from "./filename";
@@ -6,7 +6,48 @@ import { formatDuration, formatGrams, formatPaise } from "./money";
 import { settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
+import {
+  customerSchema,
+  sliceSettingsSchema,
+  type Customer,
+  type LayerHeightUm,
+  type SliceSettings,
+} from "./quote-types";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "./whatsapp";
+
+describe("quote schemas", () => {
+  const customer = {
+    name: " Asha Das ",
+    email: " asha@example.com ",
+    phone: " +91 98765 43210 ",
+    city: " Guwahati ",
+  };
+
+  it("keeps customer normalization and the notes default", () => {
+    expect(customerSchema.parse(customer)).toEqual({
+      name: "Asha Das",
+      email: "asha@example.com",
+      phone: "+91 98765 43210",
+      city: "Guwahati",
+      notes: "",
+    });
+    expect(customerSchema.parse({ ...customer, notes: undefined }).notes).toBe("");
+    expectTypeOf<Customer["notes"]>().toEqualTypeOf<string>();
+    expect(customerSchema.safeParse({ ...customer, email: "not-an-email" }).success).toBe(false);
+  });
+
+  it("keeps layer heights restricted and narrowly inferred", () => {
+    expect(
+      sliceSettingsSchema.safeParse({
+        material: "PLA",
+        layerHeightUm: 180,
+        infillPct: 15,
+        supports: "auto",
+      }).success,
+    ).toBe(false);
+    expectTypeOf<SliceSettings["layerHeightUm"]>().toEqualTypeOf<LayerHeightUm>();
+  });
+});
 
 describe("settingsKey", () => {
   it("is stable and excludes colour/quantity by construction", () => {

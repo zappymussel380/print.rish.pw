@@ -20,11 +20,7 @@ export type SupportMode = (typeof SUPPORT_MODES)[number];
  *  excluded — they only affect pricing/records, never the slicer. */
 export const sliceSettingsSchema = z.object({
   material: z.enum(MATERIAL_IDS),
-  layerHeightUm: z
-    .number()
-    .refine((v): v is LayerHeightUm => (LAYER_HEIGHTS_UM as readonly number[]).includes(v), {
-      message: `layerHeightUm must be one of ${LAYER_HEIGHTS_UM.join(", ")}`,
-    }),
+  layerHeightUm: z.union([z.literal(120), z.literal(160), z.literal(200)]),
   infillPct: z.number().int().min(INFILL_MIN_PCT).max(INFILL_MAX_PCT),
   supports: z.enum(SUPPORT_MODES),
 });
@@ -82,7 +78,7 @@ export interface SliceProgress {
 
 export const customerSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  email: z.string().trim().email().max(254),
+  email: z.string().trim().pipe(z.email().max(254)),
   phone: z
     .string()
     .trim()

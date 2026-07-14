@@ -25,6 +25,18 @@ describe("ingest queue contracts", () => {
       ingestJobDataSchema.safeParse({ ...jobData, sha256: "not-a-hash" }).success,
     ).toBe(false);
     expect(
+      ingestJobDataSchema.safeParse({
+        ...jobData,
+        tmpName: "11111111-1111-6111-8111-111111111111",
+      }).success,
+    ).toBe(false);
+    expect(
+      ingestJobDataSchema.safeParse({
+        ...jobData,
+        tmpName: "11111111-1111-4111-7111-111111111111",
+      }).success,
+    ).toBe(false);
+    expect(
       ingestJobDataSchema.safeParse({ ...jobData, unexpectedPath: "/data/uploads/tmp/x" }).success,
     ).toBe(false);
   });

@@ -10,7 +10,7 @@ import {
   type ModelConfig,
 } from "./quote-types";
 import { type ModelFormat } from "./filename";
-import { UUID_PATTERN } from "./uuid";
+import { UUID_PATTERN, UUID_RE } from "./uuid";
 
 /** BullMQ queue name shared by the web producer and worker consumer. */
 export const INGEST_QUEUE = "ingest";
@@ -23,7 +23,7 @@ export const INGEST_ADMISSION_TTL_SECONDS = 2 * 60 * 60;
 export const INGEST_ADMISSION_KEY = "queue:ingest:admission";
 export const UPLOAD_STORAGE_RESERVATION_KEY = "storage:upload-reservations";
 
-const uuidSchema = z.string().uuid();
+const uuidSchema = z.string().regex(UUID_RE);
 const modelFormatSchema = z.enum(["stl", "3mf", "obj", "amf"]);
 const publicFailureSchema = z
   .object({

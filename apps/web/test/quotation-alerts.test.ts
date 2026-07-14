@@ -27,8 +27,8 @@ vi.mock("@print/db", () => ({
 
 vi.mock("@/lib/api-util", () => ({
   guardMutation: mocks.guardMutation,
-  jsonError: (status: number, code: string, message: string) =>
-    Response.json({ error: { code, message } }, { status }),
+  jsonError: (status: number, code: string, message: string, extra?: object) =>
+    Response.json({ error: { code, message, ...extra } }, { status }),
   readJsonBody: mocks.readJsonBody,
 }));
 
@@ -161,6 +161,36 @@ beforeEach(() => {
   mocks.updateQuotation.mockResolvedValue(undefined);
   mocks.notifyNewQuotation.mockResolvedValue(undefined);
   mocks.sendOperatorAlert.mockResolvedValue(undefined);
+});
+
+describe("checkout validation contract", () => {
+  it("keeps field errors under error.issues", async () => {
+    mocks.readJsonBody.mockResolvedValue({
+      ok: true,
+      value: {
+        customer: { name: "", email: "bad", phone: "x", city: "", notes: "" },
+      },
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/quotations", { method: "POST" }) as never,
+    );
+
+    expect(response.status).toBe(422);
+    const payload = await response.json();
+    expect(payload).toEqual({
+      error: {
+        code: "INVALID_CUSTOMER",
+        message: "Please check your contact details",
+        issues: {
+          name: [expect.any(String)],
+          email: [expect.any(String)],
+          phone: ["Enter a valid phone number"],
+          city: [expect.any(String)],
+        },
+      },
+    });
+  });
 });
 
 describe("checkout operational alerts", () => {

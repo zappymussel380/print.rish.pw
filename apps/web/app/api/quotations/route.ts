@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { Prisma, prisma, type Quotation } from "@print/db";
 import {
   CATALOG,
@@ -66,7 +67,7 @@ async function postQuotation(request: NextRequest) {
   const customer = customerSchema.safeParse((body as { customer?: unknown })?.customer);
   if (!customer.success) {
     return jsonError(422, "INVALID_CUSTOMER", "Please check your contact details", {
-      issues: customer.error.flatten().fieldErrors,
+      issues: z.flattenError(customer.error).fieldErrors,
     });
   }
 
