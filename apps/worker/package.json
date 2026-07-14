@@ -16,7 +16,7 @@
     "@print/db": "workspace:*",
     "@print/geometry": "workspace:*",
     "@print/shared": "workspace:*",
-    "bullmq": "^5.34.8",
+    "bullmq": "^5.80.2",
     "fflate": "^0.8.2",
     "ioredis": "^5.4.2",
     "pino": "^9.6.0"
