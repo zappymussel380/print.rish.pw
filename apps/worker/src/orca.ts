@@ -91,9 +91,42 @@ async function writeJobProcess(workDir: string, settings: SliceSettings): Promis
 
 interface RunResult {
   code: number | null;
+  signal: NodeJS.Signals | null;
   timedOut: boolean;
   stdoutTail: string;
   stderrTail: string;
+}
+
+/** Build the Orca launch command. When root, the setpriv chain also runs Orca
+ * through `choom -n 1000` so the cgroup OOM killer always selects the slicer
+ * tree and never the orchestrator — on 2026-07-15 a complex model pushed the
+ * cgroup over its limit and the kernel killed the node worker instead. */
+export function orcaCommand(
+  runningAsRoot: boolean,
+  orcaArgs: string[],
+  identity: SlicerIdentity,
+): { command: string; args: string[] } {
+  if (!runningAsRoot) return { command: "xvfb-run", args: ["-a", config.orcaBin, ...orcaArgs] };
+  return {
+    command: "setpriv",
+    args: [
+      `--reuid=${identity.uid}`,
+      `--regid=${identity.gid}`,
+      "--clear-groups",
+      "--bounding-set=-all",
+      "--inh-caps=-all",
+      "--ambient-caps=-all",
+      "--no-new-privs",
+      "choom",
+      "-n",
+      "1000",
+      "--",
+      "xvfb-run",
+      "-a",
+      config.orcaBin,
+      ...orcaArgs,
+    ],
+  };
 }
 
 async function createProgressPipe(path: string): Promise<void> {
@@ -138,22 +171,7 @@ async function runOrca(
 
     const orcaArgs = [...args.slice(0, -1), "--pipe", pipePath, args.at(-1)!];
     const runningAsRoot = typeof process.getuid === "function" && process.getuid() === 0;
-    const command = runningAsRoot ? "setpriv" : "xvfb-run";
-    const commandArgs = runningAsRoot
-      ? [
-          `--reuid=${identity.uid}`,
-          `--regid=${identity.gid}`,
-          "--clear-groups",
-          "--bounding-set=-all",
-          "--inh-caps=-all",
-          "--ambient-caps=-all",
-          "--no-new-privs",
-          "xvfb-run",
-          "-a",
-          config.orcaBin,
-          ...orcaArgs,
-        ]
-      : ["-a", config.orcaBin, ...orcaArgs];
+    const { command, args: commandArgs } = orcaCommand(runningAsRoot, orcaArgs, identity);
     const child = spawn(command, commandArgs, {
       cwd,
       // New process group so the timeout can kill Orca and any children.
@@ -188,7 +206,7 @@ async function runOrca(
     // is armed (for example, on an immediate child-process error).
     // eslint-disable-next-line prefer-const
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const finish = async (code: number | null) => {
+    const finish = async (code: number | null, signal: NodeJS.Signals | null = null) => {
       if (finished) return;
       finished = true;
       if (timer) clearTimeout(timer);
@@ -217,6 +235,7 @@ async function runOrca(
       }
       resolvePromise({
         code,
+        signal,
         timedOut,
         stdoutTail: stdout.slice(-1200),
         stderrTail: stderr.slice(-1200),
@@ -234,7 +253,7 @@ async function runOrca(
 
     child.on("error", () => void finish(-1));
     // `exit` is independent of inherited stdio handles; `close` is not.
-    child.on("exit", (code) => void finish(code));
+    child.on("exit", (code, signal) => void finish(code, signal));
   });
 }
 
@@ -450,10 +469,19 @@ function fail(
   };
 }
 
-async function describeMissingOutput(
+export async function describeMissingOutput(
   workDir: string,
   run: RunResult,
 ): Promise<{ code: string; message: string; rawMeta?: Record<string, unknown> }> {
+  // Our own timeout also SIGKILLs, but that path returns before reaching here.
+  // An uncommanded SIGKILL with no output is the cgroup OOM killer.
+  if (run.signal === "SIGKILL" && !run.timedOut) {
+    return {
+      code: "OUT_OF_MEMORY",
+      message:
+        "The slicer ran out of memory — this model is too complex to slice automatically",
+    };
+  }
   const result = await readOrcaResult(workDir);
   const errorString =
     result && typeof result.error_string === "string"
