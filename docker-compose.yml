@@ -213,8 +213,10 @@ services:
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,size=3g,mode=1777
     pids_limit: 256
-    mem_limit: 4g
-    memswap_limit: 4g
+    # OrcaSlicer alone peaks past 4 GB RSS on ~220 MB STLs (OOM-killed at 97%
+    # on 2026-07-15), and /tmp is a 3 GB tmpfs charged to this same cgroup.
+    mem_limit: 8g
+    memswap_limit: 8g
     ulimits:
       core: 0
     init: true
@@ -229,7 +231,7 @@ services:
       resources:
         limits:
           cpus: "4"
-          memory: 4g
+          memory: 8g
           pids: 256
     # The trusted orchestrator gets only the capabilities needed to maintain
     # storage ownership, reap escaped child processes, and switch each Orca job
