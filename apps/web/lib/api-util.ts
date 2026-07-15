@@ -11,6 +11,16 @@ export function jsonError(
   return NextResponse.json({ error: { code, message, ...extra } }, { status });
 }
 
+/** RFC 6266/5987 Content-Disposition for a user-supplied filename: an ASCII
+ * fallback plus a UTF-8 `filename*` so non-Latin names survive the download. */
+export function contentDispositionFilename(name: string): string {
+  const fallback = name.replace(/[^\x20-\x7e]|["\\]/g, "_") || "model";
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 /** Route-level admin check. Middleware remains the fast UI gate, but sensitive
  * APIs do not rely on middleware matching as their sole authorization layer. */
 export async function requireAdminApi(): Promise<NextResponse | null> {

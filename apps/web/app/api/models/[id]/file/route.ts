@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { UUID_RE } from "@print/shared";
-import { jsonError } from "@/lib/api-util";
+import { contentDispositionFilename, jsonError } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { clientIp, rateLimitBytes, RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId, isAdmin } from "@/lib/session";
@@ -18,14 +18,6 @@ const MIME_BY_FORMAT: Record<string, string> = {
   amf: "application/x-amf",
 };
 const FORMATS = new Set(["stl", "3mf", "obj", "amf"]);
-
-function contentDispositionFilename(name: string): string {
-  const fallback = name.replace(/[^\x20-\x7e]|["\\]/g, "_") || "model";
-  const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) =>
-    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
-  );
-  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
-}
 
 /** Serve model bytes to the 3D viewer (session owner) or the admin. */
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {

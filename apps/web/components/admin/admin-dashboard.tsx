@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, ExternalLink, LogOut, RefreshCw, Search, Trash2 } from "lucide-react";
+import {
+  Download,
+  ExternalLink,
+  FolderArchive,
+  LogOut,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { formatPaise } from "@print/shared";
 
 export interface QuotationRow {
@@ -230,6 +238,14 @@ export function AdminDashboard({
                       aria-label={`Open PDF for ${row.number}`}
                     >
                       <ExternalLink strokeWidth={1.65} className="h-4 w-4" />
+                    </a>
+                    <a
+                      href={`/api/admin/quotations/${row.id}/zip`}
+                      download
+                      className="rounded-md p-2 text-faint transition-colors hover:text-accent"
+                      aria-label={`Download ZIP for ${row.number}`}
+                    >
+                      <FolderArchive strokeWidth={1.65} className="h-4 w-4" />
                     </a>
                     <button
                       type="button"
