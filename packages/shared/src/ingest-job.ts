@@ -24,7 +24,7 @@ export const INGEST_ADMISSION_KEY = "queue:ingest:admission";
 export const UPLOAD_STORAGE_RESERVATION_KEY = "storage:upload-reservations";
 
 const uuidSchema = z.string().regex(UUID_RE);
-const modelFormatSchema = z.enum(["stl", "3mf", "obj", "amf"]);
+export const modelFormatSchema = z.enum(["stl", "3mf", "obj", "amf"]);
 const publicFailureSchema = z
   .object({
     code: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/),
@@ -64,7 +64,7 @@ export interface UploadedModelDto {
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
 }
 
-const partialConfigSchema = z
+export const partialConfigSchema = z
   .object({
     material: z.enum(MATERIAL_IDS),
     colour: z.enum(COLOUR_IDS),
@@ -75,7 +75,7 @@ const partialConfigSchema = z
   })
   .partial()
   .strict();
-const lockedConfigSchema = z
+export const lockedConfigSchema = z
   .object({
     material: z.literal(true).optional(),
     colour: z.literal(true).optional(),

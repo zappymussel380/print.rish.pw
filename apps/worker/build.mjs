@@ -19,12 +19,14 @@ const runtimeDeps = new Set(
 );
 
 await build({
-  entryPoints: ["src/index.ts"],
+  // parse-child is its own entry: the orchestrator spawns dist/parse-child.js
+  // as a sandboxed subprocess rather than importing it.
+  entryPoints: ["src/index.ts", "src/parse-child.ts"],
   bundle: true,
   platform: "node",
   format: "esm",
   target: "node24",
-  outfile: "dist/index.js",
+  outdir: "dist",
   sourcemap: true,
   logLevel: "info",
   plugins: [

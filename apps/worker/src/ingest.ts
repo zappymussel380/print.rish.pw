@@ -1,20 +1,20 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { constants } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { constants, createWriteStream } from "node:fs";
 import {
   chmod,
   chown,
   mkdir,
   open,
+  rm,
   statfs,
   unlink,
-  writeFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
 import type { Job } from "bullmq";
 import type IORedis from "ioredis";
 import type { Logger } from "pino";
 import { Prisma, prisma } from "@print/db";
-import { ModelParseError, renderThumbnail } from "@print/geometry";
 import {
   INGEST_ADMISSION_KEY,
   UPLOAD_STORAGE_RESERVATION_KEY,
@@ -29,26 +29,35 @@ import {
   type IngestJobData,
   type IngestJobResult,
   type IngestPublicFailure,
+  type ParseChildModel,
   type UploadedModelDto,
 } from "@print/shared";
 import { config } from "./config.js";
-import { prepareUploadModels, type PreparedUpload, type PreparedUploadModel } from "./upload-prepare.js";
+import {
+  ParseRunnerPublicError,
+  removeParseWorkDir,
+  runPreparedParse,
+  type ParseRunnerOptions,
+  type PreparedParse,
+} from "./parse-runner.js";
 
 const RESERVATION_RE = new RegExp(`^\\d{1,15}:${UUID_PATTERN}$`, "i");
-const MAX_INLINE_THUMB_TRIANGLES = 1_000_000;
 
-/** Parsing is synchronous, so its BullMQ lock must comfortably exceed the old
- * five-minute web ingest lease. A stalled job is failed rather than replayed:
- * without a database ticket row, replay could persist the same upload twice. */
+/** Parsing runs in an isolated child process, so the event loop stays free to
+ * renew this lock; two minutes only has to cover queue and I/O hiccups. A
+ * stalled job is failed rather than replayed: without a database ticket row,
+ * replay could persist the same upload twice. */
 export const INGEST_WORKER_OPTIONS = {
   concurrency: 1,
   maxStalledCount: 0,
-  lockDuration: 15 * 60_000,
+  lockDuration: 2 * 60_000,
 } as const;
 
 export interface IngestProcessorContext {
   redis: Pick<IORedis, "zrem">;
   log: Pick<Logger, "info" | "warn">;
+  /** Tests only: overrides for the parse child spawn. */
+  parse?: ParseRunnerOptions;
 }
 
 class PublicIngestError extends Error {
@@ -141,28 +150,37 @@ function validateJob(job: Job<IngestJobData, IngestJobResult>): IngestJobData {
   return data;
 }
 
-async function readVerifiedTempFile(data: IngestJobData): Promise<Buffer> {
-  const path = tmpPathFor(data.tmpName);
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+/** Copy a child-produced artifact into customer storage, recomputing the hash
+ * in transit. The child is untrusted: a forged fileHash could otherwise poison
+ * the global (fileHash, settingsKey) slice-result cache across customers. */
+async function copyVerifiedArtifact(
+  sourcePath: string,
+  destination: string,
+  expectedBytes: number,
+  expectedHash: string,
+): Promise<void> {
+  const source = await open(sourcePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const hash = createHash("sha256");
+  let copiedBytes = 0;
   try {
-    const info = await handle.stat();
-    if (
-      !info.isFile() ||
-      info.size <= 0 ||
-      info.size !== data.sizeBytes ||
-      info.size > config.maxUploadBytes
-    ) {
-      throw new Error("Queued upload failed its file-size integrity check");
+    const info = await source.stat();
+    if (!info.isFile() || info.size !== expectedBytes) {
+      throw new Error("Parse child artifact failed its size integrity check");
     }
-    const contents = await handle.readFile();
-    const actualHash = createHash("sha256").update(contents).digest();
-    const expectedHash = Buffer.from(data.sha256, "hex");
-    if (actualHash.length !== expectedHash.length || !timingSafeEqual(actualHash, expectedHash)) {
-      throw new Error("Queued upload failed its hash integrity check");
-    }
-    return contents;
+    const reader = source.createReadStream({ autoClose: false });
+    reader.on("data", (chunk: string | Buffer) => {
+      const data = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      copiedBytes += data.length;
+      hash.update(data);
+    });
+    const writer = createWriteStream(destination, { flags: "wx", mode: 0o600 });
+    await pipeline(reader, writer);
   } finally {
-    await handle.close().catch(() => {});
+    await source.close().catch(() => {});
+  }
+  if (copiedBytes !== expectedBytes || hash.digest("hex") !== expectedHash) {
+    await rm(destination, { force: true }).catch(() => {});
+    throw new Error("Parse child artifact failed its hash integrity check");
   }
 }
 
@@ -170,14 +188,14 @@ interface PendingModel {
   id: string;
   finalPath: string;
   thumbPath: string | null;
-  prepared: PreparedUploadModel;
+  model: ParseChildModel;
   response: UploadedModelDto;
 }
 
 async function persistPreparedUpload(
   jobId: string,
   sessionId: string,
-  prepared: PreparedUpload,
+  prepared: PreparedParse,
   log: IngestProcessorContext["log"],
 ): Promise<IngestJobResult> {
   await ensureStorageDirs();
@@ -186,24 +204,34 @@ async function persistPreparedUpload(
   let transactionStarted = false;
 
   try {
-    for (const model of prepared.models) {
+    for (const model of prepared.result.models) {
       const id = randomUUID();
       const finalPath = modelPath(id, model.format);
       artifactPaths.add(finalPath);
-      // Persist the bytes read from the verified O_NOFOLLOW descriptor. Reopening
-      // the temp pathname here would reintroduce a swap race after hash checking.
-      await writeFile(finalPath, model.contents, { flag: "wx", mode: 0o600 });
+      await copyVerifiedArtifact(
+        join(prepared.outDir, model.fileName),
+        finalPath,
+        model.sizeBytes,
+        model.fileHash,
+      );
       await setFileOwnership(finalPath);
 
       let thumbPath: string | null = null;
-      if (model.parsed.triangleCount <= MAX_INLINE_THUMB_TRIANGLES) {
+      if (model.thumbFile) {
         const candidate = thumbnailPath(id);
         artifactPaths.add(candidate);
         try {
-          await writeFile(candidate, renderThumbnail(model.parsed.positions, config.thumbSize), {
-            flag: "wx",
-            mode: 0o600,
-          });
+          const source = await open(
+            join(prepared.outDir, model.thumbFile),
+            constants.O_RDONLY | constants.O_NOFOLLOW,
+          );
+          try {
+            const reader = source.createReadStream({ autoClose: false });
+            const writer = createWriteStream(candidate, { flags: "wx", mode: 0o600 });
+            await pipeline(reader, writer);
+          } finally {
+            await source.close().catch(() => {});
+          }
           await setFileOwnership(candidate);
           thumbPath = candidate;
         } catch (error) {
@@ -218,42 +246,42 @@ async function persistPreparedUpload(
         originalName: model.originalName,
         format: model.format,
         sizeBytes: model.sizeBytes,
-        bboxMm: model.parsed.bboxMm,
-        volumeCm3: Number(model.parsed.volumeCm3.toFixed(3)),
-        triangleCount: model.parsed.triangleCount,
-        fitsBed: fitsBed(model.parsed.bboxMm),
+        bboxMm: model.bboxMm,
+        volumeCm3: Number(model.volumeCm3.toFixed(3)),
+        triangleCount: model.triangleCount,
+        fitsBed: fitsBed(model.bboxMm),
         ...(model.defaultConfig ? { defaultConfig: model.defaultConfig } : {}),
         ...(model.sourceConfig ? { sourceConfig: model.sourceConfig } : {}),
         ...(model.lockedConfig ? { lockedConfig: model.lockedConfig } : {}),
       };
-      pending.push({ id, finalPath, thumbPath, prepared: model, response });
+      pending.push({ id, finalPath, thumbPath, model, response });
     }
 
     transactionStarted = true;
     await prisma.$transaction(async (tx) => {
-      for (const model of pending) {
+      for (const entry of pending) {
         await tx.uploadedModel.create({
           data: {
-            id: model.id,
+            id: entry.id,
             sessionId,
-            originalName: model.prepared.originalName,
-            storedPath: model.finalPath,
-            fileHash: model.prepared.fileHash,
-            sizeBytes: model.prepared.sizeBytes,
-            format: model.prepared.format,
-            bboxXMm: model.prepared.parsed.bboxMm.x,
-            bboxYMm: model.prepared.parsed.bboxMm.y,
-            bboxZMm: model.prepared.parsed.bboxMm.z,
-            volumeCm3: model.prepared.parsed.volumeCm3,
-            ...(model.thumbPath ? { thumbPath: model.thumbPath } : {}),
-            ...(model.prepared.defaultConfig
-              ? { defaultConfig: model.prepared.defaultConfig as Prisma.InputJsonValue }
+            originalName: entry.model.originalName,
+            storedPath: entry.finalPath,
+            fileHash: entry.model.fileHash,
+            sizeBytes: entry.model.sizeBytes,
+            format: entry.model.format,
+            bboxXMm: entry.model.bboxMm.x,
+            bboxYMm: entry.model.bboxMm.y,
+            bboxZMm: entry.model.bboxMm.z,
+            volumeCm3: entry.model.volumeCm3,
+            ...(entry.thumbPath ? { thumbPath: entry.thumbPath } : {}),
+            ...(entry.model.defaultConfig
+              ? { defaultConfig: entry.model.defaultConfig as Prisma.InputJsonValue }
               : {}),
-            ...(model.prepared.sourceConfig
-              ? { sourceConfig: model.prepared.sourceConfig as Prisma.InputJsonValue }
+            ...(entry.model.sourceConfig
+              ? { sourceConfig: entry.model.sourceConfig as Prisma.InputJsonValue }
               : {}),
-            ...(model.prepared.lockedConfig
-              ? { lockedConfig: model.prepared.lockedConfig as Prisma.InputJsonValue }
+            ...(entry.model.lockedConfig
+              ? { lockedConfig: entry.model.lockedConfig as Prisma.InputJsonValue }
               : {}),
           },
         });
@@ -299,74 +327,67 @@ async function persistPreparedUpload(
 async function processValidatedJob(
   jobId: string,
   data: IngestJobData,
-  log: IngestProcessorContext["log"],
+  context: IngestProcessorContext,
 ): Promise<IngestJobResult> {
-  const contents = await readVerifiedTempFile(data);
-  let prepared: PreparedUpload;
-  try {
-    prepared = prepareUploadModels({
-      contents,
+  // Staging inside the runner re-verifies size and hash against the queued
+  // metadata; parsing, canonicalization, and thumbnail rendering all happen in
+  // the sandboxed child so this event loop never blocks on customer geometry.
+  const prepared = await runPreparedParse(
+    {
+      jobId,
+      sourcePath: tmpPathFor(data.tmpName),
+      sizeBytes: data.sizeBytes,
+      sha256: data.sha256,
       originalName: data.originalName,
       format: data.format,
-      sourceSha256: data.sha256,
-    });
-  } catch (error) {
-    if (error instanceof ModelParseError) {
+    },
+    context.parse,
+  );
+  try {
+    const models = prepared.result.models;
+    const wrongScale = models.find((model) =>
+      looksWrongScale(model.bboxMm, model.triangleCount),
+    );
+    if (wrongScale) {
+      const { x, y, z } = wrongScale.bboxMm;
       rejectUpload(
-        `INVALID_MODEL_${error.code}`,
-        error.message.slice(0, 500) || "The model could not be parsed",
+        "MODEL_WRONG_SCALE",
+        `This model measures only ${x.toFixed(1)} × ${y.toFixed(1)} × ${z.toFixed(1)} mm — too small to print. ` +
+          "It was likely exported at the wrong scale; scale it to the intended size (or re-export in millimetres) and upload it again.",
       );
     }
-    throw error;
-  }
 
-  if (prepared.models.some((model) => model.sizeBytes > config.maxUploadBytes)) {
-    rejectUpload(
-      "FILE_TOO_LARGE",
-      `Canonical model files are limited to ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB each`,
-    );
-  }
+    const [count, aggregate] = await Promise.all([
+      prisma.uploadedModel.count({ where: { sessionId: data.sessionId, items: { none: {} } } }),
+      prisma.uploadedModel.aggregate({
+        where: { sessionId: data.sessionId, items: { none: {} } },
+        _sum: { sizeBytes: true },
+      }),
+    ]);
+    if (count + models.length > config.maxModelsPerSession) {
+      rejectUpload(
+        "TOO_MANY_MODELS",
+        `This upload contains ${models.length} models, but this quote only has room for ${
+          Math.max(0, config.maxModelsPerSession - count)
+        } more model(s)`,
+      );
+    }
+    if ((aggregate._sum.sizeBytes ?? 0) + prepared.result.totalBytes > config.maxSessionUploadBytes) {
+      rejectUpload(
+        "SESSION_STORAGE_LIMIT",
+        `Active quote files are limited to ${Math.round(config.maxSessionUploadBytes / 1024 / 1024)} MB in total`,
+      );
+    }
 
-  const wrongScale = prepared.models.find((model) =>
-    looksWrongScale(model.parsed.bboxMm, model.parsed.triangleCount),
-  );
-  if (wrongScale) {
-    const { x, y, z } = wrongScale.parsed.bboxMm;
-    rejectUpload(
-      "MODEL_WRONG_SCALE",
-      `This model measures only ${x.toFixed(1)} × ${y.toFixed(1)} × ${z.toFixed(1)} mm — too small to print. ` +
-        "It was likely exported at the wrong scale; scale it to the intended size (or re-export in millimetres) and upload it again.",
-    );
-  }
+    const storage = await statfs(uploadRoot());
+    if (storage.bavail * storage.bsize < prepared.result.totalBytes + config.storageReserveBytes) {
+      rejectUpload("STORAGE_LOW", "Uploads are temporarily paused while storage is low.");
+    }
 
-  const [count, aggregate] = await Promise.all([
-    prisma.uploadedModel.count({ where: { sessionId: data.sessionId, items: { none: {} } } }),
-    prisma.uploadedModel.aggregate({
-      where: { sessionId: data.sessionId, items: { none: {} } },
-      _sum: { sizeBytes: true },
-    }),
-  ]);
-  if (count + prepared.models.length > config.maxModelsPerSession) {
-    rejectUpload(
-      "TOO_MANY_MODELS",
-      `This upload contains ${prepared.models.length} models, but this quote only has room for ${
-        Math.max(0, config.maxModelsPerSession - count)
-      } more model(s)`,
-    );
+    return await persistPreparedUpload(jobId, data.sessionId, prepared, context.log);
+  } finally {
+    await removeParseWorkDir(prepared.workDir).catch(() => {});
   }
-  if ((aggregate._sum.sizeBytes ?? 0) + prepared.totalBytes > config.maxSessionUploadBytes) {
-    rejectUpload(
-      "SESSION_STORAGE_LIMIT",
-      `Active quote files are limited to ${Math.round(config.maxSessionUploadBytes / 1024 / 1024)} MB in total`,
-    );
-  }
-
-  const storage = await statfs(uploadRoot());
-  if (storage.bavail * storage.bsize < prepared.totalBytes + config.storageReserveBytes) {
-    rejectUpload("STORAGE_LOW", "Uploads are temporarily paused while storage is low.");
-  }
-
-  return persistPreparedUpload(jobId, data.sessionId, prepared, log);
 }
 
 function safeCleanupIdentity(job: Job<IngestJobData, IngestJobResult>): {
@@ -442,15 +463,17 @@ export async function processIngestJob(
   let data: IngestJobData | null = null;
   try {
     data = validateJob(job);
-    return await processValidatedJob(job.id!, data, context.log);
+    return await processValidatedJob(job.id!, data, context);
   } catch (error) {
     const failure =
       error instanceof PublicIngestError
         ? error.failure
-        : publicIngestFailure(
-            "INGEST_FAILED",
-            "The uploaded model could not be processed. Please upload it again.",
-          );
+        : error instanceof ParseRunnerPublicError
+          ? error.failure
+          : publicIngestFailure(
+              "INGEST_FAILED",
+              "The uploaded model could not be processed. Please upload it again.",
+            );
     if (data) {
       try {
         await job.updateData({ ...data, publicFailure: failure });

@@ -1,12 +1,9 @@
-import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { chmod, chown, mkdir, open, rm, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
 import pino from "pino";
 import { Prisma, prisma } from "@print/db";
-import { parseModel, renderThumbnail } from "@print/geometry";
 import {
   INGEST_QUEUE,
   SLICE_QUEUE,
@@ -21,6 +18,7 @@ import {
 } from "@print/shared";
 import { config } from "./config.js";
 import { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } from "./ingest.js";
+import { renderThumbnailIsolated } from "./parse-runner.js";
 import { runSlice, type SlicerIdentity } from "./orca.js";
 import { runRetention } from "./retention.js";
 import {
@@ -301,24 +299,19 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
 async function ensureThumbnail(modelId: string, storedPath: string, format: string): Promise<void> {
   const model = await prisma.uploadedModel.findUnique({ where: { id: modelId } });
   if (!model || model.thumbPath) return;
+  if (!["stl", "3mf", "obj", "amf"].includes(format)) return;
 
   try {
-    const handle = await open(storedPath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    let buf: Buffer;
-    try {
-      const info = await handle.stat();
-      if (!info.isFile() || info.size !== model.sizeBytes || info.size > config.maxUploadBytes) {
-        throw new Error("Stored model failed the thumbnail integrity check");
-      }
-      buf = await handle.readFile();
-    } finally {
-      await handle.close().catch(() => {});
-    }
-    if (createHash("sha256").update(buf).digest("hex") !== model.fileHash) {
-      throw new Error("Stored model hash changed before thumbnail rendering");
-    }
-    const parsed = parseModel(buf, format);
-    const png = renderThumbnail(parsed.positions, config.thumbSize);
+    // The isolated runner re-verifies size and hash while staging, then parses
+    // and rasterizes in the sandboxed child so a pathological stored model
+    // cannot block the event loop or take down the orchestrator.
+    const png = await renderThumbnailIsolated({
+      jobId: modelId,
+      sourcePath: storedPath,
+      sizeBytes: model.sizeBytes,
+      sha256: model.fileHash,
+      format: format as "stl" | "3mf" | "obj" | "amf",
+    });
 
     const thumbDir = join(dirname(storedPath), "thumbs");
     await mkdir(thumbDir, { recursive: true, mode: 0o700 });

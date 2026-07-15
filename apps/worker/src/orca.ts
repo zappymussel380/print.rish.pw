@@ -186,6 +186,9 @@ async function runOrca(
         LANG: process.env.LANG ?? "en_US.UTF-8",
         LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
         XDG_RUNTIME_DIR: join(cwd, "xdg"),
+        // Not sensitive, and Next's ProcessEnv augmentation marks it required
+        // wherever the web tsconfig typechecks these worker sources.
+        NODE_ENV: process.env.NODE_ENV,
       },
     });
 
@@ -257,7 +260,7 @@ async function runOrca(
   });
 }
 
-async function killIdentityProcesses(uid: number): Promise<void> {
+export async function killIdentityProcesses(uid: number): Promise<void> {
   for (let pass = 0; pass < 8; pass++) {
     let found = false;
     const entries = await readdir("/proc");

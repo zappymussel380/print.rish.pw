@@ -2,6 +2,7 @@ export * from "./catalog";
 export * from "./completion-date";
 export * from "./filename";
 export * from "./ingest-job";
+export * from "./parse-child-contract";
 export * from "./money";
 export * from "./order-summary";
 export * from "./pricing";

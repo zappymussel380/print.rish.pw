@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Job } from "bullmq";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseModel } from "@print/geometry";
 import {
   INGEST_ADMISSION_KEY,
   UPLOAD_STORAGE_RESERVATION_KEY,
@@ -18,14 +17,12 @@ const SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const RESERVATION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const mocks = vi.hoisted(() => ({
-  state: { dir: "", storageReserveBytes: 1 },
+  state: { dir: "", storageReserveBytes: 1, maxUploadBytes: 10 * 1024 * 1024 },
   count: vi.fn(),
   aggregate: vi.fn(),
   create: vi.fn(),
   deleteMany: vi.fn(),
   transaction: vi.fn(),
-  prepare: vi.fn(),
-  actualPrepare: undefined as ((input: unknown) => unknown) | undefined,
 }));
 
 vi.mock("@print/db", () => ({
@@ -45,7 +42,9 @@ vi.mock("./config.js", () => ({
     get uploadDir() {
       return mocks.state.dir;
     },
-    maxUploadBytes: 10 * 1024 * 1024,
+    get maxUploadBytes() {
+      return mocks.state.maxUploadBytes;
+    },
     maxSessionUploadBytes: 20 * 1024 * 1024,
     maxModelsPerSession: 20,
     get storageReserveBytes() {
@@ -54,16 +53,21 @@ vi.mock("./config.js", () => ({
     thumbSize: 128,
     storageUid: typeof process.getuid === "function" ? process.getuid() : 1001,
     storageGid: typeof process.getgid === "function" ? process.getgid() : 1001,
+    parserUid: typeof process.getuid === "function" ? process.getuid() : 1003,
+    parserGid: typeof process.getgid === "function" ? process.getgid() : 3100,
+    get parseWorkRoot() {
+      return join(mocks.state.dir, "parse-work");
+    },
+    parseTimeoutMs: 60_000,
   },
 }));
 
-vi.mock("./upload-prepare.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./upload-prepare")>();
-  mocks.actualPrepare = actual.prepareUploadModels as (input: unknown) => unknown;
-  return { ...actual, prepareUploadModels: mocks.prepare };
-});
-
 const { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } = await import("./ingest");
+
+const REAL_PARSE_CHILD = [
+  resolve(process.cwd(), "node_modules/.bin/tsx"),
+  resolve(process.cwd(), "src/parse-child.ts"),
+];
 
 function fixture(name: string): Promise<Buffer> {
   return readFile(resolve(process.cwd(), "../../packages/geometry/fixtures", name));
@@ -95,6 +99,7 @@ function context() {
   return {
     redis: { zrem: vi.fn(async () => 1) },
     log: { info: vi.fn(), warn: vi.fn() },
+    parse: { childCommand: REAL_PARSE_CHILD, sandbox: false },
   };
 }
 
@@ -108,6 +113,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.state.dir = await mkdtemp(join(tmpdir(), "print-ingest-test-"));
   mocks.state.storageReserveBytes = 1;
+  mocks.state.maxUploadBytes = 10 * 1024 * 1024;
   await mkdir(join(mocks.state.dir, "tmp"), { recursive: true });
   mocks.count.mockResolvedValue(0);
   mocks.aggregate.mockResolvedValue({ _sum: { sizeBytes: 0 } });
@@ -116,7 +122,6 @@ beforeEach(async () => {
   mocks.transaction.mockImplementation(async (action: (tx: unknown) => Promise<unknown>) =>
     action({ uploadedModel: { create: mocks.create } }),
   );
-  mocks.prepare.mockImplementation((input: unknown) => mocks.actualPrepare!(input));
 });
 
 afterEach(async () => {
@@ -124,12 +129,41 @@ afterEach(async () => {
 });
 
 describe("ingest worker contract", () => {
-  it("uses one non-replaying consumer with a long parser lock", () => {
+  it("uses one non-replaying consumer with a short lock now that parsing is off-loop", () => {
     expect(INGEST_WORKER_OPTIONS).toEqual({
       concurrency: 1,
       maxStalledCount: 0,
-      lockDuration: 15 * 60_000,
+      lockDuration: 2 * 60_000,
     });
+  });
+
+  it("parses uploads in the isolated child process, not in the orchestrator", async () => {
+    const contents = await fixture("cube.stl");
+    await putTemp(contents);
+    const job = makeJob(contents);
+    const ctx = context();
+    // A sentinel child proves the processor delegates: if ingest still parsed
+    // in-process, this healthy cube would ingest fine and the test would fail.
+    ctx.parse = {
+      childCommand: [
+        process.execPath,
+        "-e",
+        `process.stdout.write(JSON.stringify({ ok: false, publicCode: "INVALID_MODEL_SENTINEL", message: "from the child" }) + "\\n"); process.exit(64);`,
+      ],
+      sandbox: false,
+    };
+
+    await expect(processIngestJob(job, ctx)).rejects.toThrow("INVALID_MODEL_SENTINEL");
+
+    expect(job.updateData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicFailure: expect.objectContaining({
+          code: "INVALID_MODEL_SENTINEL",
+          message: "from the child",
+        }),
+      }),
+    );
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("verifies, persists, and cleans a raw upload under worker ownership", async () => {
@@ -153,6 +187,9 @@ describe("ingest worker contract", () => {
     const createData = mocks.create.mock.calls[0]![0].data;
     await expect(readFile(createData.storedPath)).resolves.toEqual(contents);
     expect(createData.fileHash).toBe(createHash("sha256").update(contents).digest("hex"));
+    expect(createData.thumbPath).toMatch(/thumbs[/\\].+\.png$/);
+    const thumb = await readFile(createData.thumbPath);
+    expect(thumb.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     await expect(readFile(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
     expect(job.updateData).not.toHaveBeenCalled();
     expect(ctx.redis.zrem).toHaveBeenCalledWith(
@@ -268,25 +305,19 @@ describe("ingest worker contract", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("enforces canonical-file and aggregate-byte limits after parsing", async () => {
-    const contents = await fixture("cube.stl");
-    await putTemp(contents);
-    const parsed = parseModel(contents, "stl");
-    mocks.prepare.mockReturnValue({
-      models: [
-        {
-          originalName: "cube.stl",
-          format: "stl",
-          contents,
-          parsed,
-          fileHash: createHash("sha256").update(contents).digest("hex"),
-          sizeBytes: 10 * 1024 * 1024 + 1,
-          derived: false,
-        },
-      ],
-      totalBytes: 10 * 1024 * 1024 + 1,
-    });
-    const job = makeJob(contents);
+  it("enforces canonical-file limits even when the upload itself is small", async () => {
+    // A deflated archive can expand into a canonical STL far larger than the
+    // uploaded bytes; the customer must still see FILE_TOO_LARGE.
+    const { strToU8, unzipSync, zipSync } = await import("fflate");
+    const archive = await fixture("cube.3mf");
+    const xml = Buffer.from(unzipSync(new Uint8Array(archive))["3D/3dmodel.model"]!).toString();
+    const triangles = xml.match(/<triangle[^>]*\/>/g)!.join("");
+    const inflated = xml.replace("</triangles>", `${triangles.repeat(400)}</triangles>`);
+    const bomb = Buffer.from(zipSync({ "3D/3dmodel.model": strToU8(inflated) }, { level: 9 }));
+    mocks.state.maxUploadBytes = 100_000;
+    expect(bomb.length).toBeLessThan(100_000);
+    await putTemp(bomb);
+    const job = makeJob(bomb, { originalName: "bomb.3mf", format: "3mf" });
 
     await expect(processIngestJob(job, context())).rejects.toThrow("FILE_TOO_LARGE");
     expect(job.updateData).toHaveBeenCalledWith(
@@ -294,7 +325,7 @@ describe("ingest worker contract", () => {
         publicFailure: expect.objectContaining({ code: "FILE_TOO_LARGE" }),
       }),
     );
-    expect(mocks.count).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("enforces the authoritative session byte total inside the consumer", async () => {
@@ -330,24 +361,34 @@ describe("ingest worker contract", () => {
   });
 
   it("rolls back every generated artifact and row identity when persistence fails", async () => {
-    const contents = await fixture("cube.stl");
+    const { strToU8, zipSync } = await import("fflate");
+    const twoObjectModel = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources>
+          <object id="1" type="model"><mesh>
+            <vertices><vertex x="0" y="0" z="0"/><vertex x="10" y="0" z="0"/><vertex x="0" y="10" z="0"/></vertices>
+            <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+          </mesh></object>
+          <object id="2" type="model"><mesh>
+            <vertices><vertex x="0" y="0" z="0"/><vertex x="20" y="0" z="0"/><vertex x="0" y="20" z="0"/></vertices>
+            <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
+          </mesh></object>
+        </resources>
+        <build><item objectid="1"/><item objectid="2"/></build>
+      </model>`;
+    const plateSettings = `<?xml version="1.0"?><config>
+      <plate><metadata key="plater_id" value="1"/><model_instance><metadata key="object_id" value="1"/></model_instance></plate>
+      <plate><metadata key="plater_id" value="2"/><model_instance><metadata key="object_id" value="2"/></model_instance></plate>
+    </config>`;
+    const contents = Buffer.from(
+      zipSync({
+        "3D/3dmodel.model": strToU8(twoObjectModel),
+        "Metadata/model_settings.config": strToU8(plateSettings),
+      }),
+    );
     await putTemp(contents);
-    const parsed = parseModel(contents, "stl");
-    const fileHash = createHash("sha256").update(contents).digest("hex");
-    mocks.prepare.mockReturnValue({
-      models: ["one", "two"].map((name) => ({
-        originalName: `${name}.stl`,
-        format: "stl",
-        contents,
-        parsed,
-        fileHash,
-        sizeBytes: contents.length,
-        derived: true,
-      })),
-      totalBytes: contents.length * 2,
-    });
     mocks.create.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("database failed"));
-    const job = makeJob(contents);
+    const job = makeJob(contents, { originalName: "plates.3mf", format: "3mf" });
 
     await expect(processIngestJob(job, context())).rejects.toThrow(
       "INGEST_FAILED",

@@ -46,6 +46,13 @@ export const config = {
    * job gets a distinct offset identity and a private staged model copy. */
   slicerUid: int("SLICER_UID", 1002),
   slicerGid: int("SLICER_GID", 3000),
+  /** Identity for the isolated upload-parse child. The gid sits outside the
+   * slicer range (3000 + concurrency offsets) so a parse child can never read
+   * another job's staged 0o440 root:gid model copy. */
+  parserUid: int("PARSER_UID", 1003),
+  parserGid: int("PARSER_GID", 3100),
+  parseWorkRoot: str("PARSE_WORK_DIR", "/tmp/parse-jobs"),
+  parseTimeoutMs: Math.min(int("PARSE_TIMEOUT_SECONDS", 600), 900) * 1000,
   storageUid: int("STORAGE_UID", 1001),
   storageGid: int("STORAGE_GID", 1001),
   maxUploadBytes: Math.min(int("MAX_UPLOAD_MB", 300), 300) * 1024 * 1024,
