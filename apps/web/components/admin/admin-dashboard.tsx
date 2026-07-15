@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, ExternalLink, LogOut, Search, Trash2 } from "lucide-react";
+import { Download, ExternalLink, LogOut, RefreshCw, Search, Trash2 } from "lucide-react";
 import { formatPaise } from "@print/shared";
 
 export interface QuotationRow {
@@ -93,6 +93,20 @@ export function AdminDashboard({
         method: "DELETE",
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const regeneratePdf = async (row: QuotationRow) => {
+    setBusyId(row.id);
+    try {
+      const response = await fetch(`/api/admin/quotations/${row.id}/regenerate-pdf`, {
+        method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!response.ok) alert(`Regenerating the PDF for ${row.number} failed.`);
       router.refresh();
     } finally {
       setBusyId(null);
@@ -217,6 +231,15 @@ export function AdminDashboard({
                     >
                       <ExternalLink strokeWidth={1.65} className="h-4 w-4" />
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => regeneratePdf(row)}
+                      disabled={busyId === row.id}
+                      className="rounded-md p-2 text-faint transition-colors hover:text-accent disabled:opacity-40"
+                      aria-label={`Regenerate PDF for ${row.number}`}
+                    >
+                      <RefreshCw strokeWidth={1.65} className="h-4 w-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => remove(row)}
