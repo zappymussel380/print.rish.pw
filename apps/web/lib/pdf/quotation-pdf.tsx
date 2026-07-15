@@ -14,6 +14,7 @@ import {
   type MaterialId,
   type SupportMode,
 } from "@print/shared";
+import { PrinterMarkPdf } from "./printer-mark-pdf";
 
 /** react-pdf cannot load a variable-weight woff2, so the PDF uses the built-in
  *  Helvetica family (no font registration, no external assets). The on-screen
@@ -54,6 +55,7 @@ const s = StyleSheet.create({
   page: { paddingTop: 44, paddingBottom: 56, paddingHorizontal: 44, fontFamily: "Helvetica", fontSize: 9, color: INK },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   wordmark: { fontFamily: "Helvetica-Bold", fontSize: 15 },
+  wordmarkCompact: { fontFamily: "Helvetica-Bold", fontSize: 10 },
   accent: { color: ACCENT },
   docTitle: { fontFamily: "Helvetica-Bold", fontSize: 20, marginBottom: 2 },
   metaRight: { textAlign: "right", color: MUTED, fontSize: 9 },
@@ -81,6 +83,37 @@ const s = StyleSheet.create({
 const fmtDate = (d: Date) =>
   new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
 
+/** Site wordmark, mirroring the web header: printer mark + "print.rish.pw". */
+function Letterhead({ compact = false }: { compact?: boolean }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <PrinterMarkPdf size={compact ? 15 : 22} />
+      <View style={{ marginLeft: 6 }}>
+        <Text style={compact ? s.wordmarkCompact : s.wordmark}>
+          <Text style={s.accent}>print</Text>.rish.pw
+        </Text>
+        {!compact && <Text style={{ color: MUTED, marginTop: 2 }}>Instant 3D-printing quotation</Text>}
+      </View>
+    </View>
+  );
+}
+
+function PdfFooter({ number }: { number: string }) {
+  return (
+    <View style={s.footer} fixed>
+      <Text>
+        This quotation is an estimate generated from real OrcaSlicer slicing on a Bambu Lab A1
+        (0.4mm nozzle). Prices are in Indian Rupees and include a one-time setup fee. Filament
+        weight and print time come directly from the slicer. This is not a tax invoice.
+      </Text>
+      <Text style={{ marginTop: 4 }}>
+        Final confirmation and payment are arranged over WhatsApp. Quotation {number} ·
+        print.rish.pw
+      </Text>
+    </View>
+  );
+}
+
 // Built-in Helvetica has no ₹ (U+20B9) glyph, so use an ASCII "Rs" in the PDF.
 const money = (paise: number) => formatPaise(paise).replace("₹", "Rs ");
 
@@ -91,12 +124,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
     <Document title={`Quotation ${data.number}`} author="print.rish.pw">
       <Page size="A4" style={s.page}>
         <View style={s.headerRow}>
-          <View>
-            <Text style={s.wordmark}>
-              rish.pw <Text style={s.accent}>/ print</Text>
-            </Text>
-            <Text style={{ color: MUTED, marginTop: 2 }}>Instant 3D-printing quotation</Text>
-          </View>
+          <Letterhead />
           <View style={s.metaRight}>
             <Text style={s.docTitle}>Quotation</Text>
             <Text style={{ fontFamily: "Helvetica-Bold", color: INK }}>{data.number}</Text>
@@ -178,17 +206,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           </View>
         ) : null}
 
-        <View style={s.footer}>
-          <Text>
-            This quotation is an estimate generated from real OrcaSlicer slicing on a Bambu Lab A1
-            (0.4mm nozzle). Prices are in Indian Rupees and include a one-time setup fee. Filament
-            weight and print time come directly from the slicer. This is not a tax invoice.
-          </Text>
-          <Text style={{ marginTop: 4 }}>
-            Final confirmation and payment are arranged over WhatsApp. Quotation {data.number} ·
-            print.rish.pw
-          </Text>
-        </View>
+        <PdfFooter number={data.number} />
       </Page>
     </Document>
   );
