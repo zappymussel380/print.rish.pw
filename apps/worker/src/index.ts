@@ -20,7 +20,7 @@ import {
   type SliceProgressStage,
 } from "@print/shared";
 import { config } from "./config.js";
-import { INGEST_WORKER_OPTIONS, processIngestJob } from "./ingest.js";
+import { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } from "./ingest.js";
 import { runSlice, type SlicerIdentity } from "./orca.js";
 import { runRetention } from "./retention.js";
 import {
@@ -389,6 +389,16 @@ const ingestWorker = new Worker<IngestJobData, IngestJobResult>(
 );
 ingestWorker.on("failed", (job, error) => {
   log.error({ jobId: job?.id, errorType: error.constructor.name }, "ingest job failed");
+  // A job failed as stalled never reached processIngestJob, so its finally
+  // cleanup did not run. terminalCleanup is idempotent for the normal path.
+  if (job) {
+    void terminalCleanup(job, { redis: ingestRedis, log }).catch((cleanupError) =>
+      log.error(
+        { jobId: job.id, err: String(cleanupError) },
+        "ingest failed-event cleanup errored",
+      ),
+    );
+  }
 });
 ingestWorker.on("ready", () => log.info("ingest worker ready"));
 

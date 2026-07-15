@@ -392,7 +392,12 @@ function safeCleanupIdentity(job: Job<IngestJobData, IngestJobResult>): {
   };
 }
 
-async function terminalCleanup(
+/** Also invoked directly by the ingest worker's failed-event handler: a job
+ * failed as stalled never reaches the processor, so the `finally` cleanup in
+ * processIngestJob is skipped and its admission slot, storage reservation, and
+ * temp file would otherwise leak until their TTLs expire. Every step is
+ * idempotent, so running again after a processor-side cleanup is harmless. */
+export async function terminalCleanup(
   job: Job<IngestJobData, IngestJobResult>,
   context: IngestProcessorContext,
 ): Promise<void> {

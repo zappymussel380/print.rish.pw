@@ -63,7 +63,7 @@ vi.mock("./upload-prepare.js", async (importOriginal) => {
   return { ...actual, prepareUploadModels: mocks.prepare };
 });
 
-const { INGEST_WORKER_OPTIONS, processIngestJob } = await import("./ingest");
+const { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } = await import("./ingest");
 
 function fixture(name: string): Promise<Buffer> {
   return readFile(resolve(process.cwd(), "../../packages/geometry/fixtures", name));
@@ -364,6 +364,25 @@ describe("ingest worker contract", () => {
         items: { none: {} },
       },
     });
+  });
+
+  it("releases admission, reservation, and temp file for a job whose processor never ran", async () => {
+    // A job failed as stalled (maxStalledCount: 0) skips processIngestJob
+    // entirely, so the failed-event handler must run terminal cleanup itself.
+    const contents = await fixture("cube.stl");
+    const tempPath = await putTemp(contents);
+    const job = makeJob(contents);
+    const ctx = context();
+
+    await terminalCleanup(job, ctx);
+
+    await expect(readFile(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(ctx.redis.zrem).toHaveBeenCalledWith(
+      UPLOAD_STORAGE_RESERVATION_KEY,
+      job.data.reservationMember,
+    );
+    expect(ctx.redis.zrem).toHaveBeenCalledWith(INGEST_ADMISSION_KEY, TICKET);
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("does not turn successful persistence into failure when Redis cleanup is down", async () => {
