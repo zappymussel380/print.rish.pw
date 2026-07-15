@@ -16,7 +16,9 @@ import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { logger, safeErrorMessage } from "@/lib/logger";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
+import { buildAnnexure } from "@/lib/pdf/annexure-data";
 import { renderQuotationPdf } from "@/lib/pdf/quotation-pdf";
+import { readThumbPng } from "@/lib/thumbs";
 import { nextQuotationNumber } from "@/lib/quotation-number";
 import { issueQuotationAccess, setQuotationAccessCookie } from "@/lib/quotation-access";
 import {
@@ -321,6 +323,46 @@ async function postQuotation(request: NextRequest) {
   // PDF rendering happens outside the transaction (it is CPU-bound and slow).
   try {
     await ensureStorageDirs();
+    // Annexure pages need geometry + slicer detail beyond what `entries`
+    // retained; a missing row or thumbnail degrades that page, never the PDF.
+    const modelRows = await prisma.uploadedModel.findMany({
+      where: { id: { in: entries.map((e) => e.modelId) } },
+    });
+    const sliceRows = await prisma.sliceResult.findMany({
+      where: { id: { in: entries.map((e) => e.sliceResultId) } },
+    });
+    const modelsById = new Map(modelRows.map((m) => [m.id, m]));
+    const slicesById = new Map(sliceRows.map((r) => [r.id, r]));
+    const annexures = (
+      await Promise.all(
+        breakdown.lines.map(async (line, i) => {
+          const entry = entries[i]!;
+          const model = modelsById.get(entry.modelId);
+          const slice = slicesById.get(entry.sliceResultId);
+          if (!model || !slice) return null;
+          return buildAnnexure({
+            fileName: entry.fileName,
+            thumbnailPng: await readThumbPng(model.id, model.fileHash, model.thumbPath),
+            model,
+            slice,
+            settings: {
+              material: line.config.material,
+              colour: line.config.colour,
+              layerHeightUm: line.config.layerHeightUm,
+              infillPct: line.config.infillPct,
+              supports: line.config.supports,
+              quantity: line.config.quantity,
+            },
+            pricing: {
+              materialPaise: line.materialPaise,
+              electricityPaise: line.electricityPaise,
+              maintenancePaise: line.maintenancePaise,
+              subtotalPaise: line.subtotalPaise,
+            },
+          });
+        }),
+      )
+    ).filter((annexure) => annexure !== null);
     const pdf = await renderQuotationPdf({
       number: created.number,
       createdAt: created.createdAt,
@@ -349,6 +391,7 @@ async function postQuotation(request: NextRequest) {
       totalGrams: breakdown.totals.grams,
       totalPrintSeconds: breakdown.totals.printSeconds,
       completion,
+      annexures,
     });
     if (pdf.length > MAX_PDF_BYTES) throw new Error("Generated quotation PDF exceeds the size limit");
     const path = pdfPath(created.number);

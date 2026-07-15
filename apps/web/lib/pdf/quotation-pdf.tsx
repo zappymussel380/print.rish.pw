@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   Document,
+  Image,
   Page,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import {
   type MaterialId,
   type SupportMode,
 } from "@print/shared";
+import { formatBytes, formatDimensions, formatVolume } from "@/lib/format";
 import { PrinterMarkPdf } from "./printer-mark-pdf";
 
 /** react-pdf cannot load a variable-weight woff2, so the PDF uses the built-in
@@ -33,6 +35,41 @@ export interface PdfLine {
   subtotalPaise: number;
 }
 
+/** One annexure page per quotation line: everything the web quote card shows
+ *  about the model, so the buyer and the printer operator read the same spec. */
+export interface PdfAnnexure {
+  fileName: string;
+  thumbnailPng: Buffer | null;
+  geometry: {
+    bboxXMm: number;
+    bboxYMm: number;
+    bboxZMm: number;
+    volumeCm3: number;
+    format: string;
+    sizeBytes: number;
+  };
+  settings: {
+    material: MaterialId;
+    colour: string;
+    layerHeightUm: number;
+    infillPct: number;
+    supports: SupportMode;
+    quantity: number;
+  };
+  slicer: {
+    filamentGrams: number;
+    filamentMm: number;
+    printSeconds: number;
+    slicerVersion: string | null;
+  };
+  pricing: {
+    materialPaise: number;
+    electricityPaise: number;
+    maintenancePaise: number;
+    subtotalPaise: number;
+  };
+}
+
 export interface QuotationPdfData {
   number: string;
   createdAt: Date;
@@ -44,6 +81,7 @@ export interface QuotationPdfData {
   totalGrams: number;
   totalPrintSeconds: number;
   completion: Date | null;
+  annexures: PdfAnnexure[];
 }
 
 const ACCENT = "#ff5555";
@@ -78,6 +116,9 @@ const s = StyleSheet.create({
   grandLabel: { fontFamily: "Helvetica-Bold", fontSize: 12 },
   grandValue: { fontFamily: "Helvetica-Bold", fontSize: 12, color: ACCENT },
   footer: { position: "absolute", bottom: 30, left: 44, right: 44, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 10, color: MUTED, fontSize: 7.5, lineHeight: 1.4 },
+  annexTitle: { fontFamily: "Helvetica-Bold", fontSize: 14 },
+  thumbBox: { borderWidth: 1, borderColor: LINE, height: 250, alignItems: "center", justifyContent: "center", padding: 8, marginTop: 16, marginBottom: 20 },
+  kvRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
 });
 
 const fmtDate = (d: Date) =>
@@ -118,6 +159,116 @@ function PdfFooter({ number }: { number: string }) {
 const money = (paise: number) => formatPaise(paise).replace("₹", "Rs ");
 
 const LAYER = (um: number) => `${(um / 1000).toFixed(2)}mm`;
+
+function KV({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={s.kvRow}>
+      <Text style={{ color: MUTED }}>{label}</Text>
+      <Text>{value}</Text>
+    </View>
+  );
+}
+
+function AnnexurePage({
+  annexure,
+  index,
+  total,
+  number,
+  createdAt,
+}: {
+  annexure: PdfAnnexure;
+  index: number;
+  total: number;
+  number: string;
+  createdAt: Date;
+}) {
+  const { geometry, settings, slicer, pricing } = annexure;
+  return (
+    <Page size="A4" style={s.page}>
+      <View style={s.headerRow}>
+        <Letterhead compact />
+        <View style={s.metaRight}>
+          <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11, color: INK }}>
+            Annexure {index + 1} of {total}
+          </Text>
+          <Text style={{ fontFamily: "Helvetica-Bold", color: INK }}>{number}</Text>
+          <Text>{fmtDate(createdAt)}</Text>
+        </View>
+      </View>
+      <View style={s.rule} />
+
+      <Text style={s.annexTitle}>{annexure.fileName}</Text>
+      <Text style={{ color: MUTED, marginTop: 2 }}>
+        {geometry.format.toUpperCase()} · {formatBytes(geometry.sizeBytes)}
+      </Text>
+
+      <View style={s.thumbBox}>
+        {annexure.thumbnailPng ? (
+          <Image
+            src={{ data: annexure.thumbnailPng, format: "png" }}
+            style={{ maxWidth: "100%", maxHeight: 232, objectFit: "contain" }}
+          />
+        ) : (
+          <Text style={{ color: MUTED }}>Preview not available</Text>
+        )}
+      </View>
+
+      <View style={s.twoCol}>
+        <View style={s.col}>
+          <Text style={s.sectionLabel}>Model geometry</Text>
+          <KV
+            label="Dimensions"
+            value={formatDimensions({ x: geometry.bboxXMm, y: geometry.bboxYMm, z: geometry.bboxZMm })}
+          />
+          <KV label="Volume" value={formatVolume(geometry.volumeCm3)} />
+          <KV label="Format" value={geometry.format.toUpperCase()} />
+          <KV label="File size" value={formatBytes(geometry.sizeBytes)} />
+
+          <Text style={[s.sectionLabel, { marginTop: 14 }]}>Print settings</Text>
+          <KV label="Material" value={`${settings.material} · ${settings.colour}`} />
+          <KV label="Layer height" value={LAYER(settings.layerHeightUm)} />
+          <KV label="Infill" value={`${settings.infillPct}%`} />
+          <KV label="Supports" value={settings.supports} />
+          <KV label="Quantity" value={String(settings.quantity)} />
+        </View>
+
+        <View style={s.col}>
+          <Text style={s.sectionLabel}>Slicer output (per unit)</Text>
+          <KV label="Filament" value={formatGrams(slicer.filamentGrams)} />
+          {slicer.filamentMm > 0 && (
+            <KV label="Filament length" value={`${(slicer.filamentMm / 1000).toFixed(1)} m`} />
+          )}
+          <KV label="Print time" value={formatDuration(slicer.printSeconds)} />
+          {slicer.slicerVersion && <KV label="Slicer" value={slicer.slicerVersion} />}
+
+          <Text style={[s.sectionLabel, { marginTop: 14 }]}>
+            Price ({settings.quantity} {settings.quantity === 1 ? "print" : "prints"})
+          </Text>
+          <View style={s.totalRow}>
+            <Text style={{ color: MUTED }}>Material</Text>
+            <Text>{money(pricing.materialPaise)}</Text>
+          </View>
+          <View style={s.totalRow}>
+            <Text style={{ color: MUTED }}>Electricity</Text>
+            <Text>{money(pricing.electricityPaise)}</Text>
+          </View>
+          <View style={s.totalRow}>
+            <Text style={{ color: MUTED }}>Maintenance</Text>
+            <Text>{money(pricing.maintenancePaise)}</Text>
+          </View>
+          <View style={s.grandRow}>
+            <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>Line total</Text>
+            <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10, color: ACCENT }}>
+              {money(pricing.subtotalPaise)}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <PdfFooter number={number} />
+    </Page>
+  );
+}
 
 function QuotationDocument({ data }: { data: QuotationPdfData }) {
   return (
@@ -208,6 +359,16 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
 
         <PdfFooter number={data.number} />
       </Page>
+      {data.annexures.map((annexure, i) => (
+        <AnnexurePage
+          key={i}
+          annexure={annexure}
+          index={i}
+          total={data.annexures.length}
+          number={data.number}
+          createdAt={data.createdAt}
+        />
+      ))}
     </Document>
   );
 }

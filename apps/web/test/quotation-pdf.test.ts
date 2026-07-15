@@ -2,7 +2,29 @@ import { describe, expect, it } from "vitest";
 import * as React from "react";
 import { Document, Page, renderToBuffer } from "@react-pdf/renderer";
 import { PrinterMarkPdf } from "@/lib/pdf/printer-mark-pdf";
-import { renderQuotationPdf, type QuotationPdfData } from "@/lib/pdf/quotation-pdf";
+import {
+  renderQuotationPdf,
+  type PdfAnnexure,
+  type QuotationPdfData,
+} from "@/lib/pdf/quotation-pdf";
+
+/** 1x1 red pixel. */
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+function annexure(overrides: Partial<PdfAnnexure> = {}): PdfAnnexure {
+  return {
+    fileName: "bracket.stl",
+    thumbnailPng: null,
+    geometry: { bboxXMm: 20, bboxYMm: 30.5, bboxZMm: 10, volumeCm3: 8.2, format: "stl", sizeBytes: 2663084 },
+    settings: { material: "PLA", colour: "black", layerHeightUm: 200, infillPct: 15, supports: "auto", quantity: 1 },
+    slicer: { filamentGrams: 12.5, filamentMm: 4183, printSeconds: 3600, slicerVersion: "OrcaSlicer 2.4.1" },
+    pricing: { materialPaise: 5000, electricityPaise: 2000, maintenancePaise: 900, subtotalPaise: 9900 },
+    ...overrides,
+  };
+}
 
 /** Content streams in react-pdf output are FlateDecoded, so text cannot be
  *  asserted directly. The page-tree object is uncompressed, which makes the
@@ -43,6 +65,7 @@ function fixture(overrides: Partial<QuotationPdfData> = {}): QuotationPdfData {
     totalGrams: 12.5,
     totalPrintSeconds: 3600,
     completion: null,
+    annexures: [],
     ...overrides,
   };
 }
@@ -52,6 +75,20 @@ describe("renderQuotationPdf", () => {
     const pdf = await renderQuotationPdf(fixture());
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pageCount(pdf)).toBe(1);
+  });
+
+  it("adds one annexure page per model, with and without a thumbnail", async () => {
+    const base = await renderQuotationPdf(fixture());
+    const pdf = await renderQuotationPdf(
+      fixture({
+        annexures: [
+          annexure({ thumbnailPng: TINY_PNG }),
+          annexure({ fileName: "case.3mf", thumbnailPng: null }),
+        ],
+      }),
+    );
+    expect(pageCount(pdf)).toBe(3);
+    expect(pdf.length).toBeGreaterThan(base.length);
   });
 });
 
