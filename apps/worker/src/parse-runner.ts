@@ -44,6 +44,12 @@ export interface ParseRunnerOptions {
   sandbox?: boolean;
 }
 
+/** ALLOW_INSECURE_SLICER is the documented local-dev escape hatch for running
+ * untrusted children without isolation; config refuses it in production. */
+function sandboxEnabled(options: ParseRunnerOptions): boolean {
+  return options.sandbox ?? !config.allowInsecureSlicer;
+}
+
 export interface ParseSourceInput {
   /** Names the private work directory; BullMQ ticket or model id. */
   jobId: string;
@@ -139,7 +145,7 @@ async function runChild(
   cwd: string,
   options: ParseRunnerOptions,
 ): Promise<ChildRun> {
-  const asRoot = (options.sandbox ?? true) && runningAsRoot();
+  const asRoot = sandboxEnabled(options) && runningAsRoot();
   const base = options.childCommand ?? defaultChildCommand();
   const [command, ...args] = asRoot
     ? [
@@ -276,7 +282,7 @@ export async function runPreparedParse(
   const workDir = join(options.workRoot ?? config.parseWorkRoot, input.jobId);
   const outDir = join(workDir, "out");
   try {
-    const staged = await stageParseInput(input, workDir, options.sandbox ?? true);
+    const staged = await stageParseInput(input, workDir, sandboxEnabled(options));
     const run = await runChild(
       {
         mode: "prepare",
@@ -334,7 +340,7 @@ export async function renderThumbnailIsolated(
 ): Promise<Buffer> {
   const workDir = join(options.workRoot ?? config.parseWorkRoot, input.jobId);
   try {
-    const staged = await stageParseInput(input, workDir, options.sandbox ?? true);
+    const staged = await stageParseInput(input, workDir, sandboxEnabled(options));
     const outPath = join(workDir, "out", "thumb.png");
     const run = await runChild(
       {
