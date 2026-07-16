@@ -204,6 +204,7 @@ function AnnexurePage({
 
       <View style={s.thumbBox}>
         {annexure.thumbnailPng ? (
+          // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf's Image draws into a PDF and has no alt prop
           <Image
             src={{ data: annexure.thumbnailPng, format: "png" }}
             style={{ maxWidth: "100%", maxHeight: 232, objectFit: "contain" }}
