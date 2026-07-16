@@ -132,6 +132,16 @@ jobs:
       - name: Verify PostgreSQL client
         run: psql --version
 
+      - name: Install OpenCASCADE DRAW (STEP converter)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends occt-draw
+          # DRAW dlopens plugins by unversioned soname; Ubuntu ships those
+          # symlinks only in the -dev packages.
+          for f in /usr/lib/x86_64-linux-gnu/libTK*.so.7; do
+            sudo ln -sf "$f" "${f%.7}"
+          done
+
       - name: Generate Prisma client
         run: pnpm --filter @print/db generate
 

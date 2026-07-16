@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 const appOrigin = process.env.APP_ORIGIN;
@@ -170,6 +171,53 @@ if (ingest.status !== "done") throw new Error("upload ingest did not finish with
 const model = ingest.model;
 if (!model || typeof model.id !== "string" || model.format !== "stl" || model.fitsBed !== true) {
   throw new Error(`upload ingest returned an unexpected model: ${JSON.stringify(ingest)}`);
+}
+
+// STEP leg: exercises the sandboxed OpenCASCADE conversion end to end. Skips
+// cleanly where the converter is not installed (e.g. a dev laptop).
+const stepConverter = process.env.STEP_CONVERT_BIN ?? "/usr/bin/occt-draw-7.6";
+if (existsSync(stepConverter)) {
+  const stepFixture = Buffer.from(
+    await readFile(new URL("../../worker/test-fixtures/box.step", import.meta.url)),
+  );
+  const stepForm = new FormData();
+  stepForm.append("file", new Blob([stepFixture], { type: "model/step" }), "box.step");
+  const stepUpload = await jsonResponse(
+    await request("/api/uploads", {
+      method: "POST",
+      headers: mutationHeaders(),
+      body: stepForm,
+    }),
+    202,
+    "step upload",
+  );
+  let stepIngest = { status: "queued" };
+  const stepDeadline = Date.now() + 60_000;
+  while (!["done", "failed"].includes(stepIngest.status) && Date.now() < stepDeadline) {
+    await delay(250);
+    stepIngest = await jsonResponse(
+      await request(`/api/uploads/status/${encodeURIComponent(stepUpload.ticket)}`),
+      200,
+      "step upload poll",
+    );
+  }
+  if (stepIngest.status !== "done") {
+    throw new Error(`STEP ingest did not convert: ${JSON.stringify(stepIngest)}`);
+  }
+  const stepModel = stepIngest.model;
+  if (
+    !stepModel ||
+    stepModel.format !== "stl" ||
+    stepModel.originalName !== "box.stl" ||
+    Math.abs(stepModel.bboxMm.x - 20) > 0.5 ||
+    Math.abs(stepModel.bboxMm.y - 30) > 0.5 ||
+    Math.abs(stepModel.bboxMm.z - 10) > 0.5
+  ) {
+    throw new Error(`STEP ingest returned an unexpected model: ${JSON.stringify(stepModel)}`);
+  }
+  console.log("[api-flow] STEP upload converted to a 20×30×10 mm STL");
+} else {
+  console.log(`[api-flow] skipping STEP leg (${stepConverter} not installed)`);
 }
 
 const sliceSettings = {
