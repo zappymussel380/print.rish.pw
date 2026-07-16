@@ -17,7 +17,12 @@ const SESSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const RESERVATION_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const mocks = vi.hoisted(() => ({
-  state: { dir: "", storageReserveBytes: 1, maxUploadBytes: 10 * 1024 * 1024 },
+  state: {
+    dir: "",
+    storageReserveBytes: 1,
+    maxUploadBytes: 10 * 1024 * 1024,
+    stepConvertBin: "/usr/bin/occt-draw-7.6",
+  },
   count: vi.fn(),
   aggregate: vi.fn(),
   create: vi.fn(),
@@ -59,6 +64,10 @@ vi.mock("./config.js", () => ({
       return join(mocks.state.dir, "parse-work");
     },
     parseTimeoutMs: 60_000,
+    get stepConvertBin() {
+      return mocks.state.stepConvertBin;
+    },
+    stepConvertTimeoutMs: 30_000,
   },
 }));
 
@@ -107,6 +116,20 @@ async function putTemp(contents: Buffer, name = TMP_NAME): Promise<string> {
   const path = join(mocks.state.dir, "tmp", name);
   await writeFile(path, contents, { flag: "wx", mode: 0o600 });
   return path;
+}
+
+/** DRAWEXE stand-in with the real argv contract: emits `payload` as the
+ * converted STL plus the success sentinel. */
+async function putFakeConverter(payload: Buffer): Promise<string> {
+  const payloadPath = join(mocks.state.dir, "converter-payload.stl");
+  await writeFile(payloadPath, payload);
+  const bin = join(mocks.state.dir, "fake-occt.sh");
+  await writeFile(
+    bin,
+    `#!/bin/bash\nSCRIPT="\${@: -1}"\ncat ${payloadPath} > "$(dirname "$SCRIPT")/step-converted.stl"\necho STEP_CONVERT_OK\n`,
+    { mode: 0o755 },
+  );
+  return bin;
 }
 
 beforeEach(async () => {
@@ -358,6 +381,42 @@ describe("ingest worker contract", () => {
       }),
     );
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the original STEP source beside the converted model", async () => {
+    const stepContents = await readFile(resolve(process.cwd(), "test-fixtures", "box.step"));
+    const cube = await fixture("cube.stl");
+    const fakeOcct = await putFakeConverter(cube);
+    mocks.state.stepConvertBin = fakeOcct;
+    const tempPath = await putTemp(stepContents);
+    const job = makeJob(stepContents, { originalName: "box.step", format: "step" });
+
+    const result = await processIngestJob(job, context());
+
+    expect(result.model).toMatchObject({ originalName: "box.stl", format: "stl" });
+    const createData = mocks.create.mock.calls[0]![0].data;
+    expect(createData.sourceFormat).toBe("step");
+    await expect(readFile(createData.storedPath)).resolves.toEqual(cube);
+    const sourcePath = join(mocks.state.dir, `${createData.id}.step`);
+    await expect(readFile(sourcePath)).resolves.toEqual(stepContents);
+    await expect(readFile(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rolls back the retained STEP source when persistence fails", async () => {
+    const stepContents = await readFile(resolve(process.cwd(), "test-fixtures", "box.step"));
+    const fakeOcct = await putFakeConverter(await fixture("cube.stl"));
+    mocks.state.stepConvertBin = fakeOcct;
+    await putTemp(stepContents);
+    mocks.create.mockRejectedValueOnce(new Error("database failed"));
+    const job = makeJob(stepContents, { originalName: "box.step", format: "step" });
+
+    await expect(processIngestJob(job, context())).rejects.toThrow("INGEST_FAILED");
+
+    const createData = mocks.create.mock.calls[0]![0].data;
+    await expect(readFile(createData.storedPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(join(mocks.state.dir, `${createData.id}.step`)),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rolls back every generated artifact and row identity when persistence fails", async () => {

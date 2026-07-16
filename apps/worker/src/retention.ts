@@ -14,7 +14,7 @@ async function rm(path: string | null | undefined): Promise<void> {
   }
 }
 
-const UUID_FILE_RE = new RegExp(`^${UUID_PATTERN}\\.(?:stl|3mf|obj|amf)$`, "i");
+const UUID_FILE_RE = new RegExp(`^${UUID_PATTERN}\\.(?:stl|3mf|obj|amf|step)$`, "i");
 const UUID_THUMB_RE = new RegExp(`^${UUID_PATTERN}\\.png$`, "i");
 const PDF_RE = /^RSP-\d{4}-\d{4,}\.pdf$/;
 const ORPHAN_GRACE_MS = 2 * 60 * 60 * 1000;
@@ -28,6 +28,13 @@ function expectedModelPath(model: { id: string; format: string }): string | null
 
 function expectedThumbPath(modelId: string): string {
   return resolve(config.uploadDir, "thumbs", `${modelId}.png`);
+}
+
+/** Original CAD file retained beside a converted model (STEP only today). */
+function expectedSourcePath(model: { id: string; sourceFormat?: string | null }): string | null {
+  return model.sourceFormat === "step"
+    ? resolve(config.uploadDir, `${model.id}.step`)
+    : null;
 }
 
 function expectedPdfPath(quotationNumber: string): string | null {
@@ -94,16 +101,18 @@ async function reconcileOrphans(now: number): Promise<number> {
       const ids = candidates.map((candidate) => candidate.name.slice(0, 36));
       const models = await prisma.uploadedModel.findMany({
         where: { id: { in: ids } },
-        select: { id: true, format: true, storedPath: true },
+        select: { id: true, format: true, sourceFormat: true, storedPath: true },
       });
-      return new Set(
-        models
-          .filter((model) => {
-            const expected = expectedModelPath(model);
-            return expected && model.storedPath && resolve(model.storedPath) === expected;
-          })
-          .map((model) => expectedModelPath(model)!),
-      );
+      const keep = new Set<string>();
+      for (const model of models) {
+        const expected = expectedModelPath(model);
+        if (!expected || !model.storedPath || resolve(model.storedPath) !== expected) continue;
+        keep.add(expected);
+        // A retained CAD source lives exactly as long as its stored mesh.
+        const source = expectedSourcePath(model);
+        if (source) keep.add(source);
+      }
+      return keep;
     },
   );
   removed += await cleanOrphanFiles(
@@ -206,6 +215,7 @@ export async function runRetention(log: Logger): Promise<void> {
       if (count === 0) continue;
       try {
         await rm(expectedModelPath(model));
+        await rm(expectedSourcePath(model));
         await rm(expectedThumbPath(model.id));
       } catch (err) {
         log.error(
@@ -276,6 +286,7 @@ export async function runRetention(log: Logger): Promise<void> {
       if (count === 0) continue;
       try {
         await rm(expectedModelPath(model));
+        await rm(expectedSourcePath(model));
         await rm(expectedThumbPath(model.id));
       } catch (err) {
         log.error(
@@ -345,6 +356,7 @@ export async function runRetention(log: Logger): Promise<void> {
         deletedQuotationModels += 1;
         try {
           await rm(expectedModelPath(model));
+          await rm(expectedSourcePath(model));
           await rm(expectedThumbPath(model.id));
         } catch (err) {
           log.error(

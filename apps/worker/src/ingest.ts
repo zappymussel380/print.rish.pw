@@ -21,7 +21,7 @@ import {
   UUID_PATTERN,
   UUID_RE,
   fitsBed,
-  formatFromFilename,
+  uploadFormatFromFilename,
   looksWrongScale,
   ingestJobDataSchema,
   publicIngestFailure,
@@ -96,6 +96,12 @@ function thumbnailPath(modelId: string): string {
   return join(uploadRoot(), "thumbs", `${modelId}.png`);
 }
 
+/** Original CAD source retained beside a converted model (STEP only today). */
+function sourceStepPath(modelId: string): string {
+  if (!UUID_RE.test(modelId)) throw new Error("Ingest generated an invalid source identity");
+  return join(uploadRoot(), `${modelId}.step`);
+}
+
 async function removeQuietly(path: string): Promise<void> {
   try {
     await unlink(path);
@@ -136,7 +142,7 @@ function validateJob(job: Job<IngestJobData, IngestJobResult>): IngestJobData {
   const data = parsed.data;
   if (
     sanitizeOriginalName(data.originalName) !== data.originalName ||
-    formatFromFilename(data.originalName) !== data.format
+    uploadFormatFromFilename(data.originalName) !== data.format
   ) {
     throw new Error("Ingest job filename and format do not agree");
   }
@@ -192,11 +198,20 @@ interface PendingModel {
   response: UploadedModelDto;
 }
 
+/** The verified original upload to keep beside a converted model. */
+interface RetainedSource {
+  format: "step";
+  path: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
 async function persistPreparedUpload(
   jobId: string,
   sessionId: string,
   prepared: PreparedParse,
   log: IngestProcessorContext["log"],
+  source?: RetainedSource,
 ): Promise<IngestJobResult> {
   await ensureStorageDirs();
   const pending: PendingModel[] = [];
@@ -257,6 +272,18 @@ async function persistPreparedUpload(
       pending.push({ id, finalPath, thumbPath, model, response });
     }
 
+    if (source) {
+      // The converter collapses a STEP file into exactly one canonical mesh;
+      // anything else means the child broke its contract.
+      if (pending.length !== 1) {
+        throw new Error("Converted upload did not produce exactly one model");
+      }
+      const sourcePath = sourceStepPath(pending[0]!.id);
+      artifactPaths.add(sourcePath);
+      await copyVerifiedArtifact(source.path, sourcePath, source.sizeBytes, source.sha256);
+      await setFileOwnership(sourcePath);
+    }
+
     transactionStarted = true;
     await prisma.$transaction(async (tx) => {
       for (const entry of pending) {
@@ -273,6 +300,7 @@ async function persistPreparedUpload(
             bboxYMm: entry.model.bboxMm.y,
             bboxZMm: entry.model.bboxMm.z,
             volumeCm3: entry.model.volumeCm3,
+            ...(source ? { sourceFormat: source.format } : {}),
             ...(entry.thumbPath ? { thumbPath: entry.thumbPath } : {}),
             ...(entry.model.defaultConfig
               ? { defaultConfig: entry.model.defaultConfig as Prisma.InputJsonValue }
@@ -384,7 +412,20 @@ async function processValidatedJob(
       rejectUpload("STORAGE_LOW", "Uploads are temporarily paused while storage is low.");
     }
 
-    return await persistPreparedUpload(jobId, data.sessionId, prepared, context.log);
+    return await persistPreparedUpload(
+      jobId,
+      data.sessionId,
+      prepared,
+      context.log,
+      data.format === "step"
+        ? {
+            format: "step",
+            path: tmpPathFor(data.tmpName),
+            sizeBytes: data.sizeBytes,
+            sha256: data.sha256,
+          }
+        : undefined,
+    );
   } finally {
     await removeParseWorkDir(prepared.workDir).catch(() => {});
   }

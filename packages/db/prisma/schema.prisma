@@ -58,6 +58,9 @@ model UploadedModel {
   fileHash     String   @db.Char(64)
   sizeBytes    Int
   format       String
+  /// Set when the stored mesh was converted from another upload format (e.g.
+  /// "step"); the original file is kept beside the model as `<id>.<format>`.
+  sourceFormat String?
   bboxXMm      Float?
   bboxYMm      Float?
   bboxZMm      Float?
