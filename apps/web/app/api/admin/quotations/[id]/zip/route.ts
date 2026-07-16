@@ -3,7 +3,7 @@ import { prisma } from "@print/db";
 import { UUID_RE } from "@print/shared";
 import { contentDispositionFilename, jsonError, requireAdminApi } from "@/lib/api-util";
 import { env } from "@/lib/env";
-import { modelPath, openPrivateFile, pdfPath } from "@/lib/storage";
+import { modelPath, openPrivateFile, pdfPath, sourceStepPath } from "@/lib/storage";
 import {
   createZipStream,
   sanitizeArchiveName,
@@ -61,6 +61,22 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
         });
       } catch {
         missing.push(name);
+      }
+
+      // Models converted at ingest keep their original CAD file beside the
+      // mesh; the admin gets both (the source is what the customer authored).
+      if (model.sourceFormat === "step") {
+        const stem = model.originalName.replace(/\.[^.]+$/, "");
+        const sourceName = uniqueArchiveName(
+          sanitizeArchiveName(`${stem}.step`, `model-source.step`),
+          taken,
+        );
+        try {
+          const opened = await openPrivateFile(sourceStepPath(model.id), env.maxUploadBytes);
+          entries.push({ name: sourceName, handle: opened.handle, size: opened.size, store: false });
+        } catch {
+          missing.push(sourceName);
+        }
       }
     }
 

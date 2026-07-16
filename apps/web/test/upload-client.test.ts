@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ACCEPT_ATTR,
+  hasAcceptedExtension,
   pollUpload,
   uploadModel,
   uploadQueueMessage,
@@ -120,6 +122,17 @@ describe("upload client", () => {
       code: "UPLOAD_STATUS_FAILED",
       retryable: false,
     });
+  });
+});
+
+describe("accepted upload formats", () => {
+  it("accepts STEP alongside the mesh formats", () => {
+    expect(hasAcceptedExtension("bracket.step")).toBe(true);
+    expect(hasAcceptedExtension("bracket.STP")).toBe(true);
+    expect(hasAcceptedExtension("part.stl")).toBe(true);
+    expect(hasAcceptedExtension("part.gcode")).toBe(false);
+    expect(ACCEPT_ATTR).toContain(".step");
+    expect(ACCEPT_ATTR).toContain(".stp");
   });
 });
 

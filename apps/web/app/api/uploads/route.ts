@@ -11,7 +11,7 @@ import { MAX_CANONICAL_ARCHIVE_BYTES } from "@print/geometry";
 import {
   INGEST_ADMISSION_TTL_SECONDS,
   INGEST_MAX_WAITING,
-  formatFromFilename,
+  uploadFormatFromFilename,
   sanitizeOriginalName,
   type IngestJobData,
 } from "@print/shared";
@@ -231,9 +231,9 @@ export async function POST(request: NextRequest) {
       }
 
       const originalName = sanitizeOriginalName(file.originalName);
-      const format = formatFromFilename(originalName);
+      const format = uploadFormatFromFilename(originalName);
       if (!format) {
-        return jsonError(422, "UNSUPPORTED_FORMAT", "Supported formats: STL, 3MF, OBJ, AMF");
+        return jsonError(422, "UNSUPPORTED_FORMAT", "Supported formats: STL, 3MF, OBJ, AMF, STEP");
       }
 
       const actualSize = (await stat(file.tmpPath)).size;

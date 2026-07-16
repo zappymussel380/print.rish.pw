@@ -69,6 +69,34 @@ describe("buildAnnexure", () => {
     });
   });
 
+  it("labels STEP-converted models honestly", () => {
+    const result = buildAnnexure({
+      fileName: "bracket.stl",
+      thumbnailPng: null,
+      model: {
+        bboxXMm: 20,
+        bboxYMm: 30,
+        bboxZMm: 10,
+        volumeCm3: 6,
+        format: "stl",
+        sourceFormat: "step",
+        sizeBytes: 684,
+      },
+      slice: { filamentGrams: 5, filamentMm: 1500, printSeconds: 900, slicerVersion: null },
+      settings: {
+        material: "PLA",
+        colour: "white",
+        layerHeightUm: 200,
+        infillPct: 15,
+        supports: "auto",
+        quantity: 1,
+      },
+      pricing: { materialPaise: 1, electricityPaise: 1, maintenancePaise: 1, subtotalPaise: 3 },
+    });
+
+    expect(result.geometry.format).toBe("step → stl");
+  });
+
   it("tolerates null slicer metadata and missing thumbnail", () => {
     const result = buildAnnexure({
       fileName: "case.3mf",

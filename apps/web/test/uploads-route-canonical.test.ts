@@ -135,6 +135,21 @@ describe("POST /api/uploads queued ingest", () => {
     expect(mocks.releaseStorageReservation).not.toHaveBeenCalled();
   });
 
+  it("accepts a STEP upload and queues it with its true format", async () => {
+    const step = await readFile(
+      join(process.cwd(), "..", "..", "apps", "worker", "test-fixtures", "box.step"),
+    );
+
+    const response = await POST(uploadRequest(step, "bracket.step") as never);
+
+    expect(response.status).toBe(202);
+    expect(mocks.queueAdd).toHaveBeenCalledWith(
+      "ingest",
+      expect.objectContaining({ originalName: "bracket.step", format: "step" }),
+      expect.anything(),
+    );
+  });
+
   it("rejects a full admission set and cleans all producer-owned resources", async () => {
     mocks.reserveIngestAdmission.mockResolvedValue(null);
     const contents = Buffer.from("solid cube\nendsolid cube\n");

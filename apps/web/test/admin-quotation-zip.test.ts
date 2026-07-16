@@ -13,6 +13,7 @@ const opened = vi.hoisted(
 
 const storage = vi.hoisted(() => ({
   modelPath: vi.fn((id: string, format: string) => `MODELDIR/${id}.${format}`),
+  sourceStepPath: vi.fn((id: string) => `MODELDIR/${id}.step`),
   pdfPath: vi.fn((number: string) => `PDFDIR/${number}.pdf`),
   openPrivateFile: vi.fn(),
 }));
@@ -40,6 +41,9 @@ let dir: string;
 const bytes: Record<string, Buffer> = {
   "model-1.stl": Buffer.from("STL BYTES ONE"),
   "model-2.stl": Buffer.from("STL BYTES TWO, LONGER"),
+  "model-4.stl": Buffer.from("CONVERTED STL FROM STEP"),
+  "model-4.step": Buffer.from("ISO-10303-21; original CAD source"),
+  "model-5.stl": Buffer.from("CONVERTED BUT SOURCE LOST"),
   "model-3.3mf": Buffer.from("PK fake 3mf container"),
   "RSP-2026-0002.pdf": Buffer.from("%PDF-1.7 fake quotation pdf"),
 };
@@ -111,6 +115,52 @@ describe("admin quotation ZIP download", () => {
       opened.push(tracked as never);
       return { handle, size };
     });
+  });
+
+  it("includes the original STEP source beside the converted mesh", async () => {
+    db.findUnique.mockResolvedValue({
+      id: QUOTE_ID,
+      number: "RSP-2026-0002",
+      items: [
+        {
+          modelId: "model-4",
+          model: {
+            id: "model-4",
+            originalName: "bracket.stl",
+            format: "stl",
+            sourceFormat: "step",
+            sizeBytes: bytes["model-4.stl"]!.length,
+            storedPath: "stored",
+          },
+        },
+        {
+          modelId: "model-5",
+          model: {
+            id: "model-5",
+            originalName: "gone.stl",
+            format: "stl",
+            sourceFormat: "step",
+            sizeBytes: bytes["model-5.stl"]!.length,
+            storedPath: "stored",
+          },
+        },
+      ],
+    });
+
+    const response = await GET(request(), ctx);
+
+    expect(response.status).toBe(200);
+    const zip = unzipSync(await collect(response));
+    expect(Object.keys(zip).sort()).toEqual([
+      "MISSING_FILES.txt",
+      "RSP-2026-0002.pdf",
+      "bracket.step",
+      "bracket.stl",
+      "gone.stl",
+    ]);
+    expect(Buffer.from(zip["bracket.step"]!)).toEqual(bytes["model-4.step"]);
+    expect(Buffer.from(zip["bracket.stl"]!)).toEqual(bytes["model-4.stl"]);
+    expect(Buffer.from(zip["MISSING_FILES.txt"]!).toString()).toContain("gone.step");
   });
 
   it("streams a zip of deduped model files plus the quotation PDF", async () => {

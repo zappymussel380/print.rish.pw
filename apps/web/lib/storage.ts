@@ -31,6 +31,12 @@ export function thumbPath(modelId: string): string {
   return join(uploadRoot(), "thumbs", `${modelId}.png`);
 }
 
+/** Original CAD file kept beside a model converted at ingest (STEP only). */
+export function sourceStepPath(modelId: string): string {
+  if (!UUID_RE.test(modelId)) throw new Error("Invalid source storage identity");
+  return join(uploadRoot(), `${modelId}.step`);
+}
+
 export function pdfPath(quotationNumber: string): string {
   if (!QUOTATION_NUMBER_RE.test(quotationNumber)) {
     throw new Error("Invalid quotation storage identity");

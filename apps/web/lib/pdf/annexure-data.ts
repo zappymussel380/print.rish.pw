@@ -15,6 +15,8 @@ export interface AnnexureInput {
     bboxZMm: unknown;
     volumeCm3: unknown;
     format: string;
+    /** Set when the mesh was converted from another upload format at ingest. */
+    sourceFormat?: string | null;
     sizeBytes: number;
   };
   slice: {
@@ -48,7 +50,9 @@ export function buildAnnexure(input: AnnexureInput): PdfAnnexure {
       bboxYMm: num(input.model.bboxYMm),
       bboxZMm: num(input.model.bboxZMm),
       volumeCm3: num(input.model.volumeCm3),
-      format: input.model.format,
+      format: input.model.sourceFormat
+        ? `${input.model.sourceFormat} → ${input.model.format}`
+        : input.model.format,
       sizeBytes: input.model.sizeBytes,
     },
     settings: { ...input.settings },

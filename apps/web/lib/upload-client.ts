@@ -23,7 +23,7 @@ export class UploadClientError extends Error {
 }
 
 /** The formats the server will accept, used to filter before sending. */
-export const ACCEPTED_EXTENSIONS = [".stl", ".3mf", ".obj", ".amf"] as const;
+export const ACCEPTED_EXTENSIONS = [".stl", ".3mf", ".obj", ".amf", ".step", ".stp"] as const;
 export const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.join(",");
 
 export function hasAcceptedExtension(name: string): boolean {
