@@ -1,7 +1,11 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CATALOG } from "./catalog";
 import { estimateCompletionDate } from "./completion-date";
-import { formatFromFilename, sanitizeOriginalName } from "./filename";
+import {
+  formatFromFilename,
+  sanitizeOriginalName,
+  uploadFormatFromFilename,
+} from "./filename";
 import { formatDuration, formatGrams, formatPaise } from "./money";
 import { settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
@@ -139,6 +143,27 @@ describe("formatFromFilename", () => {
     expect(formatFromFilename("part.3mf")).toBe("3mf");
     expect(formatFromFilename("part.gcode")).toBeNull();
     expect(formatFromFilename("no-extension")).toBeNull();
+  });
+
+  it("does not treat STEP as a mesh format", () => {
+    expect(formatFromFilename("part.step")).toBeNull();
+    expect(formatFromFilename("part.stp")).toBeNull();
+  });
+});
+
+describe("uploadFormatFromFilename", () => {
+  it("accepts every mesh format plus STEP aliases", () => {
+    expect(uploadFormatFromFilename("part.STL")).toBe("stl");
+    expect(uploadFormatFromFilename("part.3mf")).toBe("3mf");
+    expect(uploadFormatFromFilename("bracket.step")).toBe("step");
+    expect(uploadFormatFromFilename("bracket.STP")).toBe("step");
+    expect(uploadFormatFromFilename("bracket.StEp")).toBe("step");
+  });
+
+  it("still rejects unknown extensions", () => {
+    expect(uploadFormatFromFilename("part.gcode")).toBeNull();
+    expect(uploadFormatFromFilename("no-extension")).toBeNull();
+    expect(uploadFormatFromFilename("archive.steps")).toBeNull();
   });
 });
 

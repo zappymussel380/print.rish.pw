@@ -11,6 +11,16 @@ export const MODEL_FORMATS = {
 
 export type ModelFormat = (typeof MODEL_FORMATS)[keyof typeof MODEL_FORMATS];
 
+/** Formats a customer may upload. STEP is accepted at the door but converted
+ * to a mesh during ingest; only `MODEL_FORMATS` ever reach storage/slicing. */
+export const UPLOAD_FORMATS = {
+  ...MODEL_FORMATS,
+  step: "step",
+  stp: "step",
+} as const;
+
+export type UploadFormat = (typeof UPLOAD_FORMATS)[keyof typeof UPLOAD_FORMATS];
+
 export function extensionOf(name: string): string {
   const idx = name.lastIndexOf(".");
   return idx === -1 ? "" : name.slice(idx + 1).toLowerCase();
@@ -19,6 +29,11 @@ export function extensionOf(name: string): string {
 export function formatFromFilename(name: string): ModelFormat | null {
   const ext = extensionOf(name);
   return ext in MODEL_FORMATS ? MODEL_FORMATS[ext as keyof typeof MODEL_FORMATS] : null;
+}
+
+export function uploadFormatFromFilename(name: string): UploadFormat | null {
+  const ext = extensionOf(name);
+  return ext in UPLOAD_FORMATS ? UPLOAD_FORMATS[ext as keyof typeof UPLOAD_FORMATS] : null;
 }
 
 const MAX_NAME_CHARS = 200;

@@ -3,6 +3,7 @@ import {
   lockedConfigSchema,
   modelFormatSchema,
   partialConfigSchema,
+  uploadFormatSchema,
 } from "./ingest-job";
 
 /** Wire contract between the worker orchestrator and the isolated parse child
@@ -18,7 +19,7 @@ export const parseChildParamsSchema = z.discriminatedUnion("mode", [
       mode: z.literal("prepare"),
       inputPath: z.string().min(1),
       originalName: z.string().min(1).max(255),
-      format: modelFormatSchema,
+      format: uploadFormatSchema,
       sourceSha256: z.string().regex(/^[0-9a-f]{64}$/),
       outDir: z.string().min(1),
       thumbSize: z.number().int().min(16).max(4096),

@@ -53,6 +53,16 @@ export async function executeParseChild(params: ParseChildParams): Promise<Parse
     return { ok: true, models: [], totalBytes: 0 };
   }
 
+  // STEP conversion lands in the next commit; until then reject it honestly
+  // (the web upload gate does not accept .step yet, so this is unreachable
+  // outside forged jobs).
+  if (params.format === "step") {
+    throw new ParseChildPublicError(
+      "STEP_NOT_SUPPORTED",
+      "STEP files are not supported yet — export STL or 3MF from your CAD tool",
+    );
+  }
+
   const prepared = prepareUploadModels({
     contents,
     originalName: params.originalName,

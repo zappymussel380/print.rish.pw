@@ -4,6 +4,7 @@ import {
   ingestJobResultSchema,
   publicIngestFailure,
 } from "./ingest-job";
+import { parseChildParamsSchema } from "./parse-child-contract";
 
 const jobData = {
   tmpName: "11111111-1111-4111-8111-111111111111",
@@ -16,6 +17,25 @@ const jobData = {
 };
 
 describe("ingest queue contracts", () => {
+  it("accepts a STEP upload job", () => {
+    const stepJob = { ...jobData, originalName: "bracket.step", format: "step" };
+    expect(ingestJobDataSchema.parse(stepJob)).toEqual(stepJob);
+  });
+
+  it("lets the parse child receive a STEP input format", () => {
+    const params = {
+      mode: "prepare",
+      inputPath: "/uploads/tmp/x",
+      originalName: "bracket.step",
+      format: "step",
+      sourceSha256: "b".repeat(64),
+      outDir: "/work/out",
+      thumbSize: 512,
+      maxUploadBytes: 1024,
+    };
+    expect(parseChildParamsSchema.parse(params).format).toBe("step");
+  });
+
   it("accepts only server-derived queue identities", () => {
     expect(ingestJobDataSchema.parse(jobData)).toEqual(jobData);
     expect(

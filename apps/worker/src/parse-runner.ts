@@ -13,6 +13,7 @@ import {
   sanitizeOriginalName,
   type IngestPublicFailure,
   type ModelFormat,
+  type UploadFormat,
   type ParseChildParams,
   type ParseChildSuccess,
 } from "@print/shared";
@@ -56,11 +57,14 @@ export interface ParseSourceInput {
   sourcePath: string;
   sizeBytes: number;
   sha256: string;
+  /** Thumbnails re-render from stored meshes, so this stays mesh-only. */
   format: ModelFormat;
 }
 
-export interface PreparedParseInput extends ParseSourceInput {
+/** Fresh uploads may additionally be STEP; the child converts before parsing. */
+export interface PreparedParseInput extends Omit<ParseSourceInput, "format"> {
   originalName: string;
+  format: UploadFormat;
 }
 
 export interface PreparedParse {
@@ -83,7 +87,7 @@ function defaultChildCommand(): string[] {
 }
 
 async function stageParseInput(
-  input: ParseSourceInput,
+  input: ParseSourceInput | PreparedParseInput,
   workDir: string,
   sandbox: boolean,
 ): Promise<string> {

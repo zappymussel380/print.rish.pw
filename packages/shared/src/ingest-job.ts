@@ -25,6 +25,8 @@ export const UPLOAD_STORAGE_RESERVATION_KEY = "storage:upload-reservations";
 
 const uuidSchema = z.string().regex(UUID_RE);
 export const modelFormatSchema = z.enum(["stl", "3mf", "obj", "amf"]);
+/** What customers may upload: mesh formats plus STEP (converted at ingest). */
+export const uploadFormatSchema = z.enum(["stl", "3mf", "obj", "amf", "step"]);
 const publicFailureSchema = z
   .object({
     code: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/),
@@ -37,7 +39,7 @@ export const ingestJobDataSchema = z
     tmpName: uuidSchema,
     sessionId: uuidSchema,
     originalName: z.string().min(1).max(255),
-    format: modelFormatSchema,
+    format: uploadFormatSchema,
     sizeBytes: z.number().int().positive().max(1024 * 1024 * 1024),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
     reservationMember: z.string().regex(new RegExp(`^\\d{1,15}:${UUID_PATTERN}$`, "i")),
