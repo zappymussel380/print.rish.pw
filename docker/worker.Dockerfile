@@ -55,7 +55,8 @@ ENV ORCA_VERSION=${ORCA_VERSION} \
     DEBIAN_FRONTEND=noninteractive
 
 # OrcaSlicer runtime dependencies (GUI toolkit links even in CLI mode) + xvfb
-# for the virtual display, + Node 24 for the BullMQ worker.
+# for the virtual display, + Node 24 for the BullMQ worker, + OpenCASCADE's
+# DRAW harness (occt-draw) for STEP→STL conversion in the parse sandbox.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         xvfb \
@@ -67,11 +68,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgstreamer1.0-0 \
         libgstreamer-plugins-base1.0-0 \
         locales \
+        occt-draw \
         openssl \
         redis-tools \
         util-linux \
     && rm -rf /var/lib/apt/lists/* \
-    && sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
+    && sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen \
+    # DRAW dlopens its plugins by unversioned soname (libTKXSDRAW.so, ...),
+    # but Ubuntu ships those symlinks only in the -dev packages.
+    && for f in /usr/lib/x86_64-linux-gnu/libTK*.so.7; do ln -sf "$f" "${f%.7}"; done
 
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 

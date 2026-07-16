@@ -87,6 +87,28 @@ describe("runPreparedParse", () => {
     });
   });
 
+  it("hands the STEP converter identity to the child", async () => {
+    const contents = await readFile(resolve(process.cwd(), "test-fixtures", "box.step"));
+    const path = join(dir, "upload.bin");
+    await writeFile(path, contents);
+    const paramsEcho = fakeChild(`
+      const params = JSON.parse(process.argv.at(-1));
+      const echo = [params.format, params.stepConvertBin, params.stepConvertTimeoutMs].join(" ");
+      console.log(JSON.stringify({ ok: false, publicCode: "PARAMS_ECHO", message: echo }));
+      process.exit(64);
+    `);
+
+    await expect(
+      runPreparedParse(inputFor(contents, { originalName: "box.step", format: "step" }), {
+        childCommand: paramsEcho,
+        workRoot,
+        sandbox: false,
+      }),
+    ).rejects.toMatchObject({
+      failure: { code: "PARAMS_ECHO", message: "step /usr/bin/occt-draw-7.6 120000" },
+    });
+  });
+
   it("refuses to stage a source whose hash does not match the queued metadata", async () => {
     const contents = await fixture("cube.stl");
     await stageSource(contents);

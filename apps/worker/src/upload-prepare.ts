@@ -17,6 +17,7 @@ import {
   sanitizeOriginalName,
   type ModelConfig,
   type ModelFormat,
+  type UploadFormat,
 } from "@print/shared";
 
 const CANONICAL_ARCHIVE_HEADER = "print.rish.pw canonical archive geometry";
@@ -41,9 +42,11 @@ export interface PreparedUpload {
 }
 
 interface PrepareUploadInput {
+  /** For STEP uploads these are the sandbox-tessellated STL bytes, not the
+   * original upload: CAD geometry never leaves the parse child unconverted. */
   contents: Buffer;
   originalName: string;
-  format: ModelFormat;
+  format: UploadFormat;
   sourceSha256: string;
 }
 
@@ -150,6 +153,11 @@ export function prepareUploadModels(input: PrepareUploadInput): PreparedUpload {
         }),
       ];
     }
+  } else if (format === "step") {
+    // Contents are the converter's binary STL; retain them as a derived model
+    // so the hash covers the exact bytes that get persisted and sliced.
+    const parsed = parseModel(contents, "stl");
+    models = [derivedModel(asStlName(originalName), contents, parsed)];
   } else {
     const parsed = parseModel(contents, format);
     if (format === "amf" && isZip(contents)) {

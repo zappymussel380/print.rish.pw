@@ -297,6 +297,12 @@ export async function runPreparedParse(
         outDir,
         thumbSize: config.thumbSize,
         maxUploadBytes: config.maxUploadBytes,
+        ...(input.format === "step"
+          ? {
+              stepConvertBin: config.stepConvertBin,
+              stepConvertTimeoutMs: config.stepConvertTimeoutMs,
+            }
+          : {}),
       },
       workDir,
       options,

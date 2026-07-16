@@ -24,6 +24,9 @@ export const parseChildParamsSchema = z.discriminatedUnion("mode", [
       outDir: z.string().min(1),
       thumbSize: z.number().int().min(16).max(4096),
       maxUploadBytes: z.number().int().positive(),
+      /** STEP→STL converter binary; orchestrator-controlled, defaults in-child. */
+      stepConvertBin: z.string().min(1).optional(),
+      stepConvertTimeoutMs: z.number().int().positive().optional(),
     })
     .strict(),
   z

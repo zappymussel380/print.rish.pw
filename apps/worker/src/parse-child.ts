@@ -9,6 +9,7 @@ import {
   type ParseChildParams,
   type ParseChildSuccess,
 } from "@print/shared";
+import { StepConvertError, convertStepToStl } from "./step-convert.js";
 import { prepareUploadModels } from "./upload-prepare.js";
 
 /** Untrusted half of upload parsing. The orchestrator spawns this file as a
@@ -27,6 +28,26 @@ export class ParseChildPublicError extends Error {
   ) {
     super(message);
     this.name = "ParseChildPublicError";
+  }
+}
+
+async function runStepConversion(
+  params: Extract<ParseChildParams, { mode: "prepare" }>,
+  maxUploadBytes: number,
+): Promise<Buffer> {
+  try {
+    return await convertStepToStl(params.inputPath, params.outDir, {
+      ...(params.stepConvertBin ? { bin: params.stepConvertBin } : {}),
+      ...(params.stepConvertTimeoutMs ? { timeoutMs: params.stepConvertTimeoutMs } : {}),
+      // CAD solids legitimately tessellate larger than their STEP source, but
+      // canonical artifacts are still bounded by the per-file upload limit.
+      maxStlBytes: maxUploadBytes,
+    });
+  } catch (error) {
+    if (error instanceof StepConvertError) {
+      throw new ParseChildPublicError(error.publicCode, error.message);
+    }
+    throw error;
   }
 }
 
@@ -53,18 +74,15 @@ export async function executeParseChild(params: ParseChildParams): Promise<Parse
     return { ok: true, models: [], totalBytes: 0 };
   }
 
-  // STEP conversion lands in the next commit; until then reject it honestly
-  // (the web upload gate does not accept .step yet, so this is unreachable
-  // outside forged jobs).
-  if (params.format === "step") {
-    throw new ParseChildPublicError(
-      "STEP_NOT_SUPPORTED",
-      "STEP files are not supported yet — export STL or 3MF from your CAD tool",
-    );
-  }
+  // STEP is CAD geometry, not a mesh: tessellate it here in the sandbox and
+  // hand the resulting STL bytes through the normal canonicalization path.
+  const contentsForParse =
+    params.format === "step"
+      ? await runStepConversion(params, params.maxUploadBytes)
+      : contents;
 
   const prepared = prepareUploadModels({
-    contents,
+    contents: contentsForParse,
     originalName: params.originalName,
     format: params.format,
     sourceSha256: params.sourceSha256,

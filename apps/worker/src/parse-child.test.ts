@@ -92,6 +92,60 @@ describe("executeParseChild prepare mode", () => {
     expect(written.length).toBe(model.sizeBytes);
   });
 
+  it("converts STEP uploads into a derived canonical STL", async () => {
+    const stepContents = await readFile(resolve(process.cwd(), "test-fixtures", "box.step"));
+    const cube = await fixture("cube.stl");
+    const staged = await stage(stepContents);
+    const payload = join(dir, "payload.stl");
+    await writeFile(payload, cube);
+    const fakeOcct = join(dir, "fake-occt.sh");
+    await writeFile(
+      fakeOcct,
+      `#!/bin/bash\nSCRIPT="\${@: -1}"\ncat ${payload} > "$(dirname "$SCRIPT")/step-converted.stl"\necho STEP_CONVERT_OK\n`,
+      { mode: 0o755 },
+    );
+
+    const result = await executeParseChild(
+      prepareParams(staged, stepContents, {
+        originalName: "box.step",
+        format: "step",
+        stepConvertBin: fakeOcct,
+      }),
+    );
+
+    expect(result.models).toHaveLength(1);
+    const model = result.models[0]!;
+    expect(model).toMatchObject({
+      format: "stl",
+      derived: true,
+      fileName: "model-0.stl",
+      originalName: "box.stl",
+      thumbFile: "thumb-0.png",
+    });
+    const written = await readFile(join(staged.outDir, model.fileName));
+    expect(written.equals(cube)).toBe(true);
+    expect(model.fileHash).toBe(createHash("sha256").update(cube).digest("hex"));
+  });
+
+  it("reports STEP converter failures with their public code", async () => {
+    const stepContents = await readFile(resolve(process.cwd(), "test-fixtures", "box.step"));
+    const staged = await stage(stepContents);
+    const fakeOcct = join(dir, "fake-occt-broken.sh");
+    await writeFile(fakeOcct, "#!/bin/bash\nexit 0\n", { mode: 0o755 });
+
+    const attempt = executeParseChild(
+      prepareParams(staged, stepContents, {
+        originalName: "box.step",
+        format: "step",
+        stepConvertBin: fakeOcct,
+      }),
+    );
+    await expect(attempt).rejects.toMatchObject({
+      name: "ParseChildPublicError",
+      publicCode: "STEP_CONVERT_FAILED",
+    });
+  });
+
   it("propagates parse rejections for malformed models", async () => {
     const contents = Buffer.from("not an STL");
     const staged = await stage(contents);
