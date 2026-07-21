@@ -209,3 +209,11 @@ model QuotationCounter {
   year    Int @id
   counter Int @default(0)
 }
+
+/// Generic key-value store for runtime, admin-editable app settings (e.g.
+/// catalog material/colour availability under key "catalogAvailability").
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
