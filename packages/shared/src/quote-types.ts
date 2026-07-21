@@ -4,7 +4,56 @@ import { z } from "zod";
  *  Extend these tuples (plus `catalog.ts`) to add options — everything else
  *  (validation, pricing, UI selects) derives from them. */
 export const MATERIAL_IDS = ["PLA", "PETG"] as const;
-export const COLOUR_IDS = ["black", "white"] as const;
+/** The full orderable colour universe (Numakers palette), plus the legacy
+ *  `black`/`white` ids kept accept-only for records created before the palette
+ *  expanded. Which of these a customer may actually pick is a runtime,
+ *  admin-controlled subset — see `catalog-availability.ts`. Display names and
+ *  swatches live in `colours.ts` (`MASTER_COLOURS`), whose keys must stay in
+ *  exact sync with this tuple (enforced by a completeness type + a unit test). */
+export const COLOUR_IDS = [
+  "pitch-black",
+  "pure-white",
+  "lemon-yellow",
+  "mauve-purple",
+  "nuclear-red",
+  "imperial-red",
+  "outrageous-orange",
+  "atomic-pink",
+  "royal-blue",
+  "light-gray",
+  "light-blue",
+  "grass-green",
+  "beige-brown",
+  "teal-blue",
+  "army-green",
+  "dark-gray",
+  "ivory-white",
+  "rust-copper",
+  "apricot",
+  "lagoon-blue",
+  "forest-green",
+  "fluorescent-orange",
+  "fluorescent-green",
+  "transparent",
+  "bahama-yellow",
+  "chocolate-brown",
+  "fluorescent-yellow",
+  "lavender-violet",
+  "magenta",
+  "military-khaki",
+  "ryobix-green",
+  "simply-silver",
+  "midnight-gray",
+  "thanos-purple",
+  "cool-white",
+  "bone-white",
+  "terracota-orange",
+  "water-blue",
+  "light-beige",
+  // Legacy — accept-only, never offered going forward.
+  "black",
+  "white",
+] as const;
 export const LAYER_HEIGHTS_UM = [120, 160, 200] as const;
 export const SUPPORT_MODES = ["auto", "off", "always"] as const;
 export const INFILL_MIN_PCT = 10;
@@ -35,7 +84,7 @@ export type ModelConfig = z.infer<typeof modelConfigSchema>;
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   material: "PLA",
-  colour: "black",
+  colour: "pitch-black",
   layerHeightUm: 200,
   infillPct: 15,
   supports: "auto",

@@ -1,4 +1,5 @@
 import type { BoundingBoxMm, ColourId, MaterialId } from "./quote-types";
+import { MATERIAL_COLOURS } from "./colours";
 
 /**
  * Business configuration: printers, materials, rates.
@@ -65,14 +66,14 @@ export const CATALOG: Catalog = {
       costPerKgPaise: 600_00,
       // Matches filament_density in the flattened Bambu PLA Basic profile.
       densityGcm3: 1.26,
-      colours: ["black", "white"],
+      colours: MATERIAL_COLOURS.PLA,
     },
     PETG: {
       name: "PETG",
       sellPerGramPaise: 250,
       costPerKgPaise: 800_00,
       densityGcm3: 1.27,
-      colours: ["black", "white"],
+      colours: MATERIAL_COLOURS.PETG,
     },
   },
   electricityPerKwhPaise: 10_00,

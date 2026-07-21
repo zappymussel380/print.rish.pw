@@ -1,4 +1,6 @@
 export * from "./catalog";
+export * from "./catalog-availability";
+export * from "./colours";
 export * from "./completion-date";
 export * from "./costs";
 export * from "./filename";
