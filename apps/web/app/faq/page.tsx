@@ -10,11 +10,23 @@ export const metadata: Metadata = {
 const faqs: { q: string; a: string }[] = [
   {
     q: "Which file formats can I upload?",
-    a: "STL, 3MF, OBJ and AMF. STL is the safest export from almost any CAD tool. If your software offers 3MF, prefer it — it preserves units and orientation more reliably.",
+    a: "STL, 3MF, OBJ and AMF — plus STEP/STP, which we convert for you automatically on upload. STL is the safest export from almost any CAD tool. If your software offers 3MF, prefer it — it preserves units and orientation more reliably.",
+  },
+  {
+    q: "Do you design models, or only print them?",
+    a: "Printing is the service — you bring the model and we slice and print it. We're happy to make small edits like a resize, a simple cut, or splitting a part so it fits the bed, but we don't take on custom modeling from scratch yet. If you need something designed, MakerWorld, Printables and Thingiverse have huge free libraries, and those communities are also where you'll find freelance designers.",
   },
   {
     q: "How accurate is the instant quote?",
     a: "Very — it isn't an estimate from geometry, your file is actually sliced by OrcaSlicer with the same Bambu Lab A1 profile the printer runs. The filament weight and print time in your quote come from the generated toolpath itself.",
+  },
+  {
+    q: "Can I gauge weight and cost before I have a file?",
+    a: "Once you upload there's no need to guess — the quote is exact, sliced from your actual model. Before that, model libraries like MakerWorld, Printables, Thingiverse and the Yeggi aggregator usually list a typical weight for popular prints, which is a fair ballpark for material and price. Your real figure can shift a little with the infill and supports you choose.",
+  },
+  {
+    q: "Why is pricing per gram?",
+    a: "Because material is what a print actually consumes, so per-gram billing stays fair and transparent — you pay for your model, not a flat guess. Small items are genuinely cheap: a keychain is only a few grams of filament plus the one-time setup fee. The live per-gram rates for PLA and PETG are on the Pricing page.",
   },
   {
     q: "What's the maximum printable size?",
@@ -22,7 +34,11 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "Which colours are available?",
-    a: "Black and white, in both PLA and PETG, kept permanently in stock. Other colours can usually be arranged on request — ask on WhatsApp before ordering.",
+    a: "Black and white, in both PLA and PETG, kept permanently in stock. For a reasonably large print — roughly 800 g or more — we can order in whatever colour you'd like and print the whole job in it. For smaller prints, other colours can sometimes still be arranged; ask on WhatsApp before ordering.",
+  },
+  {
+    q: "Can you do multicolour prints?",
+    a: "Basic multicolour, yes. We don't run an AMS, so colour changes are done by hand — swapping filament at set points during the print, or printing parts separately and assembling them. It works best when colours split cleanly by layer height or by component rather than blending within a single layer. Tell us on WhatsApp what you have in mind and we'll say what's practical.",
   },
   {
     q: "How long until I get my prints?",
@@ -43,6 +59,10 @@ const faqs: { q: string; a: string }[] = [
   {
     q: "What about supports — do they leave marks?",
     a: "Overhanging geometry needs support material, which is included in your quoted weight. After removal there can be slight surface marks on supported faces. 'Auto' lets the slicer decide where supports are needed; choose 'Off' only if you know your model prints support-free.",
+  },
+  {
+    q: "What's infill, and should I change it?",
+    a: "Infill is the internal lattice inside a print — solid plastic on the outside, an open honeycomb within. More infill means a stronger, heavier and slightly pricier part; less means lighter and cheaper. The default is 15%, which is plenty for most décor and display pieces, and you can set anything from 10% to 60% in the quote tool. Raise it for parts that take real load. Wall count stays fixed at a sturdy two perimeters.",
   },
   {
     q: "How do I pay?",
