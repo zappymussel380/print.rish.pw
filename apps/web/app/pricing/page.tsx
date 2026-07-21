@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CATALOG, formatPaise } from "@print/shared";
+import { CATALOG, formatPaise, isMaterialEnabled, MATERIAL_IDS, type MaterialId } from "@print/shared";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
 
 export const metadata: Metadata = {
   title: "Pricing",
   description: "How print.rish.pw quotations are calculated: real slicing data, per-gram rates, one transparent setup fee.",
 };
 
-export default function PricingPage() {
+export const dynamic = "force-dynamic";
+
+const MATERIAL_BLURB: Record<MaterialId, string> = {
+  PLA: "The everyday material — crisp detail, easy on the wallet.",
+  PETG: "Tougher, heat-resistant parts for real-world use.",
+};
+
+export default async function PricingPage() {
   const { setupFeePaise, materials, electricityPerKwhPaise, maintenancePerGramPaise, printers } =
     CATALOG;
   const printer = printers[CATALOG.defaultPrinterId]!;
+  const availability = await getCatalogAvailability();
+  const shownMaterials = MATERIAL_IDS.filter((m) => isMaterialEnabled(availability, m));
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
@@ -31,22 +41,16 @@ export default function PricingPage() {
             <p className="mt-2 text-2xl font-[650] tracking-tight">{formatPaise(setupFeePaise)}</p>
             <p className="mt-1 text-sm text-muted">Once per order, however many files you upload.</p>
           </div>
-          <div className="tile p-5">
-            <p className="eyebrow text-[0.7rem]">PLA</p>
-            <p className="mt-2 text-2xl font-[650] tracking-tight">
-              {formatPaise(materials.PLA.sellPerGramPaise)}
-              <span className="text-sm font-[450] text-muted"> / gram</span>
-            </p>
-            <p className="mt-1 text-sm text-muted">The everyday material — crisp detail, easy on the wallet.</p>
-          </div>
-          <div className="tile p-5">
-            <p className="eyebrow text-[0.7rem]">PETG</p>
-            <p className="mt-2 text-2xl font-[650] tracking-tight">
-              {formatPaise(materials.PETG.sellPerGramPaise)}
-              <span className="text-sm font-[450] text-muted"> / gram</span>
-            </p>
-            <p className="mt-1 text-sm text-muted">Tougher, heat-resistant parts for real-world use.</p>
-          </div>
+          {shownMaterials.map((m) => (
+            <div key={m} className="tile p-5">
+              <p className="eyebrow text-[0.7rem]">{m}</p>
+              <p className="mt-2 text-2xl font-[650] tracking-tight">
+                {formatPaise(materials[m].sellPerGramPaise)}
+                <span className="text-sm font-[450] text-muted"> / gram</span>
+              </p>
+              <p className="mt-1 text-sm text-muted">{MATERIAL_BLURB[m]}</p>
+            </div>
+          ))}
         </div>
       </section>
 

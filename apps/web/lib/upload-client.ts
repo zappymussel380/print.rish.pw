@@ -1,4 +1,5 @@
 import type {
+  ColourId,
   IngestPublicFailure,
   MaterialId,
   UploadedModelDto,
@@ -31,8 +32,8 @@ export function hasAcceptedExtension(name: string): boolean {
   return ACCEPTED_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
-export function defaultMaterialColour(): { material: MaterialId; colour: "black" | "white" } {
-  return { material: "PLA", colour: "black" };
+export function defaultMaterialColour(): { material: MaterialId; colour: ColourId } {
+  return { material: "PLA", colour: "pitch-black" };
 }
 
 /**

@@ -4,15 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import {
+  type ColourId,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
   LAYER_HEIGHTS_UM,
-  MATERIAL_IDS,
+  type MaterialId,
   MAX_QUANTITY,
   type ModelConfig,
   SUPPORT_MODES,
 } from "@print/shared";
 import { useQuoteStore } from "@/lib/quote-store";
+import { useCatalog } from "@/lib/use-catalog";
 
 const SUPPORT_LABEL: Record<(typeof SUPPORT_MODES)[number], string> = {
   auto: "Auto",
@@ -35,6 +37,28 @@ export function SettingsPanel({
   const set = (patch: Partial<ModelConfig>) => update(modelKey, patch);
   const supportLocked = lockedConfig?.supports === true;
 
+  const catalog = useCatalog();
+  const enabledMaterials = catalog.materials.filter((m) => m.enabled);
+  const currentMaterial = catalog.materials.find((m) => m.id === config.material);
+  const enabledColours = (currentMaterial?.colours ?? []).filter((c) => c.enabled);
+
+  // Keep the selection valid as availability loads or the operator changes it:
+  // fall back to the first enabled material, and reset the colour when it isn't
+  // offered in the chosen material.
+  useEffect(() => {
+    if (enabledMaterials.length === 0) return;
+    if (!enabledMaterials.some((m) => m.id === config.material)) {
+      set({ material: enabledMaterials[0]!.id });
+    }
+  }, [catalog, config.material]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (enabledColours.length === 0) return;
+    if (!enabledColours.some((c) => c.id === config.colour)) {
+      set({ colour: enabledColours[0]!.id });
+    }
+  }, [catalog, config.material, config.colour]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <Field
@@ -44,23 +68,33 @@ export function SettingsPanel({
       >
         <Segmented
           value={config.material}
-          options={MATERIAL_IDS.map((m) => ({ value: m, label: m }))}
-          onChange={(v) => set({ material: v })}
+          options={enabledMaterials.map((m) => ({ value: m.id as MaterialId, label: m.id }))}
+          onChange={(v) => {
+            const next = catalog.materials.find((m) => m.id === v);
+            const nextColours = (next?.colours ?? []).filter((c) => c.enabled);
+            const firstColour = nextColours[0]?.id;
+            const keepColour = nextColours.some((c) => c.id === config.colour);
+            set({
+              material: v,
+              ...(keepColour || firstColour === undefined ? {} : { colour: firstColour }),
+            });
+          }}
         />
       </Field>
 
       <Field
         label="Colour"
-        info="The filament colour your part is printed in. Black and white are in stock; ask on WhatsApp for other colours. Colour has no effect on the price."
+        info="The filament colour your part is printed in. Colour has no effect on the price — ask on WhatsApp if you'd like a colour that isn't listed."
       >
-        <Segmented
-          value={config.colour}
-          options={[
-            { value: "black", label: "Black" },
-            { value: "white", label: "White" },
-          ]}
-          onChange={(v) => set({ colour: v })}
-        />
+        {enabledColours.length > 0 ? (
+          <ColourSelect
+            value={config.colour}
+            options={enabledColours}
+            onChange={(v) => set({ colour: v })}
+          />
+        ) : (
+          <p className="text-sm text-muted">No colours available — please ask on WhatsApp.</p>
+        )}
       </Field>
 
       <Field
@@ -311,6 +345,44 @@ function Segmented<T extends string | number>({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** A wrapping grid of colour swatches; the selected swatch is ringed and its
+ *  name shown beneath. Each swatch is a labelled toggle button for a11y. */
+function ColourSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: ColourId;
+  options: { id: ColourId; name: string; hex: string }[];
+  onChange: (id: ColourId) => void;
+}) {
+  const selected = options.find((o) => o.id === value);
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Colour">
+        {options.map((o) => {
+          const active = o.id === value;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              aria-pressed={active}
+              aria-label={o.name}
+              title={o.name}
+              onClick={() => onChange(o.id)}
+              className={`size-7 rounded-full border border-line transition-transform hover:scale-110 ${
+                active ? "ring-2 ring-accent ring-offset-2 ring-offset-bg" : ""
+              }`}
+              style={{ background: o.hex }}
+            />
+          );
+        })}
+      </div>
+      <span className="mt-2 block text-xs text-muted">{selected?.name ?? "—"}</span>
     </div>
   );
 }
