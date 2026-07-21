@@ -331,55 +331,117 @@ export async function runSlice(
   }
 
   const jobProcess = await writeJobProcess(workDir, settings);
-  const machine = join(config.profilesDir, MACHINE_PROFILE);
-  const filament = join(config.profilesDir, filamentProfile(settings.material));
+  const profiles: OrcaSliceProfiles = {
+    jobProcess,
+    machine: join(config.profilesDir, MACHINE_PROFILE),
+    filament: join(config.profilesDir, filamentProfile(settings.material)),
+    identity,
+  };
   const prearrangedPlate = await isPrearrangedPlateStl(stagedPath);
 
+  // Primary path: let Orca auto-orient — it already evaluates many orientations
+  // and picks the lowest-support one. A prearranged plate keeps its authored
+  // orientation and placement untouched.
+  const primary = await runOrcaSlice(
+    stagedPath,
+    { orient: !prearrangedPlate, arrange: !prearrangedPlate, ensureOnBed: prearrangedPlate },
+    workDir,
+    profiles,
+    onProgress,
+  );
+
+  if (primary.ok || prearrangedPlate || !shouldRetryOrientation(primary)) {
+    return primary;
+  }
+
+  // Auto-orient can settle on a pose it then cannot place on the bed (typical of
+  // large flat panels). Fall back to a single re-slice in the model's submitted
+  // orientation, letting Orca only arrange it onto the plate — for flat panels
+  // this is already the low-support pose the customer authored in their slicer.
+  onProgress?.({ percent: 20, message: "Retrying in the submitted orientation" });
+  const fallback = await runOrcaSlice(
+    stagedPath,
+    { orient: false, arrange: true, ensureOnBed: false },
+    workDir,
+    profiles,
+    onProgress,
+  );
+  return fallback.ok ? fallback : primary;
+}
+
+interface OrcaSliceProfiles {
+  jobProcess: string;
+  machine: string;
+  filament: string;
+  identity: SlicerIdentity;
+}
+
+interface OrcaSliceOpts {
+  orient: boolean;
+  arrange: boolean;
+  ensureOnBed: boolean;
+}
+
+/** Run one Orca slice of `modelPath` inside `runDir` (which must already hold
+ * the orca-data/home/xdg subdirs Orca writes into) and map its output to a
+ * SliceOutcome. Shared by the primary slice and the submitted-orientation retry. */
+async function runOrcaSlice(
+  modelPath: string,
+  opts: OrcaSliceOpts,
+  runDir: string,
+  profiles: OrcaSliceProfiles,
+  onProgress?: (progress: OrcaProgress) => void,
+): Promise<SliceOutcome> {
   const args = [
     "--datadir",
-    join(workDir, "orca-data"),
+    join(runDir, "orca-data"),
     "--load-settings",
-    `${machine};${jobProcess}`,
+    `${profiles.machine};${profiles.jobProcess}`,
     "--load-filaments",
-    filament,
+    profiles.filament,
     "--orient",
-    prearrangedPlate ? "0" : "1",
+    opts.orient ? "1" : "0",
     "--arrange",
-    prearrangedPlate ? "0" : "1",
+    opts.arrange ? "1" : "0",
     "--slice",
     "0",
     "--export-3mf",
     "out.3mf",
     "--outputdir",
-    workDir,
+    runDir,
     "--debug",
     "1",
     "--logfile",
-    join(workDir, "orca.log"),
+    join(runDir, "orca.log"),
   ];
-  if (prearrangedPlate) args.push("--ensure-on-bed");
-  args.push(stagedPath);
+  if (opts.ensureOnBed) args.push("--ensure-on-bed");
+  args.push(modelPath);
 
-  const run = await runOrca(args, workDir, identity, onProgress);
+  const run = await runOrca(args, runDir, profiles.identity, onProgress);
 
   if (run.timedOut) {
     return fail("TIMEOUT", `Slicing exceeded ${Math.round(config.sliceTimeoutMs / 1000)}s`, run);
   }
 
-  let archive: Uint8Array;
   try {
     onProgress?.({ percent: 97, message: "Reading slice results" });
-    archive = await readRegularFile(
-      join(workDir, "out.3mf"),
+    const archive = await readRegularFile(
+      join(runDir, "out.3mf"),
       MAX_SLICER_ARCHIVE_BYTES,
       "Slicer output archive",
     );
+    return parseSliceInfo(archive, run);
   } catch {
-    const detail = await describeMissingOutput(workDir, run);
+    const detail = await describeMissingOutput(runDir, run);
     return fail(detail.code, detail.message, run, detail.rawMeta);
   }
+}
 
-  return parseSliceInfo(archive, run);
+/** A timeout or OOM will not be cured by re-slicing in the submitted orientation
+ * (and would only double the cost), so those failures stop here. Anything else —
+ * an unplaceable auto-orient, empty plate, no output — is worth one retry. */
+function shouldRetryOrientation(outcome: SliceOutcome): boolean {
+  return outcome.errorCode !== "TIMEOUT" && outcome.errorCode !== "OUT_OF_MEMORY";
 }
 
 async function stageModel(

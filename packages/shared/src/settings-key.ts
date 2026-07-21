@@ -3,7 +3,7 @@ import type { ModelFormat } from "./filename";
 
 /** Bump whenever OrcaSlicer or a machine/process/filament profile changes in a
  * way that can affect toolpaths. Old rows remain harmless cache misses. */
-export const SLICE_PIPELINE_VERSION = "orca-2.4.1-a1-v1";
+export const SLICE_PIPELINE_VERSION = "orca-2.4.1-a1-v2";
 
 /**
  * Canonical cache key for a slice-settings combination.

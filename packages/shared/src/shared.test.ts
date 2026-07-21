@@ -62,7 +62,7 @@ describe("settingsKey", () => {
 
   it("scopes persistent cache entries to format and slicer/profile version", () => {
     const settings = { material: "PLA", layerHeightUm: 160, infillPct: 25, supports: "auto" } as const;
-    expect(sliceArtifactKey("stl", settings)).toBe("orca-2.4.1-a1-v1:stl:PLA:160:25:auto");
+    expect(sliceArtifactKey("stl", settings)).toBe("orca-2.4.1-a1-v2:stl:PLA:160:25:auto");
     expect(sliceArtifactKey("obj", settings)).not.toBe(sliceArtifactKey("stl", settings));
   });
 });
