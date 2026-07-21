@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import {
+  assertConfigAvailable,
   CATALOG,
   modelConfigSchema,
   priceQuote,
@@ -9,6 +10,7 @@ import {
   settingsKey,
 } from "@print/shared";
 import { jsonError, readJsonBody } from "@/lib/api-util";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { env } from "@/lib/env";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { assertSameOrigin, clientIp, rateLimit, RATE_LIMITS } from "@/lib/security";
@@ -79,11 +81,13 @@ async function rebuildTotals(
 
   const inputs: QuoteLineInput[] = [];
   const seen = new Set<string>();
+  const availability = await getCatalogAvailability();
   for (const line of lines) {
     const { modelId, ...rawConfig } = line;
     const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
     if (!model) return null;
     const config = normalizeModelConfigLocks(rawConfig, model);
+    if (!assertConfigAvailable(config, availability).ok) return null;
     const lineKey = `${modelId}::${settingsKey(config)}`;
     if (seen.has(lineKey)) continue;
     seen.add(lineKey);

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { Prisma, prisma, type Quotation } from "@print/db";
 import {
+  assertConfigAvailable,
   CATALOG,
   customerSchema,
   estimateCompletionDate,
@@ -13,6 +14,7 @@ import {
   summariseItems,
 } from "@print/shared";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { env } from "@/lib/env";
 import { logger, safeErrorMessage } from "@/lib/logger";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
@@ -100,6 +102,7 @@ async function postQuotation(request: NextRequest) {
   // becomes a financial document, so the server must never reinterpret what
   // the customer submitted. The legit client can't produce duplicates.
   const seenModels = new Set<string>();
+  const availability = await getCatalogAvailability();
 
   for (const raw of rawItems) {
     const modelId = (raw as { modelId?: unknown })?.modelId;
@@ -119,6 +122,11 @@ async function postQuotation(request: NextRequest) {
     }
 
     const normalizedConfig = normalizeModelConfigLocks(config.data, model);
+
+    const available = assertConfigAvailable(normalizedConfig, availability);
+    if (!available.ok) {
+      return jsonError(422, available.code, available.message);
+    }
 
     const slice = await prisma.sliceResult.findUnique({
       where: {

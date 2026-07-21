@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Prisma, prisma } from "@print/db";
 import {
+  assertConfigAvailable,
   type SliceJobData,
   sliceArtifactKey,
   sliceJobId,
   sliceSettingsSchema,
 } from "@print/shared";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { getSliceQueue } from "@/lib/queue";
 import { RATE_LIMITS } from "@/lib/security";
@@ -46,6 +48,11 @@ export async function POST(request: NextRequest) {
   });
   if (!model) return jsonError(404, "NOT_FOUND", "Model not found in this session");
   const settings = normalizeModelConfigLocks(parsed.data, model);
+
+  // Don't spend the worker on a material that's been turned off. Colour isn't a
+  // slice setting, so only the material is checked here.
+  const material = assertConfigAvailable(settings, await getCatalogAvailability());
+  if (!material.ok) return jsonError(422, material.code, material.message);
 
   const key = sliceArtifactKey(model.format as "stl" | "3mf" | "obj" | "amf", settings);
 
