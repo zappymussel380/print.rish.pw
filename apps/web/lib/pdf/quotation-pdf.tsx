@@ -245,18 +245,6 @@ function AnnexurePage({
           <Text style={[s.sectionLabel, { marginTop: 14 }]}>
             Price ({settings.quantity} {settings.quantity === 1 ? "print" : "prints"})
           </Text>
-          <View style={s.totalRow}>
-            <Text style={{ color: MUTED }}>Material</Text>
-            <Text>{money(pricing.materialPaise)}</Text>
-          </View>
-          <View style={s.totalRow}>
-            <Text style={{ color: MUTED }}>Electricity</Text>
-            <Text>{money(pricing.electricityPaise)}</Text>
-          </View>
-          <View style={s.totalRow}>
-            <Text style={{ color: MUTED }}>Maintenance</Text>
-            <Text>{money(pricing.maintenancePaise)}</Text>
-          </View>
           <View style={s.grandRow}>
             <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>Line total</Text>
             <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10, color: ACCENT }}>
