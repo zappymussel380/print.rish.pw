@@ -23,7 +23,7 @@ const PLA_ONLY: readonly MaterialId[] = ["PLA"];
 export const MASTER_COLOURS: Record<ColourId, ColourDef> = {
   "pitch-black": { name: "Pitch Black", hex: "#141414", materials: PLA_PETG },
   "pure-white": { name: "Pure White", hex: "#F7F7F4", materials: PLA_PETG },
-  "lemon-yellow": { name: "Lemon Yellow", hex: "#F6E400", materials: PLA_ONLY },
+  "lemon-yellow": { name: "Lemon Yellow", hex: "#F6E400", materials: PLA_PETG },
   "mauve-purple": { name: "Mauve Purple", hex: "#915F84", materials: PLA_PETG },
   "nuclear-red": { name: "Nuclear Red", hex: "#E10E1A", materials: PLA_PETG },
   "imperial-red": { name: "Imperial Red", hex: "#C41E28", materials: PLA_ONLY },
