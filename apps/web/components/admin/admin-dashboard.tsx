@@ -27,11 +27,13 @@ export interface QuotationRow {
   grams: number;
   printSeconds: number;
   totalPaise: number;
+  profitPaise: number;
 }
 
 export interface AdminStats {
   total: number;
   revenuePaise: number;
+  profitPaise: number;
   aovPaise: number;
   printHours: number;
   filamentKg: number;
@@ -158,6 +160,11 @@ export function AdminDashboard({
       <div className="mt-3">
         <MaterialSplit pla={stats.plaGrams} petg={stats.petgGrams} />
       </div>
+      <p className="mt-3 text-xs text-faint">
+        Lifetime · Revenue {formatPaise(stats.revenuePaise)} · Profit{" "}
+        <span className="font-[600] text-muted">{formatPaise(stats.profitPaise)}</span>
+        <span className="text-faint"> (est.)</span>
+      </p>
 
       {/* Controls */}
       <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -196,6 +203,7 @@ export function AdminDashboard({
               <Th>Customer</Th>
               <Th className="text-right">Models</Th>
               <Th className="text-right">Total</Th>
+              <Th className="text-right">Profit</Th>
               <Th>Status</Th>
               <Th className="text-right">Actions</Th>
             </tr>
@@ -213,6 +221,7 @@ export function AdminDashboard({
                 </td>
                 <td className="py-3 pr-3 text-right text-muted">{row.models}</td>
                 <td className="py-3 pr-3 text-right font-[600]">{formatPaise(row.totalPaise)}</td>
+                <td className="py-3 pr-3 text-right text-muted">{formatPaise(row.profitPaise)}</td>
                 <td className="py-3 pr-3">
                   <select
                     value={row.status}
