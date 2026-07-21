@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { type Prisma, prisma } from "@print/db";
-import { estimateOrderCostPaise, type CostItem } from "@print/shared";
+import { estimateOrderCostPaise, type CostItem, toPublicCatalog } from "@print/shared";
 import {
   AdminDashboard,
   type AdminStats,
   type QuotationRow,
 } from "@/components/admin/admin-dashboard";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { isAdmin } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -48,8 +49,9 @@ export default async function AdminPage() {
   }));
 
   const stats = computeStats(quotations);
+  const catalog = toPublicCatalog(await getCatalogAvailability());
 
-  return <AdminDashboard quotations={rows} stats={stats} />;
+  return <AdminDashboard quotations={rows} stats={stats} catalog={catalog} />;
 }
 
 type QuotationWithItems = Prisma.QuotationGetPayload<{ include: { items: true } }>;

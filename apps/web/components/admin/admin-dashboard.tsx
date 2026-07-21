@@ -11,7 +11,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { formatPaise } from "@print/shared";
+import { formatPaise, type PublicMaterial } from "@print/shared";
 
 export interface QuotationRow {
   id: string;
@@ -58,9 +58,11 @@ const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short
 export function AdminDashboard({
   quotations,
   stats,
+  catalog,
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
+  catalog: { materials: PublicMaterial[] };
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -165,6 +167,9 @@ export function AdminDashboard({
         <span className="font-[600] text-muted">{formatPaise(stats.profitPaise)}</span>
         <span className="text-faint"> (est.)</span>
       </p>
+
+      {/* Catalog availability */}
+      <CatalogEditor catalog={catalog} />
 
       {/* Controls */}
       <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -313,6 +318,150 @@ function MaterialSplit({ pla, petg }: { pla: number; petg: number }) {
         <div className="h-full bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" style={{ width: `${100 - plaPct}%` }} />
       </div>
     </div>
+  );
+}
+
+interface CatalogEditState {
+  materials: Record<string, boolean>;
+  colours: Record<string, Record<string, boolean>>;
+}
+
+function toEditState(catalog: { materials: PublicMaterial[] }): CatalogEditState {
+  const materials: Record<string, boolean> = {};
+  const colours: Record<string, Record<string, boolean>> = {};
+  for (const m of catalog.materials) {
+    materials[m.id] = m.enabled;
+    const row: Record<string, boolean> = {};
+    for (const c of m.colours) row[c.id] = c.enabled;
+    colours[m.id] = row;
+  }
+  return { materials, colours };
+}
+
+/** Enable/disable materials and, per material, each colour in the Numakers
+ *  palette. Saves the whole availability blob at once. */
+function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }) {
+  const router = useRouter();
+  const [state, setState] = useState<CatalogEditState>(() => toEditState(catalog));
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const mutate = (fn: (draft: CatalogEditState) => void) => {
+    setState((prev) => {
+      const next: CatalogEditState = {
+        materials: { ...prev.materials },
+        colours: Object.fromEntries(
+          Object.entries(prev.colours).map(([m, cs]) => [m, { ...cs }]),
+        ),
+      };
+      fn(next);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const setAllColours = (material: string, on: boolean) =>
+    mutate((d) => {
+      for (const id of Object.keys(d.colours[material] ?? {})) d.colours[material]![id] = on;
+    });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const colours: Record<string, string[]> = {};
+      for (const m of catalog.materials) {
+        colours[m.id] = m.colours.filter((c) => state.colours[m.id]?.[c.id]).map((c) => c.id);
+      }
+      const res = await fetch("/api/admin/catalog", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: JSON.stringify({ materials: state.materials, colours }),
+      });
+      if (!res.ok) {
+        alert("Saving catalog changes failed.");
+        return;
+      }
+      setDirty(false);
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <details className="tile mt-4 p-0 [&_summary]:list-none">
+      <summary className="flex cursor-pointer items-center justify-between p-4 text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
+        <span>Catalog · materials &amp; colours</span>
+        <span className="text-faint">manage</span>
+      </summary>
+      <div className="space-y-6 border-t border-line p-4">
+        {catalog.materials.map((m) => {
+          const enabledCount = m.colours.filter((c) => state.colours[m.id]?.[c.id]).length;
+          const materialOn = state.materials[m.id];
+          return (
+            <div key={m.id}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm font-[650]">
+                  <input
+                    type="checkbox"
+                    checked={materialOn}
+                    onChange={(e) => mutate((d) => (d.materials[m.id] = e.target.checked))}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  {m.name}
+                  <span className="text-xs font-[450] text-faint">
+                    {enabledCount}/{m.colours.length} colours
+                  </span>
+                </label>
+                <div className="flex items-center gap-2 text-xs">
+                  <button type="button" className="btn-ghost" onClick={() => setAllColours(m.id, true)}>
+                    All
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={() => setAllColours(m.id, false)}>
+                    None
+                  </button>
+                </div>
+              </div>
+              <div
+                className={`mt-3 flex flex-wrap gap-1.5 ${materialOn ? "" : "pointer-events-none opacity-40"}`}
+              >
+                {m.colours.map((c) => {
+                  const on = state.colours[m.id]?.[c.id] ?? false;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => mutate((d) => (d.colours[m.id]![c.id] = !on))}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        on ? "border-accent text-text" : "border-line text-faint hover:text-muted"
+                      }`}
+                    >
+                      <span
+                        className="size-3 rounded-full border border-line"
+                        style={{ background: c.hex }}
+                      />
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={save}
+            disabled={!dirty || saving}
+            className="btn-pill text-sm disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+          {dirty && !saving ? <span className="text-xs text-faint">Unsaved changes</span> : null}
+        </div>
+      </div>
+    </details>
   );
 }
 
