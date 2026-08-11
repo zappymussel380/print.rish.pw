@@ -272,7 +272,16 @@ export async function killIdentityProcesses(uid: number): Promise<void> {
       try {
         status = await readFile(`/proc/${entry}/status`, "utf8");
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+        // The pid list is a snapshot, so a task can exit between readdir and
+        // this read. Linux reports that as ENOENT when the entry is already
+        // gone, or ESRCH when the task dies mid-read. Both mean the pid is no
+        // longer running, which is the state this reap is trying to reach —
+        // and the kill below already treats ESRCH as success for the same
+        // reason. Letting either escape aborts the job and, via the caller,
+        // exits the orchestrator over an unrelated process exiting at an
+        // unlucky moment.
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ESRCH") continue;
         throw err;
       }
       const processUid = Number(status.match(/^Uid:\s+(\d+)/m)?.[1]);
