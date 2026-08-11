@@ -28,10 +28,11 @@ updates:
       # Node 26 is not LTS until October 2026; revisit after it enters LTS.
       - dependency-name: node
         update-types: ["version-update:semver-major"]
-      # Ubuntu 26.04 can affect the native OrcaSlicer runtime; revisit after an
-      # image-level Orca slicing smoke test succeeds on the new base.
-      - dependency-name: ubuntu
-        update-types: ["version-update:semver-major"]
+      # Ubuntu majors are no longer ignored: the image-level Orca slicing smoke
+      # test has been run against 26.04 and passes, and the base is now on that
+      # LTS. Note Dependabot ranks purely by version number and will happily
+      # propose interim releases (24.10, 25.04, 25.10) that are already end of
+      # life — only LTS bases belong here.
 
   - package-ecosystem: github-actions
     directory: /

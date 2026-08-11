@@ -11,7 +11,7 @@ import { join } from "node:path";
  * is detected by the stdout sentinel AND the output file existing — never by
  * the exit code. */
 
-export const DEFAULT_STEP_CONVERT_BIN = "/usr/bin/occt-draw-7.6";
+export const DEFAULT_STEP_CONVERT_BIN = "/usr/bin/occt-draw";
 const DEFAULT_TIMEOUT_MS = 120_000;
 /** Tessellation of a CAD solid can legitimately outgrow its STEP source. */
 const DEFAULT_MAX_STL_BYTES = 512 * 1024 * 1024;

@@ -83,7 +83,7 @@ one. Review vendor retention/access terms before enabling it.
 | `THUMB_SIZE` | `512` | Square PNG size; hard maximum 1024 px. |
 | `ORCA_BIN` | `/opt/orca/AppRun` | Baked-in executable. |
 | `ORCA_VERSION` | `2.4.1` | Must agree with the pinned image/cache pipeline version. |
-| `STEP_CONVERT_BIN` | `/usr/bin/occt-draw-7.6` | OpenCASCADE DRAW harness used to tessellate STEP uploads inside the parse sandbox (baked into the worker image). |
+| `STEP_CONVERT_BIN` | `/usr/bin/occt-draw` | OpenCASCADE DRAW harness used to tessellate STEP uploads inside the parse sandbox (baked into the worker image). |
 | `STEP_CONVERT_TIMEOUT_SECONDS` | `120` | Per-file STEP→STL conversion timeout; hard maximum 600 seconds. |
 | `PROFILES_DIR` | worker profiles | Flattened, committed A1 profiles. |
 | `SLICE_WORK_DIR` | `/tmp/slice-jobs` | Private per-job scratch root. |

@@ -54,7 +54,7 @@ export const config = {
   parseWorkRoot: str("PARSE_WORK_DIR", "/tmp/parse-jobs"),
   parseTimeoutMs: Math.min(int("PARSE_TIMEOUT_SECONDS", 600), 900) * 1000,
   /** OpenCASCADE DRAW harness used for STEP→STL tessellation in the child. */
-  stepConvertBin: str("STEP_CONVERT_BIN", "/usr/bin/occt-draw-7.6"),
+  stepConvertBin: str("STEP_CONVERT_BIN", "/usr/bin/occt-draw"),
   stepConvertTimeoutMs: Math.min(int("STEP_CONVERT_TIMEOUT_SECONDS", 120), 600) * 1000,
   storageUid: int("STORAGE_UID", 1001),
   storageGid: int("STORAGE_GID", 1001),

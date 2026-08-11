@@ -175,7 +175,7 @@ if (!model || typeof model.id !== "string" || model.format !== "stl" || model.fi
 
 // STEP leg: exercises the sandboxed OpenCASCADE conversion end to end. Skips
 // cleanly where the converter is not installed (e.g. a dev laptop).
-const stepConverter = process.env.STEP_CONVERT_BIN ?? "/usr/bin/occt-draw-7.6";
+const stepConverter = process.env.STEP_CONVERT_BIN ?? "/usr/bin/occt-draw";
 if (existsSync(stepConverter)) {
   const stepFixture = Buffer.from(
     await readFile(new URL("../../worker/test-fixtures/box.step", import.meta.url)),
