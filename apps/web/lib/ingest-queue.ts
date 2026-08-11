@@ -1,4 +1,4 @@
-import type { Queue } from "bullmq";
+import type { JobType, Queue } from "bullmq";
 import {
   INGEST_ADMISSION_KEY,
   INGEST_ADMISSION_TTL_SECONDS,
@@ -63,17 +63,17 @@ export async function releaseIngestAdmission(ticket: string): Promise<void> {
 
 /** Return the count of active/waiting jobs ahead in one Redis snapshot.
  * BullMQ's waiting list is reversed internally; `asc=true` presents FIFO order.
- * Including `paused` keeps positions honest during an operational queue pause. */
+ * Including `paused` keeps positions honest during an operational queue pause.
+ * bullmq 6 dropped `paused` from the public JobType union, but pausing still
+ * renames the wait list to `paused` and getRanges still reads that key, so the
+ * state is only unspeakable in the types — not gone. */
+const INGEST_AHEAD_TYPES: JobType[] = ["active", "waiting", "paused" as JobType];
+
 export async function getIngestCountAhead(
   queue: Queue<IngestJobData, IngestJobResult>,
   ticket: string,
 ): Promise<number | null> {
-  const ids = await queue.getRanges(
-    ["active", "waiting", "paused"],
-    0,
-    INGEST_MAX_WAITING,
-    true,
-  );
+  const ids = await queue.getRanges(INGEST_AHEAD_TYPES, 0, INGEST_MAX_WAITING, true);
   const index = ids.indexOf(ticket);
   return index === -1 ? null : index;
 }

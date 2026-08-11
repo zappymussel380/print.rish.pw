@@ -398,14 +398,15 @@ ingestWorker.on("ready", () => log.info("ingest worker ready"));
 // --- daily data-retention sweep (repeatable) ---
 const MAINTENANCE_QUEUE = "maintenance";
 const maintenanceQueue = new Queue(MAINTENANCE_QUEUE, { connection: redisOptions() });
-await maintenanceQueue.add(
+// bullmq 6 dropped `repeat` from Queue.add; job schedulers are the replacement.
+// Upserting an already-registered scheduler does not re-emit, so the separate
+// startup job below is still what guarantees a sweep on every worker boot.
+await maintenanceQueue.upsertJobScheduler(
   "retention",
-  {},
+  { every: 24 * 3600 * 1000 },
   {
-    repeat: { every: 24 * 3600 * 1000 },
-    jobId: "retention",
-    removeOnComplete: true,
-    removeOnFail: 20,
+    name: "retention",
+    opts: { removeOnComplete: true, removeOnFail: 20 },
   },
 );
 await maintenanceQueue.add("retention", {}, {
