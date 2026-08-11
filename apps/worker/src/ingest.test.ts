@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
     dir: "",
     storageReserveBytes: 1,
     maxUploadBytes: 10 * 1024 * 1024,
-    stepConvertBin: "/usr/bin/occt-draw-7.6",
+    stepConvertBin: "/usr/bin/occt-draw",
   },
   count: vi.fn(),
   aggregate: vi.fn(),

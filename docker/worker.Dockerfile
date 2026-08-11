@@ -10,7 +10,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------- stage 1: fetch + extract OrcaSlicer ----------
-FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS orca
+# Upstream publishes no 26.04 AppImage; the Ubuntu2404 build is what ships, and
+# it runs on this base (verified by an image-level slice of a real STL). Keep
+# the AppImage name pinned to 2404 even as the base moves forward.
+FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03 AS orca
 
 ARG ORCA_VERSION=2.4.1
 ARG ORCA_SHA256=7aff29a0ac6bb906f11c069eefe83459781c3364bac20ba9529eb9937a231402
@@ -46,7 +49,7 @@ RUN pnpm --filter @print/db generate \
     && rm -rf /opt/worker-app/test-fixtures /opt/worker-app/src /opt/worker-app/build.mjs
 
 # ---------- stage 3: runtime ----------
-FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03
 
 ARG ORCA_VERSION=2.4.1
 ENV ORCA_VERSION=${ORCA_VERSION} \
@@ -74,9 +77,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen \
-    # DRAW dlopens its plugins by unversioned soname (libTKXSDRAW.so, ...),
-    # but Ubuntu ships those symlinks only in the -dev packages.
-    && for f in /usr/lib/x86_64-linux-gnu/libTK*.so.7; do ln -sf "$f" "${f%.7}"; done
+    # DRAW dlopens its plugins by unversioned soname (libTKXSDRAW.so, ...), but
+    # Ubuntu ships those symlinks only in the -dev packages. The versioned
+    # suffix tracks the OpenCASCADE release — .so.7 under 24.04's OCCT 7.6,
+    # .so.7.9 under 26.04's 7.9.2 — so derive the target rather than hardcode
+    # it. A hardcoded suffix that matches nothing is not caught by the shell:
+    # the unexpanded pattern is passed through literally and `ln -sf` happily
+    # creates a dangling link named "libTK*.so", so the image builds green and
+    # STEP conversion fails only at runtime. Assert instead.
+    && linked=0 \
+    && for f in /usr/lib/x86_64-linux-gnu/libTK*.so.*; do \
+           [ -e "$f" ] || continue; \
+           target="${f%%.so.*}.so"; \
+           [ -e "$target" ] || ln -sf "$f" "$target"; \
+           linked=$((linked + 1)); \
+       done \
+    && if [ "$linked" -eq 0 ] || [ ! -e /usr/lib/x86_64-linux-gnu/libTKXSDRAW.so ]; then \
+           echo "FATAL: OpenCASCADE plugin symlinks missing; STEP conversion would break" >&2; \
+           exit 1; \
+       fi
 
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 

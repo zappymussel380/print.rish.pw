@@ -6,7 +6,7 @@ import { parseModel } from "@print/geometry";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { StepConvertError, convertStepToStl } from "./step-convert.js";
 
-const REAL_BIN = "/usr/bin/occt-draw-7.6";
+const REAL_BIN = "/usr/bin/occt-draw";
 
 let root: string;
 let scratch: string;

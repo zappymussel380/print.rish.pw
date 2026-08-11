@@ -137,10 +137,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends occt-draw
           # DRAW dlopens plugins by unversioned soname; Ubuntu ships those
-          # symlinks only in the -dev packages.
-          for f in /usr/lib/x86_64-linux-gnu/libTK*.so.7; do
-            sudo ln -sf "$f" "${f%.7}"
+          # symlinks only in the -dev packages. Derive the versioned suffix
+          # rather than hardcoding it: it tracks the OpenCASCADE release, and
+          # an unmatched glob would be passed through literally, creating a
+          # dangling "libTK*.so" link and leaving the STEP leg broken while the
+          # job still went green. Mirrors docker/worker.Dockerfile.
+          linked=0
+          for f in /usr/lib/x86_64-linux-gnu/libTK*.so.*; do
+            [ -e "$f" ] || continue
+            target="${f%%.so.*}.so"
+            [ -e "$target" ] || sudo ln -sf "$f" "$target"
+            linked=$((linked + 1))
           done
+          if [ "$linked" -eq 0 ] || [ ! -e /usr/lib/x86_64-linux-gnu/libTKXSDRAW.so ]; then
+            echo "FATAL: OpenCASCADE plugin symlinks missing; STEP leg would break" >&2
+            exit 1
+          fi
 
       - name: Generate Prisma client
         run: pnpm --filter @print/db generate

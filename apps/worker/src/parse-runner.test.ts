@@ -105,7 +105,7 @@ describe("runPreparedParse", () => {
         sandbox: false,
       }),
     ).rejects.toMatchObject({
-      failure: { code: "PARAMS_ECHO", message: "step /usr/bin/occt-draw-7.6 120000" },
+      failure: { code: "PARAMS_ECHO", message: "step /usr/bin/occt-draw 120000" },
     });
   });
 
