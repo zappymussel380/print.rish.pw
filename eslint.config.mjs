@@ -1,28 +1,23 @@
-import { FlatCompat } from "@eslint/eslintrc";
 import js from "@eslint/js";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-const compat = new FlatCompat({
-  baseDirectory: dirname(fileURLToPath(import.meta.url)),
-});
-const convertedNextConfig = compat.extends("next/core-web-vitals");
-const nextPlugin = convertedNextConfig.find((config) => config.plugins?.["@next/next"])
-  ?.plugins?.["@next/next"];
+// eslint-config-next 16 ships a native flat config, so it is imported directly.
+// Routing it through FlatCompat (which is for eslintrc-style configs) throws
+// "Converting circular structure to JSON" on the plugin graph.
+const WEB_FILES = ["apps/web/**/*.{js,jsx,ts,tsx}"];
 
-if (!nextPlugin) throw new Error("eslint-config-next did not expose the Next.js plugin");
+if (!nextCoreWebVitals.some((entry) => entry.plugins?.["@next/next"])) {
+  throw new Error("eslint-config-next did not expose the Next.js plugin");
+}
 
-const nextConfig = convertedNextConfig.map((config) => {
-  const plugins = config.plugins ? { ...config.plugins } : undefined;
-  if (plugins) delete plugins["@next/next"];
-  return {
-    ...config,
-    ...(plugins ? { plugins } : {}),
-    files: ["apps/web/**/*.{js,jsx,ts,tsx}"],
-  };
-});
+// Next's rules apply to the web app only. Entries that carry neither `files`
+// nor `rules` are its global `ignores` block; adding `files` to that would
+// demote it to an ordinary config object and silently stop it ignoring.
+const nextConfig = nextCoreWebVitals.map((entry) =>
+  entry.files || entry.rules ? { ...entry, files: WEB_FILES } : entry,
+);
 
 export default tseslint.config(
   {
@@ -30,9 +25,6 @@ export default tseslint.config(
   },
   { ...js.configs.recommended, files: ["**/*.{js,mjs,cjs}"] },
   ...tseslint.configs.recommended,
-  // Register this once globally so Next 15's build-time detector sees the
-  // plugin; its actual rules remain scoped to apps/web below.
-  { plugins: { "@next/next": nextPlugin } },
   ...nextConfig,
   {
     files: ["**/*.mjs"],

@@ -32,6 +32,10 @@ export function SessionCleanupBanner() {
   };
 
   useEffect(() => {
+    // Fetch-on-mount. Every setState in `refresh` runs after an await, so this
+    // does not actually cascade renders; the rule cannot see through the async
+    // boundary and flags the call site.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, []);
 

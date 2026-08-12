@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 // Security headers that do not vary per request. The Content-Security-Policy
-// (nonce-based) is set in middleware.ts so scripts can be allowed per request.
+// (nonce-based) is set in proxy.ts so scripts can be allowed per request.
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
@@ -20,11 +20,13 @@ const nextConfig: NextConfig = {
     // three.js and react-pdf are large; keep them out of the server bundle graph
     // where possible.
     optimizePackageImports: ["lucide-react"],
-    // With middleware configured, Next truncates request bodies at 10MB by
+    // With a proxy configured, Next truncates request bodies at 10MB by
     // default, breaking model uploads mid-stream. Sized to clear the 300 MiB
     // hard file cap plus multipart framing; the upload route enforces the
     // real per-file/session/storage limits itself.
-    middlewareClientMaxBodySize: "301mb",
+    // Next 16 renamed this from `middlewareClientMaxBodySize`. The old name is
+    // still honoured as an alias, but setting both is a hard config error.
+    proxyClientMaxBodySize: "301mb",
   },
   async headers() {
     return [

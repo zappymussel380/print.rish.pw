@@ -152,7 +152,7 @@ database/Redis amplification path.
 
 ## Admin
 
-Middleware is an outer gate; every authenticated admin API independently
+The edge proxy is an outer gate; every authenticated admin API independently
 verifies the signed admin session. Sensitive responses are
 private/no-store/noindex.
 

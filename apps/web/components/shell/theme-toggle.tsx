@@ -58,6 +58,13 @@ export function ThemeToggle() {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const syncSystemPreference = () => setPrefersDark(query.matches);
 
+    // localStorage and matchMedia are both unreadable during SSR, so the first
+    // client render deliberately starts from the neutral `null`/`false` pair
+    // that matches the server HTML and this effect corrects it after hydration.
+    // Doing it any earlier is a hydration mismatch. The blessed replacement is
+    // useSyncExternalStore for both sources; that is a rewrite of the theme
+    // plumbing and does not belong in a framework upgrade.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreference(storedPreference());
     syncSystemPreference();
     query.addEventListener("change", syncSystemPreference);

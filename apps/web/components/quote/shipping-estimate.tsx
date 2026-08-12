@@ -41,7 +41,12 @@ export function ShippingEstimate() {
   // response for a pincode/quote the user has since changed is discarded rather
   // than shown or (worse) carried into checkout. Syncing during render keeps it
   // exact — an effect would lag a frame behind the fetch it needs to gate.
+  // The ref is never read during render — only by the two post-await staleness
+  // checks below — so the hazard the rule guards against (render output that
+  // depends on a ref and therefore does not re-render) does not apply. Moving
+  // the sync into an effect would make the guard lag the render it must gate.
   const sigRef = useRef(currentKey);
+  // eslint-disable-next-line react-hooks/refs
   sigRef.current = currentKey;
 
   if (!breakdown || ingesting > 0) return null;
