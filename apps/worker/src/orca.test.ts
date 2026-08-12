@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { describeMissingOutput, orcaCommand, parseOrcaProgressLine } from "./orca";
+import { describeMissingOutput, orcaChildEnv, orcaCommand, parseOrcaProgressLine } from "./orca";
 
 describe("parseOrcaProgressLine", () => {
   it("reads Orca's total percentage and operation message", () => {
@@ -67,5 +67,38 @@ describe("orcaCommand", () => {
     expect(command).toBe("xvfb-run");
     expect(args).not.toContain("choom");
     expect(args).not.toContain("setpriv");
+  });
+});
+
+describe("orcaChildEnv", () => {
+  const run = "/tmp/slice-jobs/job-1";
+
+  // Regression: Orca stages 3MF project exports through
+  // `$TMPDIR/orcaslicer_model`. Without TMPDIR that is the shared
+  // /tmp/orcaslicer_model, owned by whichever uid ran Orca first; a later run
+  // under the slicer uid then fails at 97% with "Failed to create backup path".
+  it("keeps every writable directory inside the run's own work directory", () => {
+    const env = orcaChildEnv(run);
+    expect(env.HOME).toBe(`${run}/home`);
+    expect(env.XDG_RUNTIME_DIR).toBe(`${run}/xdg`);
+    expect(env.TMPDIR).toBe(`${run}/tmp`);
+    for (const key of ["HOME", "XDG_RUNTIME_DIR", "TMPDIR"] as const) {
+      expect(env[key]?.startsWith(`${run}/`)).toBe(true);
+    }
+  });
+
+  it("passes nothing from the orchestrator's own environment beyond the safe allowlist", () => {
+    process.env.SESSION_SECRET = "must-not-leak";
+    process.env.DATABASE_URL = "postgres://must-not-leak";
+    try {
+      const env = orcaChildEnv(run);
+      expect(Object.keys(env).sort()).toEqual(
+        ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "TMPDIR", "XDG_RUNTIME_DIR"].sort(),
+      );
+      expect(JSON.stringify(env)).not.toContain("must-not-leak");
+    } finally {
+      delete process.env.SESSION_SECRET;
+      delete process.env.DATABASE_URL;
+    }
   });
 });

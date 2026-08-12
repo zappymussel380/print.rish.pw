@@ -129,6 +129,36 @@ export function orcaCommand(
   };
 }
 
+/** The child environment for one Orca run, rooted entirely in that run's work
+ * directory (`cwd`).
+ *
+ * Minimal and explicit — never `...process.env`: the worker's own environment
+ * holds DB/Redis credentials, and Orca parses untrusted uploads, so a slicer
+ * exploit must find nothing to exfiltrate. Everything Orca needs beyond this
+ * (datadir, profiles, output dir) travels as CLI args.
+ *
+ * Every directory here must also be per-run, not shared. Orca stages each 3MF
+ * project export through a backup tree at `$TMPDIR/orcaslicer_model` before
+ * zipping it, so on the default temp dir that path is the shared
+ * `/tmp/orcaslicer_model`: whichever uid runs Orca first owns it, and every
+ * later run under a different uid then fails at the export step with "Failed to
+ * create backup path ... Permission denied" — *after* slicing successfully, at
+ * 97%. Keeping it under `cwd` makes it unshared, and means the trees are
+ * removed with the work directory instead of accumulating in a 3 GiB tmpfs. */
+export function orcaChildEnv(cwd: string): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    HOME: join(cwd, "home"),
+    LANG: process.env.LANG ?? "en_US.UTF-8",
+    LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
+    XDG_RUNTIME_DIR: join(cwd, "xdg"),
+    TMPDIR: join(cwd, "tmp"),
+    // Not sensitive, and Next's ProcessEnv augmentation marks it required
+    // wherever the web tsconfig typechecks these worker sources.
+    NODE_ENV: process.env.NODE_ENV,
+  };
+}
+
 async function createProgressPipe(path: string): Promise<void> {
   await new Promise<void>((resolvePromise, rejectPromise) => {
     const child = spawn("mkfifo", ["-m", "600", path], { stdio: "ignore" });
@@ -176,20 +206,7 @@ async function runOrca(
       cwd,
       // New process group so the timeout can kill Orca and any children.
       detached: true,
-      // Minimal, explicit environment — never `...process.env`: the worker's
-      // own env holds DB/Redis credentials, and Orca parses untrusted uploads,
-      // so a slicer exploit must find nothing to exfiltrate. Everything Orca
-      // needs beyond this (datadir, profiles, output dir) travels as CLI args.
-      env: {
-        PATH: process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        HOME: join(cwd, "home"),
-        LANG: process.env.LANG ?? "en_US.UTF-8",
-        LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
-        XDG_RUNTIME_DIR: join(cwd, "xdg"),
-        // Not sensitive, and Next's ProcessEnv augmentation marks it required
-        // wherever the web tsconfig typechecks these worker sources.
-        NODE_ENV: process.env.NODE_ENV,
-      },
+      env: orcaChildEnv(cwd),
     });
 
     let stdout = "";
@@ -313,7 +330,16 @@ export async function runSlice(
   await chmod(config.workRoot, 0o711);
   await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { mode: 0o700 });
-  const runtimeDirs = [join(workDir, "home"), join(workDir, "xdg"), join(workDir, "orca-data")];
+  // Must stay in step with orcaChildEnv: every directory it names has to exist
+  // and be owned by the slicer identity before the child starts. "tmp" backs
+  // TMPDIR, without which Orca falls back to the shared /tmp — see that
+  // function's comment for what breaks then.
+  const runtimeDirs = [
+    join(workDir, "home"),
+    join(workDir, "xdg"),
+    join(workDir, "orca-data"),
+    join(workDir, "tmp"),
+  ];
   for (const dir of runtimeDirs) await mkdir(dir, { recursive: true, mode: 0o700 });
   if (typeof process.getuid === "function" && process.getuid() === 0) {
     await chown(workDir, identity.uid, identity.gid);
@@ -392,7 +418,7 @@ interface OrcaSliceOpts {
 }
 
 /** Run one Orca slice of `modelPath` inside `runDir` (which must already hold
- * the orca-data/home/xdg subdirs Orca writes into) and map its output to a
+ * the orca-data/home/xdg/tmp subdirs Orca writes into) and map its output to a
  * SliceOutcome. Shared by the primary slice and the submitted-orientation retry. */
 async function runOrcaSlice(
   modelPath: string,
