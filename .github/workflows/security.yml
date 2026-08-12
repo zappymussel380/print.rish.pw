@@ -253,6 +253,154 @@ jobs:
       - name: Build
         run: pnpm build
 
+  # Everything above this point runs against the source tree. Nothing in it
+  # builds a container image or executes one, and twice in one day that let a
+  # deploy-breaking change through a fully green pipeline:
+  #
+  #   * Next 16 type-checked apps/web/test-integration, which imports
+  #     ../../worker/src — present in the monorepo, absent from the web image's
+  #     build context. `pnpm build` passed; `docker build` failed.
+  #   * Every production slice failed for nine hours because OrcaSlicer staged
+  #     its 3MF export through a shared /tmp path owned by whichever uid ran it
+  #     first. Only the real worker image, running the real bundle and dropping
+  #     to the real slicer uid, takes that path at all.
+  #
+  # So this job builds the actual images and runs the actual stack, then drives
+  # one real slice through the public API. `docker compose up` is what makes it
+  # meaningful: the worker image's CMD is `node dist/index.js`, so this is also
+  # the only check that ever executes the shipped bundle rather than tsx on the
+  # sources.
+  images:
+    name: Container images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # docker-compose.yml pins `name: print`, so every compose command targets
+      # the production project regardless of directory. Harmless on a throwaway
+      # runner, but the teardown below ends in `down -v`, and these steps get
+      # copied to real machines when someone reproduces a CI failure by hand.
+      # Overriding the project name means that copy destroys nothing.
+      COMPOSE_PROJECT_NAME: print-ci
+      # Throwaway credentials for a stack that lives as long as this job.
+      #
+      # These MUST be set here rather than written to a .env file. Compose
+      # resolves ${VAR} from the process environment before it consults .env, and
+      # the workflow-level env block above already defines DATABASE_URL,
+      # APP_ORIGIN, SESSION_SECRET and ADMIN_PASSWORD_HASH for every job — so a
+      # .env is silently outranked, and the stack comes up pointed at
+      # localhost:5432 and https://example.invalid. Job-level env outranks
+      # workflow-level, which is what makes these authoritative.
+      #
+      # Values taken from the environment are also used verbatim, so the bcrypt
+      # hash keeps its single '$' here. Only .env files need it doubled, which is
+      # the rule .env.example documents for deployments.
+      POSTGRES_USER: print
+      POSTGRES_PASSWORD: ci-postgres-password-0000000000000000
+      POSTGRES_DB: print
+      DATABASE_URL: postgresql://print_web:ci-web-password-00000000000000000000000000@postgres:5432/print
+      MIGRATION_DATABASE_URL: postgresql://print:ci-postgres-password-0000000000000000@postgres:5432/print
+      WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@postgres:5432/print
+      REDIS_PASSWORD: ci-redis-password-000000000000000000000
+      SESSION_SECRET: ci-session-secret-000000000000000000000000000000000000000000000000
+      ADMIN_PASSWORD_HASH: $2b$12$LQv3c1yqBWXv6LoYh5pCjOaFh5SwmP7j8WbWm5CDhP5Rw1G2uQ0eW
+      # The web image requires an https APP_ORIGIN, while inside the compose
+      # network the container is reached over plain http — hence the smoke test
+      # taking the address and the Origin header separately. Requests go straight
+      # to web:3000 because nginx trusts exactly one transport peer and the
+      # runner's bridge address is not knowable before the stack is up; the
+      # proxy's own guard is covered by the verify job's trust-guard step.
+      APP_ORIGIN: https://web:3000
+      TRUSTED_PROXY_CIDR: 127.0.0.1/32
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Reclaim runner disk
+        # The worker image carries Ubuntu, OpenCASCADE and the OrcaSlicer
+        # AppImage; the runner's preinstalled toolchains are the easiest few GB
+        # to give back and none of them are used here.
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h /
+
+      - name: Build images
+        # The web build is where a monorepo-only module resolution shows up, and
+        # the worker build is where the Dockerfile's OpenCASCADE symlink
+        # assertion actually runs — a zero-match glob there is silent at runtime.
+        run: docker compose build web migrate worker
+
+      - name: Apply migrations from the migrate image
+        run: docker compose run --rm migrate
+
+      - name: Start the stack
+        run: docker compose up -d web worker
+
+      - name: Wait for web and worker to report healthy
+        # The worker's healthcheck is its Redis heartbeat, so this also proves
+        # the shipped bundle booted and connected rather than merely started.
+        run: |
+          for _ in $(seq 1 60); do
+            unhealthy=0
+            for svc in web worker; do
+              state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q "$svc")" 2>/dev/null || echo starting)
+              [ "$state" = "healthy" ] || unhealthy=1
+            done
+            if [ "$unhealthy" -eq 0 ]; then echo "web and worker healthy"; exit 0; fi
+            sleep 5
+          done
+          echo "stack did not become healthy" >&2
+          exit 1
+
+      - name: Serve the public pages from the web image
+        run: |
+          set -euo pipefail
+          # Read the network off the running container rather than matching a
+          # name pattern: another compose project on the same host would match
+          # too, and the checks would then quietly run against the wrong stack.
+          net=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' \
+            "$(docker compose ps -q web)" | tr ' ' '\n' | grep -m1 backend)
+          for path in /api/health / /quote /contact /faq /materials /pricing; do
+            code=$(docker run --rm --network "$net" curlimages/curl:8.11.1 \
+              -s -o /dev/null -w '%{http_code}' "http://web:3000${path}")
+            echo "$code  $path"
+            [ "$code" = "200" ] || { echo "expected 200 for $path" >&2; exit 1; }
+          done
+          admin=$(docker run --rm --network "$net" curlimages/curl:8.11.1 \
+            -s -o /dev/null -w '%{http_code}' "http://web:3000/admin")
+          echo "$admin  /admin (admin gate)"
+          [ "$admin" = "307" ] || { echo "admin gate did not redirect" >&2; exit 1; }
+
+      - name: Slice a real model through the queue
+        # No STUB_SLICER: this is OrcaSlicer, in the worker image, under the
+        # slicer uid, reached only by enqueuing through the public API.
+        run: |
+          set -euo pipefail
+          net=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' \
+            "$(docker compose ps -q web)" | tr ' ' '\n' | grep -m1 backend)
+          docker run --rm --network "$net" -v "$PWD:/workspace" -w /workspace \
+            node:24 node apps/web/scripts/stack-slice-smoke.mjs http://web:3000 https://web:3000
+
+      - name: Assert Orca staged inside the job sandbox
+        # Regression guard for the 2026-08-11 outage: if this shared path exists,
+        # some run resolved TMPDIR to the default temp dir and the next slice
+        # under a different uid would fail at 97%.
+        run: |
+          if docker compose exec -T worker sh -c 'ls -d /tmp/orcaslicer_model' 2>/dev/null; then
+            echo "Orca used the SHARED /tmp/orcaslicer_model; TMPDIR is not per-run" >&2
+            exit 1
+          fi
+          echo "shared /tmp/orcaslicer_model absent, as expected"
+
+      - name: Dump stack logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Tear the stack down
+        if: always()
+        run: docker compose down -v --remove-orphans
+
   codeql:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
