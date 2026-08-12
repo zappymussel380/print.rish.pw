@@ -10,7 +10,7 @@
     "test": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:flow": "node scripts/api-flow-test.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test-integration.json",
     "hash-password": "node scripts/hash-password.mjs"
   },
   "dependencies": {

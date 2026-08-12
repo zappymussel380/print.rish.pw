@@ -1,0 +1,14 @@
+{
+  // Type-checks the integration suite, which tsconfig.json excludes so that
+  // `next build` (and therefore the web image, which has no apps/worker) does
+  // not try to resolve its `../../worker/src/*` imports. Run by `pnpm typecheck`
+  // alongside the app project so these files stay fully covered.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // A second --noEmit pass would otherwise fight the app project over the
+    // same default .tsbuildinfo path.
+    "incremental": false
+  },
+  "include": ["next-env.d.ts", "test-integration/**/*.ts"],
+  "exclude": ["node_modules"]
+}
