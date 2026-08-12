@@ -12,5 +12,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // test-integration reaches into apps/worker/src, which is deliberately absent
+  // from the web image's build context (docker/web.Dockerfile copies only
+  // packages/ and apps/web/). Next 16 type-checks the app's tsconfig during
+  // `next build`, so leaving these in fails the IMAGE build with TS2307 while
+  // `pnpm build` in the full monorepo still passes — green CI, broken deploy.
+  // They keep full type coverage via tsconfig.test-integration.json.
+  "exclude": ["node_modules", "test-integration"]
 }
