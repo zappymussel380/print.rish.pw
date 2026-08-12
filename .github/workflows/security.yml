@@ -281,6 +281,36 @@ jobs:
       # copied to real machines when someone reproduces a CI failure by hand.
       # Overriding the project name means that copy destroys nothing.
       COMPOSE_PROJECT_NAME: print-ci
+      # Throwaway credentials for a stack that lives as long as this job.
+      #
+      # These MUST be set here rather than written to a .env file. Compose
+      # resolves ${VAR} from the process environment before it consults .env, and
+      # the workflow-level env block above already defines DATABASE_URL,
+      # APP_ORIGIN, SESSION_SECRET and ADMIN_PASSWORD_HASH for every job — so a
+      # .env is silently outranked, and the stack comes up pointed at
+      # localhost:5432 and https://example.invalid. Job-level env outranks
+      # workflow-level, which is what makes these authoritative.
+      #
+      # Values taken from the environment are also used verbatim, so the bcrypt
+      # hash keeps its single '$' here. Only .env files need it doubled, which is
+      # the rule .env.example documents for deployments.
+      POSTGRES_USER: print
+      POSTGRES_PASSWORD: ci-postgres-password-0000000000000000
+      POSTGRES_DB: print
+      DATABASE_URL: postgresql://print_web:ci-web-password-00000000000000000000000000@postgres:5432/print
+      MIGRATION_DATABASE_URL: postgresql://print:ci-postgres-password-0000000000000000@postgres:5432/print
+      WORKER_DATABASE_URL: postgresql://print_worker:ci-worker-password-0000000000000000000000@postgres:5432/print
+      REDIS_PASSWORD: ci-redis-password-000000000000000000000
+      SESSION_SECRET: ci-session-secret-000000000000000000000000000000000000000000000000
+      ADMIN_PASSWORD_HASH: $2b$12$LQv3c1yqBWXv6LoYh5pCjOaFh5SwmP7j8WbWm5CDhP5Rw1G2uQ0eW
+      # The web image requires an https APP_ORIGIN, while inside the compose
+      # network the container is reached over plain http — hence the smoke test
+      # taking the address and the Origin header separately. Requests go straight
+      # to web:3000 because nginx trusts exactly one transport peer and the
+      # runner's bridge address is not knowable before the stack is up; the
+      # proxy's own guard is covered by the verify job's trust-guard step.
+      APP_ORIGIN: https://web:3000
+      TRUSTED_PROXY_CIDR: 127.0.0.1/32
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -294,33 +324,6 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
           df -h /
-
-      - name: Write CI stack environment
-        # Throwaway credentials for a stack that exists for the length of this
-        # job. APP_ORIGIN is the in-network address the smoke test uses, because
-        # requests go straight to the web container: nginx trusts exactly one
-        # transport peer, and the runner's address on the bridge is not knowable
-        # before the stack is up. The proxy's own guard is covered by the
-        # "Verify proxy trust guard" step in the verify job.
-        #
-        # Every '$' in ADMIN_PASSWORD_HASH is doubled because compose performs
-        # variable substitution on .env: a single-'$' bcrypt hash arrives at the
-        # container mangled, web fails env validation, and the service sits in a
-        # restart loop. Same rule .env.example documents for deployments.
-        run: |
-          cat > .env <<'ENV'
-          POSTGRES_USER=print
-          POSTGRES_PASSWORD=ci-postgres-password-0000000000000000
-          POSTGRES_DB=print
-          DATABASE_URL=postgresql://print_web:ci-web-password-00000000000000000000000000@postgres:5432/print
-          MIGRATION_DATABASE_URL=postgresql://print:ci-postgres-password-0000000000000000@postgres:5432/print
-          WORKER_DATABASE_URL=postgresql://print_worker:ci-worker-password-0000000000000000000000@postgres:5432/print
-          REDIS_PASSWORD=ci-redis-password-000000000000000000000
-          SESSION_SECRET=ci-session-secret-000000000000000000000000000000000000000000000000
-          ADMIN_PASSWORD_HASH=$$2b$$12$$LQv3c1yqBWXv6LoYh5pCjOaFh5SwmP7j8WbWm5CDhP5Rw1G2uQ0eW
-          APP_ORIGIN=https://web:3000
-          TRUSTED_PROXY_CIDR=127.0.0.1/32
-          ENV
 
       - name: Build images
         # The web build is where a monorepo-only module resolution shows up, and
