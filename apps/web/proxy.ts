@@ -7,11 +7,11 @@ import {
   adminCookieName,
 } from "@print/shared/session-constants";
 
-/** Edge middleware: applies the Content-Security-Policy + security headers to
- *  every response, and gates the admin area. Keeps its own verification logic
- *  (no next/headers import) so it stays edge-compatible; it re-verifies the
- *  same HS256 admin cookie that lib/session.ts issues, sharing only the token
- *  and cookie-name constants. */
+/** Edge proxy (`middleware.ts` before Next 16): applies the
+ *  Content-Security-Policy + security headers to every response, and gates the
+ *  admin area. Keeps its own verification logic (no next/headers import) so it
+ *  stays edge-compatible; it re-verifies the same HS256 admin cookie that
+ *  lib/session.ts issues, sharing only the token and cookie-name constants. */
 
 async function isAdminToken(token: string | undefined): Promise<boolean> {
   if (!token || !process.env.SESSION_SECRET) return false;
@@ -80,7 +80,7 @@ function withSecurityHeaders(
   return response;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const nonce = crypto.randomUUID().replace(/-/g, "");
 

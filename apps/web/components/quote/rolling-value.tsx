@@ -104,22 +104,24 @@ function RollingDigit({ digit }: { digit: number }) {
 /** A non-numeric character that slides its old glyph out and new glyph in. */
 function RollingChar({ char }: { char: string }) {
   const [display, setDisplay] = useState(char);
-  const [rolling, setRolling] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `display` trails `char` for exactly the length of the slide, so "is a roll
+  // in progress" is those two disagreeing — it was previously a second piece of
+  // state set from inside the effect, which cost a render before the animation
+  // could start and showed the old glyph unanimated for that frame.
+  const rolling = char !== display;
 
   useEffect(() => {
-    if (char === display) return;
-    setRolling(true);
+    if (!rolling) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       setDisplay(char);
-      setRolling(false);
       timer.current = null;
     }, ROLL_MS);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [char, display]);
+  }, [char, rolling]);
 
   const glyph = (c: string) => (c === " " ? NBSP : c);
 

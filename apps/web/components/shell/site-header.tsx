@@ -3,7 +3,7 @@
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PrinterMark } from "./printer-mark";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -17,10 +17,11 @@ const nav = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
-  // Close the mobile menu on navigation.
-  useEffect(() => setOpen(false), [pathname]);
+  // The menu is open *for a page*, so closing it on navigation is a derivation
+  // rather than an effect that resets a boolean after the new page has already
+  // rendered with the menu still up.
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  const open = openFor === pathname;
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] backdrop-blur-[18px]">
@@ -61,7 +62,7 @@ export function SiteHeader() {
             aria-expanded={open}
             aria-controls="mobile-nav"
             aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => setOpenFor(open ? null : pathname)}
           >
             {open ? <X strokeWidth={1.65} className="size-5" /> : <Menu strokeWidth={1.65} className="size-5" />}
           </button>

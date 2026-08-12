@@ -6,7 +6,7 @@ import { requireAdminApi } from "@/lib/api-util";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Export all quotations as CSV. Admin-gated by middleware. */
+/** Export all quotations as CSV. Admin-gated by the edge proxy. */
 export async function GET(_request: NextRequest) {
   const auth = await requireAdminApi();
   if (auth) return auth;

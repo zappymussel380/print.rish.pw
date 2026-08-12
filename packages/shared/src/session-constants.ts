@@ -1,7 +1,7 @@
 /**
  * Session token and cookie naming, shared between lib/session.ts (issuing and
- * verifying via next/headers) and middleware.ts (edge-compatible re-verifier).
- * The middleware keeps its own verification logic; only these constants are
+ * verifying via next/headers) and proxy.ts (edge-compatible re-verifier).
+ * The proxy keeps its own verification logic; only these constants are
  * shared so the two cannot drift apart.
  */
 

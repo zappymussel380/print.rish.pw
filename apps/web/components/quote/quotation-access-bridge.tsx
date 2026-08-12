@@ -11,6 +11,11 @@ export function QuotationAccessBridge({ number }: { number: string }) {
   useEffect(() => {
     const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
     if (!token) {
+      // The token lives in the URL fragment, which is never sent to the server,
+      // so "is there a token" cannot be known until after hydration — a lazy
+      // useState initialiser would run during SSR and mismatch. Reading it here
+      // and rendering the outcome is the whole job of this component.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState("invalid");
       return;
     }

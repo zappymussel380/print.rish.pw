@@ -21,8 +21,8 @@ export function contentDispositionFilename(name: string): string {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
-/** Route-level admin check. Middleware remains the fast UI gate, but sensitive
- * APIs do not rely on middleware matching as their sole authorization layer. */
+/** Route-level admin check. The edge proxy remains the fast UI gate, but
+ * sensitive APIs do not rely on its matching as their sole authorization layer. */
 export async function requireAdminApi(): Promise<NextResponse | null> {
   return (await isAdmin())
     ? null

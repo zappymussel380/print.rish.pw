@@ -119,7 +119,7 @@ export async function destroyAdminSession(): Promise<void> {
   store.delete(adminCookieName());
 }
 
-/** For middleware use (no next/headers cookies() there). */
+/** For edge-proxy use (no next/headers cookies() there). */
 export async function verifyAdminToken(token: string | undefined): Promise<boolean> {
   const payload = await verify<{ role?: string }>(token, ADMIN_AUDIENCE);
   return payload?.role === "admin";
