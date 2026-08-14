@@ -8,7 +8,13 @@ mode="${1:-web}"
 if [ "$mode" = "migrate" ]; then
   export DATABASE_URL="${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}"
   echo "[migrate] Applying database migrations…"
-  /opt/migrate/node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
+  # Run from the deployed package: Prisma 7 takes the connection URL from
+  # prisma.config.mjs rather than the schema, and the config is resolved from
+  # the working directory. /opt/migrate is the only place where the config, the
+  # schema it points at, and the node_modules its `@prisma/config` import needs
+  # all resolve together.
+  cd /opt/migrate
+  ./node_modules/.bin/prisma migrate deploy
   echo "[migrate] Provisioning least-privilege runtime roles…"
   node /app/provision-database.mjs
   echo "[migrate] Database ready"

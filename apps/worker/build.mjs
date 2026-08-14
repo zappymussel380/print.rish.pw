@@ -7,10 +7,11 @@ import { build } from "esbuild";
 // The deployed node_modules is not hoisted, so only the worker's own
 // package.json dependencies are resolvable from the app root at runtime:
 // those stay external, while the workspace packages' third-party deps
-// (zod, @xmldom/xmldom) are bundled in. The Prisma client generated under
-// @print/db carries a native engine and must load from disk; its relative
-// import is rewritten to a package subpath that resolves in both the dev
-// workspace and the deployed image.
+// (zod, @xmldom/xmldom) are bundled in. Prisma 7's generated client is plain
+// TypeScript with no engine binary, so it is simply bundled like any other
+// workspace source; its runtime (@prisma/client) and the pg driver adapter are
+// declared as worker dependencies so they stay external and get installed into
+// the image by `pnpm deploy --prod`.
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const runtimeDeps = new Set(
   Object.entries(pkg.dependencies)
@@ -33,10 +34,6 @@ await build({
     {
       name: "worker-externals",
       setup(builder) {
-        builder.onResolve({ filter: /^\.\..*\/generated\/client\/index\.js$/ }, () => ({
-          path: "@print/db/generated/client/index.js",
-          external: true,
-        }));
         builder.onResolve({ filter: /^[^./]/ }, (args) => {
           const name = args.path.startsWith("@")
             ? args.path.split("/").slice(0, 2).join("/")

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Queue } from "bullmq";
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
-import { PrismaClient } from "../../../packages/db/generated/client/index.js";
+import { type PrismaClient, createPrismaClient } from "@print/db";
 import {
   sliceArtifactKey,
   sliceJobId,
@@ -49,8 +49,8 @@ describe("slice retry generation fence", () => {
     const originalDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = webConnection.url;
 
-    const webPrisma = new PrismaClient({ datasourceUrl: webConnection.url });
-    const ownerPrisma = new PrismaClient({ datasourceUrl: ownerConnection.url });
+    const webPrisma = createPrismaClient(webConnection.url);
+    const ownerPrisma = createPrismaClient(ownerConnection.url);
     let routePrisma: PrismaClient | undefined;
     let workerPrisma: PrismaClient | undefined;
     let queue: Queue<SliceJobData> | undefined;

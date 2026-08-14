@@ -6,14 +6,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     ignore:
-      # Prisma 7 needs a deliberate paired migration; revisit when prisma and
-      # @prisma/client can be upgraded together (the current PR bumps only the CLI).
-      - dependency-name: prisma
-        update-types: ["version-update:semver-major"]
-      # Prisma 7 needs a deliberate paired migration; revisit when the client and
-      # CLI migration is scheduled and verified against the integration fences.
-      - dependency-name: "@prisma/client"
-        update-types: ["version-update:semver-major"]
       # TypeScript 7 is the native port, and typescript-eslint does not support it:
       # 8.67.0 peers `typescript >=4.8.4 <6.1.0`. The repository is on 6.0.3, which
       # is inside that ceiling. Revisit once typescript-eslint ships a release that

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { PrismaClient, prisma } from "@print/db";
+import { createPrismaClient, prisma } from "@print/db";
 import { redis } from "@/lib/redis";
 import {
   assertSameDatabaseEndpoint,
@@ -10,7 +10,7 @@ const webConnection = integrationConnection("DATABASE_URL", "print_web");
 const workerConnection = integrationConnection("WORKER_DATABASE_URL", "print_worker");
 assertSameDatabaseEndpoint(webConnection, workerConnection);
 
-const workerPrisma = new PrismaClient({ datasourceUrl: workerConnection.url });
+const workerPrisma = createPrismaClient(workerConnection.url);
 
 afterAll(async () => {
   await Promise.all([prisma.$disconnect(), workerPrisma.$disconnect(), redis.quit()]);
