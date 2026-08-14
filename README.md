@@ -1,6 +1,6 @@
 # print.rish.pw — Instant 3D-Printing Quotation System
 
-A production 3D-printing quotation app - print.rish.pw. Customers upload STL / 3MF / OBJ / AMF
+A production 3D-printing quotation app - [print.rish.pw](https://print.rish.pw). Customers upload STL / 3MF / OBJ / AMF
 models, every model is **actually sliced** with OrcaSlicer (Bambu Lab A1, 0.4 mm
 nozzle — no mathematical estimation), and they get a live, itemised quote they
 can tweak and submit. Submitting generates a PDF and hands off to WhatsApp.
