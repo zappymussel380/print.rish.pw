@@ -1,7 +1,8 @@
 # Next.js web container. The Dockerfile also provides a separate short-lived
 # migration target, while the public runner excludes psql and owner credentials.
-# Builder and runner share the same debian base so the Prisma query engine
-# generated at build time matches the runtime platform.
+# Builder and runner share the same debian base. Prisma 7 dropped the Rust
+# query engine, so nothing platform-specific is generated any more, but the
+# shared base keeps native addons elsewhere in the tree consistent.
 
 FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS base
 RUN apt-get update \
@@ -51,7 +52,8 @@ ENV NODE_ENV=production
 RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-client \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /app/packages/db/prisma /app/prisma
+# The schema and migrations arrive inside the deployed package itself, which is
+# also where the entrypoint runs `prisma migrate deploy` from — no separate copy.
 COPY --from=build /opt/migrate /opt/migrate
 COPY apps/web/scripts/provision-database.mjs /app/provision-database.mjs
 USER nextjs
@@ -67,10 +69,6 @@ ENV NODE_ENV=production \
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
-# The Prisma query engine binary — Next's file tracing bundles the client code
-# but not this native addon. `.next/server` is one of the runtime's search
-# paths, so drop it there.
-COPY --from=build /app/packages/db/generated/client/libquery_engine-*.so.node ./apps/web/.next/server/
 COPY apps/web/scripts/validate-env.mjs /app/validate-env.mjs
 
 # Pre-create the data dirs owned by the runtime user. Docker initialises the

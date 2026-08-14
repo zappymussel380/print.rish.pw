@@ -3,19 +3,20 @@
 // quantity multiplication happens in the pricing engine.
 
 generator client {
-  provider      = "prisma-client-js"
-  // Emit into the package so the client + query engine live inside the traced
-  // workspace source (reliable with Next standalone in a monorepo), rather than
-  // in a version-hashed .pnpm path that file-tracing misses.
-  output        = "../generated/client"
-  // "native" covers local dev; the debian target matches the node:24-slim /
-  // ubuntu:24.04 container runtime (OpenSSL 3.0) for web and worker.
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  provider = "prisma-client"
+  // Emit into the package so the client lives inside the traced workspace
+  // source (reliable with Next standalone in a monorepo), rather than in a
+  // version-hashed .pnpm path that file-tracing misses. Prisma 7 dropped the
+  // Rust query engine, so there is no longer a binary to keep beside it and
+  // `binaryTargets` is gone with it.
+  output   = "../generated/client"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Prisma 7 no longer accepts `url` here. The connection string reaches
+  // Migrate through prisma.config.mjs and the runtime through the driver
+  // adapter in src/index.ts — both from DATABASE_URL.
 }
 
 enum MaterialId {

@@ -41,9 +41,9 @@ await mkdir(pdfDir, { recursive: true });
 // @print/db caches its development client on globalThis. Select the worker URL
 // before importing the production sweep and make the role under test explicit.
 delete (globalThis as { prisma?: unknown }).prisma;
-const { PrismaClient, prisma: workerPrisma } = await import("@print/db");
-const webPrisma = new PrismaClient({ datasourceUrl: webConnection.url });
-const ownerPrisma = new PrismaClient({ datasourceUrl: ownerConnection.url });
+const { createPrismaClient, prisma: workerPrisma } = await import("@print/db");
+const webPrisma = createPrismaClient(webConnection.url);
+const ownerPrisma = createPrismaClient(ownerConnection.url);
 const { runRetention } = await import("../../worker/src/retention.js");
 
 const fixtureSuffix = Date.now();

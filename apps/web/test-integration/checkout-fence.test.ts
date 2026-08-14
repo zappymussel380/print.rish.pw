@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Prisma, PrismaClient, prisma } from "@print/db";
+import { Prisma, createPrismaClient, prisma } from "@print/db";
 import { DEFAULT_MODEL_CONFIG, sliceArtifactKey } from "@print/shared";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -38,8 +38,8 @@ const workerConnection = integrationConnection("WORKER_DATABASE_URL", "print_wor
 const ownerConnection = integrationConnection("MIGRATION_DATABASE_URL", "print_owner");
 assertSameDatabaseEndpoint(webConnection, workerConnection, ownerConnection);
 
-const workerPrisma = new PrismaClient({ datasourceUrl: workerConnection.url });
-const ownerPrisma = new PrismaClient({ datasourceUrl: ownerConnection.url });
+const workerPrisma = createPrismaClient(workerConnection.url);
+const ownerPrisma = createPrismaClient(ownerConnection.url);
 const modelId = randomUUID();
 const sliceResultId = randomUUID();
 const fileHash = randomBytes(32).toString("hex");

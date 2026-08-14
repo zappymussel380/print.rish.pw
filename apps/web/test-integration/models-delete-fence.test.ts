@@ -48,8 +48,8 @@ process.env.UPLOAD_DIR = uploadDir;
 process.env.PDF_DIR = join(storageRoot, "pdfs");
 await mkdir(join(uploadDir, "thumbs"), { recursive: true });
 
-const { PrismaClient, prisma } = await import("@print/db");
-const ownerPrisma = new PrismaClient({ datasourceUrl: ownerConnection.url });
+const { createPrismaClient, prisma } = await import("@print/db");
+const ownerPrisma = createPrismaClient(ownerConnection.url);
 const { redis } = await import("@/lib/redis");
 const { DELETE } = await import("@/app/api/models/route");
 
