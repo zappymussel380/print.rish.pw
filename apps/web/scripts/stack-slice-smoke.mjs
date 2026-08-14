@@ -22,6 +22,10 @@
  * is reached over plain http, so CI addresses http://web:3000 while presenting
  * the configured https origin.
  *
+ * `fixture` accepts a binary STL or a STEP file; the upload name and content
+ * type follow its extension. Both legs matter — STEP additionally exercises the
+ * OpenCASCADE tessellation the worker performs before anything is sliced.
+ *
  * Leaves nothing behind: the uploaded model is deleted and no quotation is
  * created. Exits non-zero if the slice does not finish.
  */
@@ -55,8 +59,11 @@ async function request(path, init = {}) {
 
 async function json(res, expected, label) {
   const body = await res.text();
-  if (res.status !== expected) {
-    throw new Error(`${label}: expected HTTP ${expected}, got ${res.status} — ${body.slice(0, 400)}`);
+  const allowed = Array.isArray(expected) ? expected : [expected];
+  if (!allowed.includes(res.status)) {
+    throw new Error(
+      `${label}: expected HTTP ${allowed.join(" or ")}, got ${res.status} — ${body.slice(0, 400)}`,
+    );
   }
   try {
     return JSON.parse(body);
@@ -79,15 +86,40 @@ async function poll(path, label, timeoutMs, onUpdate) {
 }
 
 const model = Buffer.from(await readFile(fixture));
-if (model.length < 84) throw new Error(`${fixture} is not a binary STL`);
-// Binary STL headers are descriptive only, so overwriting one keeps the
-// geometry while guaranteeing a fresh hash — otherwise a previous run's cached
-// SliceResult would be returned and no slicing would actually happen.
-model.fill(0, 0, 80);
-model.write(`stack-smoke-${randomUUID()}`, 0, 80, "ascii");
+const uploadName = fixture.split("/").pop();
+const isStep = /\.(step|stp)$/i.test(uploadName);
+
+// The upload has to be perturbed so it does not collide with a previous run's
+// cached SliceResult, which is keyed on the stored file's hash — otherwise the
+// smoke test would report success without any slicing having happened.
+let payload;
+if (isStep) {
+  // A STEP file opens with the ISO-10303-21 magic and the worker rejects
+  // anything else, so the STL trick below would make it unrecognisable. Append
+  // a comment after the terminator instead: it changes the hash without
+  // touching the structure.
+  //
+  // Note this only defeats the *ingest* cache. STEP is tessellated to a
+  // canonical STL before storage and that conversion is deterministic, so the
+  // stored file — and therefore the slice cache key — is identical across runs.
+  // The STEP leg proves upload and STEP→STL conversion; the slice itself may
+  // legitimately be served from cache.
+  payload = Buffer.concat([model, Buffer.from(`\n/* stack-smoke-${randomUUID()} */\n`, "ascii")]);
+} else {
+  if (model.length < 84) throw new Error(`${fixture} is not a binary STL`);
+  // Binary STL headers are descriptive only, so overwriting one keeps the
+  // geometry while guaranteeing a fresh hash.
+  model.fill(0, 0, 80);
+  model.write(`stack-smoke-${randomUUID()}`, 0, 80, "ascii");
+  payload = model;
+}
 
 const form = new FormData();
-form.append("file", new Blob([model], { type: "model/stl" }), "calibration-cube.stl");
+form.append(
+  "file",
+  new Blob([payload], { type: isStep ? "application/step" : "model/stl" }),
+  uploadName,
+);
 const upload = await json(
   await request("/api/uploads", { method: "POST", headers: mutation(), body: form }),
   202,
@@ -121,10 +153,16 @@ const queued = await json(
       },
     }),
   }),
-  202,
+  // 202 queues a fresh slice; 200 means an identical stored file was already
+  // sliced with these settings and the cached SliceResult came straight back.
+  // That is a legitimate outcome — see the STEP note above — and the polling
+  // and measurement assertions below still have to pass either way.
+  [202, 200],
   "slice request",
 );
-console.log(`slice queued    sliceId=${queued.sliceId}`);
+console.log(
+  `slice ${queued.status === "done" ? "cached  " : "queued  "} sliceId=${queued.sliceId}`,
+);
 
 let lastStage = "";
 const slice = await poll(
