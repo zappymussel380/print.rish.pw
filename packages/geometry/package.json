@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.9.6",
+    "@xmldom/xmldom": "^0.9.11",
     "fflate": "^0.8.2"
   },
   "devDependencies": {
