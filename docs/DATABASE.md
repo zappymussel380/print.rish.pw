@@ -20,6 +20,7 @@ generated client is re-exported by `@print/db`.
 | `QuotationItem` | Issued line settings/prices and links to its model/slice. |
 | `StatusHistory` | Status transitions and admin note. |
 | `QuotationCounter` | Transactional per-year number sequence. |
+| `AppSetting` | Key-value store for admin-editable runtime settings: catalog material/colour availability, and the public "recent prints" showcase. Kept generic so an admin-managed list does not need its own table — and therefore its own privilege grant. |
 
 Customer access tokens are never stored for new or migrated rows. `accessToken`
 contains `sha256:<hex>` and `accessTokenExpiresAt` bounds verification to 30

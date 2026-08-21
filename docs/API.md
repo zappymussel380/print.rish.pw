@@ -150,6 +150,20 @@ Returns `{ ok, db, redis }`; 200 only when both dependencies respond, otherwise
 503. Checks are coalesced/cached briefly to avoid turning health traffic into a
 database/Redis amplification path.
 
+## Showcase
+
+### `GET /api/showcase`
+
+The admin-curated list of recent prints, in display order. Public and briefly
+cacheable, like `/api/catalog`.
+
+### `GET /api/showcase/:id/photo`
+
+Streams one showcase photo from `UPLOAD_DIR/showcase`. Deliberately public and
+`immutable`-cacheable — these are images the admin chose to publish, and the
+bytes at an id never change because a re-upload gets a new id. The id must
+appear in the saved showcase, so an arbitrary UUID cannot probe storage.
+
 ## Admin
 
 The edge proxy is an outer gate; every authenticated admin API independently
@@ -170,3 +184,11 @@ private/no-store/noindex.
 - `DELETE /api/admin/quotations/:id` — deletes the row/cascades, derived PDF,
   and now-unreferenced derived model/thumbnail files.
 - `GET /api/admin/quotations/export` — protected CSV export.
+- `GET /api/admin/showcase` — the current showcase.
+- `POST /api/admin/showcase` — raw JPEG/PNG body, 8 MiB cap. Identified by
+  structure rather than declared Content-Type and re-emitted without its
+  metadata containers (EXIF, including GPS), then stored under a server-chosen
+  UUID. Returns `{ id, photoExt }`; the caller describes it with `PUT`.
+- `PUT /api/admin/showcase` — replaces the whole ordered list (64 KiB).
+  Normalized on save, so entries that cannot address a real photo are dropped.
+  Photos left unreferenced are deleted, which is how removal works.
