@@ -13,6 +13,13 @@ overrides:
   "postcss@<8.5.23": "^8.5.23"
   "nanoid@<3.3.17": "^3.3.17"
   "sharp@<0.35.0": "^0.35.0"
+  # CLI-only: Prisma Migrate reads prisma.config.mjs through @prisma/config,
+  # which pins deepmerge-ts exactly, so nothing but an override reaches it. The
+  # fix for GHSA-ggr8-5vv4-36mx (stack exhaustion on recursive object graphs)
+  # only exists in 8.x, so unlike the entries above this one does cross a major
+  # — deliberately. The merged input is our own committed config file, never
+  # anything a customer supplies, and it runs in the migrate image only.
+  "deepmerge-ts@<8.0.0": "^8.0.1"
   # Dev-only: eslint and vitest toolchains. Three majors are live at once.
   "brace-expansion@<1.1.18": "^1.1.18"
   "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4"
