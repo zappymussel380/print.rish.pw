@@ -1,11 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ImagePlus, Loader2, Trash2 } from "lucide-react";
-import { MATERIAL_IDS, MAX_CAPTION_LENGTH, type RecentPrint } from "@print/shared";
+import {
+  MATERIAL_IDS,
+  MAX_CAPTION_LENGTH,
+  MAX_SHOWCASE_PHOTO_BYTES,
+  type RecentPrint,
+} from "@print/shared";
 
 const ACCEPT = "image/jpeg,image/png";
+const MAX_PHOTO_MB = Math.round(MAX_SHOWCASE_PHOTO_BYTES / 1024 / 1024);
 
 /**
  * Admin editor for the public "Recent prints" showcase.
@@ -23,6 +29,7 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<"idle" | "uploading" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const mutate = (fn: (draft: RecentPrint[]) => RecentPrint[]) => {
     setItems((prev) => fn([...prev]));
@@ -38,10 +45,13 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
       return draft;
     });
 
-  const onPick = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy("uploading");
-    setError(null);
+  /** Upload one photo. Returns an error string, or null on success. */
+  const uploadOne = async (file: File): Promise<string | null> => {
+    // Check the size here as well as server-side: it costs nothing, and it
+    // turns "upload failed after a long wait" into an instant, specific answer.
+    if (file.size > MAX_SHOWCASE_PHOTO_BYTES) {
+      return `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is ${MAX_PHOTO_MB} MB.`;
+    }
     try {
       const res = await fetch("/api/admin/showcase", {
         method: "POST",
@@ -53,27 +63,66 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
         photoExt?: RecentPrint["photoExt"];
         error?: { message?: string };
       };
-      if (!res.ok || !data.id || !data.photoExt) {
-        setError(data.error?.message ?? "Upload failed.");
-        return;
+      // Bound before the guard: narrowing on `data.*` does not survive into
+      // the mutate callback, which TypeScript treats as deferred.
+      const { id, photoExt } = data;
+      if (!res.ok || !id || !photoExt) {
+        // A rejection can come from the proxy rather than the app, in which
+        // case the body is HTML and there is no JSON message to show. Never
+        // fall back to a bare "failed" — that is unactionable, and it is what
+        // made the 413 at the edge so hard to place.
+        return (
+          data.error?.message ??
+          (res.status === 413
+            ? `${file.name} was rejected as too large. The limit is ${MAX_PHOTO_MB} MB.`
+            : `${file.name} failed to upload (HTTP ${res.status}).`)
+        );
       }
       mutate((draft) => [
         {
-          id: data.id!,
-          caption: file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").slice(0, MAX_CAPTION_LENGTH),
+          id,
+          caption: file.name
+            .replace(/\.[^.]+$/, "")
+            .replace(/[-_]+/g, " ")
+            .slice(0, MAX_CAPTION_LENGTH),
           material: "PLA",
-          photoExt: data.photoExt!,
+          photoExt,
           createdAt: new Date().toISOString(),
         },
         ...draft,
       ]);
+      return null;
     } catch {
-      setError("Network error while uploading.");
+      return `${file.name} could not be sent — check the connection.`;
+    }
+  };
+
+  /** Upload a picked or dropped selection, one at a time.
+   *
+   * Sequential rather than parallel: each upload writes a file and the admin
+   * is one person on one connection, so concurrency buys nothing and makes a
+   * partial failure harder to report. */
+  const acceptFiles = useCallback(async (files: FileList | File[]) => {
+    const chosen = Array.from(files).filter((f) => f.size > 0);
+    if (chosen.length === 0) return;
+
+    setBusy("uploading");
+    setError(null);
+    const problems: string[] = [];
+    try {
+      for (const file of chosen) {
+        const problem = await uploadOne(file);
+        if (problem) problems.push(problem);
+      }
     } finally {
       setBusy("idle");
       if (fileInput.current) fileInput.current.value = "";
     }
-  };
+    // Report every failure, not just the first: dropping ten photos and being
+    // told about one of them is worse than being told about none.
+    if (problems.length) setError(problems.join(" "));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const save = async () => {
     setBusy("saving");
@@ -107,28 +156,64 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
       </summary>
 
       <div className="space-y-4 border-t border-line p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            ref={fileInput}
-            type="file"
-            accept={ACCEPT}
-            className="sr-only"
-            id="showcase-photo"
-            onChange={(e) => void onPick(e.target.files?.[0])}
-          />
-          <label htmlFor="showcase-photo" className="btn-pill cursor-pointer text-sm">
-            {busy === "uploading" ? (
-              <>
-                <Loader2 strokeWidth={2} className="size-4 animate-spin" /> Uploading…
-              </>
-            ) : (
-              <>
-                <ImagePlus strokeWidth={1.65} className="size-4" /> Add photo
-              </>
-            )}
-          </label>
+        <input
+          ref={fileInput}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          className="sr-only"
+          id="showcase-photo"
+          onChange={(e) => {
+            if (e.target.files?.length) void acceptFiles(e.target.files);
+          }}
+        />
+        {/* Drop target. Also click- and keyboard-operable, so dragging is an
+            addition rather than the only way in — same contract as the
+            customer-facing model dropzone. */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Add showcase photos"
+          aria-disabled={busy !== "idle"}
+          onClick={() => busy === "idle" && fileInput.current?.click()}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " ") && busy === "idle") {
+              e.preventDefault();
+              fileInput.current?.click();
+            }
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (busy === "idle") setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            if (e.dataTransfer.files.length) void acceptFiles(e.dataTransfer.files);
+          }}
+          className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-6 py-8 text-center transition-colors"
+          style={{
+            borderColor: dragging ? "var(--accent)" : undefined,
+            background: dragging ? "color-mix(in srgb, var(--accent) 8%, transparent)" : undefined,
+          }}
+        >
+          {busy === "uploading" ? (
+            <>
+              <Loader2 strokeWidth={2} className="size-5 animate-spin text-accent" />
+              <p className="text-sm font-[650]">Uploading&hellip;</p>
+            </>
+          ) : (
+            <>
+              <ImagePlus strokeWidth={1.65} className="size-5 text-accent" aria-hidden="true" />
+              <p className="text-sm font-[650]">
+                {dragging ? "Drop to add" : "Drop photos here, or click to choose"}
+              </p>
+            </>
+          )}
           <p className="text-xs text-faint">
-            JPEG or PNG, up to 8&nbsp;MB. Location and camera data are stripped on upload.
+            JPEG or PNG, up to {MAX_PHOTO_MB}&nbsp;MB each. Several at once is fine. Location
+            and camera data are stripped on upload.
           </p>
         </div>
 

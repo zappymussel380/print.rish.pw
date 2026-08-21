@@ -16,6 +16,15 @@ import { MATERIAL_IDS, type MaterialId } from "./quote-types";
 /** Beyond this the homepage strip and the gallery page stop being a curated
  *  showcase, and the single JSON row stops being a sensible way to store it. */
 export const MAX_RECENT_PRINTS = 60;
+/** Largest photo the upload route accepts.
+ *
+ * Shared deliberately: the admin UI, the API route and the proxy's
+ * `client_max_body_size` all have to agree about this number, and the proxy
+ * silently winning that disagreement is exactly how photo upload shipped
+ * broken — every real photo was refused at the edge with no log line. The
+ * proxy allowance sits just above this so an oversized file is refused by the
+ * application, with an error the UI can actually show. */
+export const MAX_SHOWCASE_PHOTO_BYTES = 8 * 1024 * 1024;
 export const MAX_CAPTION_LENGTH = 120;
 
 export type RecentPrintPhotoExt = "jpg" | "png";
