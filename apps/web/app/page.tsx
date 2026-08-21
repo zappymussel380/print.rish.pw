@@ -1,6 +1,7 @@
-import { ArrowRight, FileUp, IndianRupee, ScanEye, Send } from "lucide-react";
+import { ArrowRight, ExternalLink, FileUp, IndianRupee, ScanEye, Send } from "lucide-react";
 import Link from "next/link";
 import { CATALOG, formatPaise } from "@print/shared";
+import { HOMEPAGE_MODEL_SOURCES } from "@/lib/model-sources";
 
 const steps = [
   {
@@ -72,6 +73,49 @@ export default function HomePage() {
             </li>
           ))}
         </ol>
+      </section>
+
+      {/* Where to get a model. Deliberately above the fold-ish and naming the
+          sites outright: the most common reason a first-time visitor bounces is
+          that they have nothing to upload and do not know these libraries
+          exist. A link to a page they cannot imagine would not fix that. */}
+      <section className="pb-16 sm:pb-20" aria-labelledby="sources-title">
+        <p className="eyebrow">No model yet?</p>
+        <h2 id="sources-title" className="section-title mt-3">
+          Thousands of free, ready-to-print models
+        </h2>
+        <p className="mt-4 max-w-xl text-[0.95rem] leading-7 text-muted">
+          You don&rsquo;t need to design anything. Download a file from any of these libraries,
+          upload it here, and you&rsquo;ll have a price in under a minute.
+        </p>
+        <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {HOMEPAGE_MODEL_SOURCES.map((source) => (
+            <li key={source.name}>
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tile tile-hover flex h-full flex-col p-5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[0.95rem] font-[650]">{source.name}</h3>
+                  <ExternalLink
+                    strokeWidth={1.65}
+                    className="size-4 shrink-0 text-faint"
+                    aria-hidden="true"
+                  />
+                </div>
+                <p className="mt-2 flex-1 text-sm leading-6 text-muted">{source.short}</p>
+                <span className="chip mt-4 w-fit">{source.cost}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-8">
+          <Link href="/find-models" className="btn-ghost">
+            More places to look, and what to check before you print
+          </Link>
+        </div>
       </section>
 
       {/* Printer + materials strip */}

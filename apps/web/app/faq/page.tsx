@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "Frequently asked questions: file formats, turnaround, maximum size, colours, shipping, layer lines and durability.",
 };
 
-const faqs: { q: string; a: string }[] = [
+const faqs: { q: string; a: string; more?: { href: string; label: string } }[] = [
   {
     q: "Which file formats can I upload?",
     a: "STL, 3MF, OBJ and AMF — plus STEP/STP, which we convert for you automatically on upload. STL is the safest export from almost any CAD tool. If your software offers 3MF, prefer it — it preserves units and orientation more reliably.",
@@ -15,6 +15,7 @@ const faqs: { q: string; a: string }[] = [
   {
     q: "Do you design models, or only print them?",
     a: "Printing is the service — you bring the model and we slice and print it. We're happy to make small edits like a resize, a simple cut, or splitting a part so it fits the bed, but we don't take on custom modeling from scratch yet. If you need something designed, MakerWorld, Printables and Thingiverse have huge free libraries, and those communities are also where you'll find freelance designers.",
+    more: { href: "/find-models", label: "Where to find models" },
   },
   {
     q: "How accurate is the instant quote?",
@@ -23,6 +24,7 @@ const faqs: { q: string; a: string }[] = [
   {
     q: "Can I gauge weight and cost before I have a file?",
     a: "Once you upload there's no need to guess — the quote is exact, sliced from your actual model. Before that, model libraries like MakerWorld, Printables, Thingiverse and the Yeggi aggregator usually list a typical weight for popular prints, which is a fair ballpark for material and price. Your real figure can shift a little with the infill and supports you choose.",
+    more: { href: "/find-models", label: "Where to find models" },
   },
   {
     q: "Why is pricing per gram?",
@@ -97,7 +99,17 @@ export default function FaqPage() {
                 </span>
               </span>
             </summary>
-            <p className="border-t border-line p-5 text-sm leading-7 text-muted">{item.a}</p>
+            <div className="border-t border-line p-5">
+              <p className="text-sm leading-7 text-muted">{item.a}</p>
+              {item.more && (
+                <Link
+                  href={item.more.href}
+                  className="mt-3 inline-block text-sm text-accent underline decoration-accent underline-offset-4"
+                >
+                  {item.more.label}
+                </Link>
+              )}
+            </div>
           </details>
         ))}
       </div>
