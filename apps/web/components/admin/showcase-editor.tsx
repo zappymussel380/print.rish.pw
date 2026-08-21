@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ImagePlus, Loader2, Trash2 } from "lucide-react";
 import {
@@ -11,6 +11,15 @@ import {
 } from "@print/shared";
 
 const ACCEPT = "image/jpeg,image/png";
+
+/** An entry plus the things only the editor knows about it.
+ *
+ * `previewUrl` is a local object URL for a photo uploaded in this session. It
+ * matters because `/api/showcase/:id/photo` deliberately serves only ids that
+ * are already in the published list — that is what stops an arbitrary UUID
+ * probing storage — so a just-uploaded photo has no server URL yet and would
+ * render as a broken image. `saved` drives the unsaved marker. */
+type EditorPrint = RecentPrint & { previewUrl?: string; saved?: boolean };
 const MAX_PHOTO_MB = Math.round(MAX_SHOWCASE_PHOTO_BYTES / 1024 / 1024);
 
 /**
@@ -25,13 +34,25 @@ const MAX_PHOTO_MB = Math.round(MAX_SHOWCASE_PHOTO_BYTES / 1024 / 1024);
 export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [items, setItems] = useState<RecentPrint[]>(prints);
+  const [items, setItems] = useState<EditorPrint[]>(
+    prints.map((print) => ({ ...print, saved: true })),
+  );
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<"idle" | "uploading" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  // Object URLs are a document-lifetime resource; hold them so they can be
+  // released when the editor goes away rather than leaking per upload.
+  const objectUrls = useRef<string[]>([]);
 
-  const mutate = (fn: (draft: RecentPrint[]) => RecentPrint[]) => {
+  useEffect(() => {
+    const urls = objectUrls.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+    };
+  }, []);
+
+  const mutate = (fn: (draft: EditorPrint[]) => EditorPrint[]) => {
     setItems((prev) => fn([...prev]));
     setDirty(true);
   };
@@ -78,9 +99,15 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
             : `${file.name} failed to upload (HTTP ${res.status}).`)
         );
       }
+      // Preview from the file the browser already has: instant, and correct
+      // before the entry exists server-side.
+      const previewUrl = URL.createObjectURL(file);
+      objectUrls.current.push(previewUrl);
       mutate((draft) => [
         {
           id,
+          previewUrl,
+          saved: false,
           caption: file.name
             .replace(/\.[^.]+$/, "")
             .replace(/[-_]+/g, " ")
@@ -131,7 +158,18 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
       const res = await fetch("/api/admin/showcase", {
         method: "PUT",
         headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-        body: JSON.stringify({ prints: items }),
+        // Send only the stored shape. Zod would drop the editor-only fields
+        // anyway; being explicit keeps the payload honest.
+        body: JSON.stringify({
+          prints: items.map(({ id, caption, material, colour, photoExt, createdAt }) => ({
+            id,
+            caption,
+            material,
+            colour,
+            photoExt,
+            createdAt,
+          })),
+        }),
       });
       if (!res.ok) {
         setError("Saving the showcase failed.");
@@ -139,8 +177,19 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
       }
       const data = (await res.json()) as { prints: RecentPrint[] };
       // Take the server's normalized list back: an entry it rejected (an empty
-      // caption, say) must disappear here too rather than look saved.
-      setItems(data.prints);
+      // caption, say) must disappear here too rather than look saved. Keep the
+      // local previews — their ids now resolve server-side, but the object URL
+      // is already decoded and avoids a refetch.
+      setItems(
+        data.prints.map((print) => {
+          const previous = items.find((item) => item.id === print.id);
+          return {
+            ...print,
+            saved: true,
+            ...(previous?.previewUrl ? { previewUrl: previous.previewUrl } : {}),
+          };
+        }),
+      );
       setDirty(false);
       router.refresh();
     } finally {
@@ -233,8 +282,8 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
               <li key={item.id} className="flex flex-wrap items-start gap-3 border-t border-line pt-3 first:border-t-0 first:pt-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/api/showcase/${item.id}/photo`}
-                  alt=""
+                  src={item.previewUrl ?? `/api/showcase/${item.id}/photo`}
+                  alt={item.caption ? `Preview of ${item.caption}` : "Uploaded photo"}
                   width={72}
                   height={72}
                   className="size-[72px] shrink-0 rounded-lg border border-line object-cover"
@@ -293,6 +342,11 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
                     />
                   </label>
                 </div>
+                {item.saved === false && (
+                  <span className="chip chip-accent self-center" title="Not saved yet — click Save showcase">
+                    Unsaved
+                  </span>
+                )}
                 <div className="flex shrink-0 items-center gap-1">
                   <IconButton label="Move up" disabled={index === 0} onClick={() => move(index, -1)}>
                     <ArrowUp strokeWidth={1.65} className="size-4" />
