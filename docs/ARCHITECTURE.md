@@ -64,7 +64,16 @@ instead converted from the app-selected triangle stream to bounded binary STL
 before persistence, so the original
 attacker-controlled ZIP namespace never reaches the native slicer. Downstream
 STL parsing remains a separate parser boundary. Supported model units are
-normalized to millimetres. Rows are scoped to an anonymous signed `qsid`
+normalized to millimetres.
+
+Because the slicer receives one merged mesh, it cannot separate a 3MF's parts —
+so a 3MF holding several build items is split and re-arranged here instead.
+Each item is resolved on its own and shelf-packed onto bed-sized plates: parts
+that share a plate ship as one prearranged-plate STL, and parts that overflow
+open another plate and become their own priced model. `printable="0"` is read
+but not obeyed; honouring it silently dropped geometry from the mesh, the slice
+and the price alike. A 3MF with a single build item keeps its authored
+coordinates and its original toolpath. Rows are scoped to an anonymous signed `qsid`
 session cookie.
 The route enforces a 300 MiB hard file limit, byte and session quotas, a storage
 reserve, archive/XML expansion limits, at most 20 3MF plates, and a global

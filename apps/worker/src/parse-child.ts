@@ -125,6 +125,7 @@ export async function executeParseChild(params: ParseChildParams): Promise<Parse
       bboxMm: model.parsed.bboxMm,
       volumeCm3: model.parsed.volumeCm3,
       triangleCount: model.parsed.triangleCount,
+      ...(model.partCount && model.partCount > 1 ? { partCount: model.partCount } : {}),
       ...(model.defaultConfig ? { defaultConfig: model.defaultConfig } : {}),
       ...(model.sourceConfig ? { sourceConfig: model.sourceConfig } : {}),
       ...(model.lockedConfig ? { lockedConfig: model.lockedConfig } : {}),

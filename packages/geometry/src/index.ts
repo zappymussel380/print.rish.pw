@@ -17,13 +17,19 @@ export {
   serializeBinaryStl,
 } from "./stl";
 export {
+  DEFAULT_BED_MM,
   extract3mfPlates,
   extract3mfSourceConfig,
   inspect3mfUpload,
   MAX_3MF_PLATES,
   PREARRANGED_PLATE_STL_HEADER,
 } from "./threemf";
-export type { ThreeMfSourceConfig, ThreeMfUploadInspection } from "./threemf";
+export type {
+  Extracted3mfPlate,
+  ThreeMfParseOptions,
+  ThreeMfSourceConfig,
+  ThreeMfUploadInspection,
+} from "./threemf";
 export { extractZipEntry, isZip } from "./zip";
 export { renderThumbnail } from "./thumbnail";
 export { MAX_TEXT_MODEL_BYTES, MAX_TRIANGLES, MAX_VERTICES, ModelParseError } from "./types";

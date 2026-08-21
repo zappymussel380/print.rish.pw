@@ -41,6 +41,9 @@ export interface SlicerInput {
 const MAX_SLICER_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_SLICER_RESULT_BYTES = 64 * 1024;
 const MAX_SLICE_INFO_BYTES = 512 * 1024;
+const MAX_ORCA_LOG_BYTES = 4 * 1024 * 1024;
+/** Kept small: this rides along in every successful slice's stored metadata. */
+const ORCA_LOG_TAIL_CHARS = 2000;
 const MAX_FILAMENT_GRAMS = 50_000;
 const MAX_FILAMENT_METRES = 100_000;
 const MAX_PRINT_SECONDS = 365 * 24 * 60 * 60;
@@ -465,7 +468,12 @@ async function runOrcaSlice(
       MAX_SLICER_ARCHIVE_BYTES,
       "Slicer output archive",
     );
-    return parseSliceInfo(archive, run);
+    // The run directory is deleted as soon as the job finishes, taking the
+    // slicer's own log with it. Keep a tail on the successful result too: a
+    // slice that quietly covers less of the plate than it should reports
+    // perfectly plausible grams and seconds, so the log is the only evidence
+    // left to diagnose it after the fact.
+    return parseSliceInfo(archive, run, await readLogTail(runDir));
   } catch {
     const detail = await describeMissingOutput(runDir, run);
     return fail(detail.code, detail.message, run, detail.rawMeta);
@@ -647,7 +655,17 @@ const attr = (xml: string, re: RegExp, maxLength = 128): string | undefined => {
   return value === undefined ? undefined : cleanChildMessage(value, maxLength);
 };
 
-function parseSliceInfo(archive: Uint8Array, run: RunResult): SliceOutcome {
+/** Last few KiB of the slicer's own debug log, or "" when it is unreadable. */
+async function readLogTail(runDir: string): Promise<string> {
+  try {
+    const data = await readRegularFile(join(runDir, "orca.log"), MAX_ORCA_LOG_BYTES, "Slicer log");
+    return cleanChildMessage(data.toString("utf8"), ORCA_LOG_TAIL_CHARS);
+  } catch {
+    return "";
+  }
+}
+
+function parseSliceInfo(archive: Uint8Array, run: RunResult, logTail = ""): SliceOutcome {
   let xml: string;
   try {
     const entry = extractZipEntry(
@@ -701,6 +719,7 @@ function parseSliceInfo(archive: Uint8Array, run: RunResult): SliceOutcome {
       usedM,
       supportUsed: supportUsed === "true",
       returnCode: run.code,
+      ...(logTail ? { logTail } : {}),
     },
   };
 }

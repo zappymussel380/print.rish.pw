@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Loader2, Truck } from "lucide-react";
 import { formatPaise, settingsKey } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
@@ -14,10 +14,12 @@ interface Estimate {
 }
 type Status = "idle" | "loading" | "done" | "error";
 
-/** Delivery-pincode shipping estimator. Appears once a quote is priced; the
- *  server rebuilds the parcel weight + declared value from the session's sliced
- *  models (the client only names which models). Presented as our own estimate —
- *  not added to the total. */
+/** Delivery-pincode shipping estimator. Entirely optional: nothing downstream
+ *  requires a pincode, the quote total never includes shipping, and Continue is
+ *  not gated on it. Appears once a quote is priced; the server rebuilds the
+ *  parcel weight + declared value from the session's sliced models (the client
+ *  only names which models). Presented as our own estimate — not added to the
+ *  total. */
 export function ShippingEstimate() {
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
@@ -32,6 +34,7 @@ export function ShippingEstimate() {
   // pincode, quantity, settings, or model list hides a now-stale amount.
   const [resultKey, setResultKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pincodeHintId = useId();
 
   const valid = /^\d{6}$/.test(pincode);
   const quoteKey = breakdown ? `${breakdown.totals.grams}:${breakdown.totalPaise}` : "";
@@ -125,13 +128,15 @@ export function ShippingEstimate() {
 
   return (
     <div className="tile mt-6 p-5">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Truck strokeWidth={1.65} className="size-5 text-accent" aria-hidden="true" />
         <h2 className="text-sm font-[650]">Estimate shipping</h2>
+        <span className="chip">Optional</span>
       </div>
       <p className="mt-1.5 text-xs leading-5 text-muted">
-        Estimated prepaid shipping from Guwahati for your parts + 200&nbsp;g of packaging. Final
-        shipping is confirmed over WhatsApp.
+        Your quote is complete without this &mdash; skip straight to Continue if you like. Enter a
+        pincode only to preview prepaid shipping from Guwahati for your parts + 200&nbsp;g of
+        packaging. Final shipping is confirmed over WhatsApp either way.
       </p>
 
       <form onSubmit={onSubmit} className="mt-3 flex flex-wrap items-center gap-2">
@@ -141,6 +146,7 @@ export function ShippingEstimate() {
           onChange={(e) => onPincodeChange(e.target.value)}
           placeholder="Delivery pincode"
           aria-label="Delivery pincode"
+          aria-describedby={pincodeHintId}
           className="input-base max-w-[11rem]"
         />
         <button type="submit" disabled={!valid || status === "loading"} className="btn-pill text-sm">
@@ -152,6 +158,11 @@ export function ShippingEstimate() {
             "Estimate"
           )}
         </button>
+        {/* The Estimate button stays disabled until six digits are in. Say why,
+            rather than leaving an inert control with no explanation. */}
+        <span id={pincodeHintId} className="text-xs text-faint">
+          6-digit pincode
+        </span>
       </form>
 
       {showResult && (

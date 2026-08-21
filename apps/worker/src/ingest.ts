@@ -265,6 +265,7 @@ async function persistPreparedUpload(
         volumeCm3: Number(model.volumeCm3.toFixed(3)),
         triangleCount: model.triangleCount,
         fitsBed: fitsBed(model.bboxMm),
+        ...(model.partCount ? { partCount: model.partCount } : {}),
         ...(model.defaultConfig ? { defaultConfig: model.defaultConfig } : {}),
         ...(model.sourceConfig ? { sourceConfig: model.sourceConfig } : {}),
         ...(model.lockedConfig ? { lockedConfig: model.lockedConfig } : {}),
@@ -300,6 +301,7 @@ async function persistPreparedUpload(
             bboxYMm: entry.model.bboxMm.y,
             bboxZMm: entry.model.bboxMm.z,
             volumeCm3: entry.model.volumeCm3,
+            ...(entry.model.partCount ? { partCount: entry.model.partCount } : {}),
             ...(source ? { sourceFormat: source.format } : {}),
             ...(entry.thumbPath ? { thumbPath: entry.thumbPath } : {}),
             ...(entry.model.defaultConfig

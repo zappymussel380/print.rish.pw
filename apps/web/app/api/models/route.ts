@@ -19,6 +19,7 @@ type RestorableModelRow = {
   bboxYMm: number | null;
   bboxZMm: number | null;
   volumeCm3: number | null;
+  partCount: number | null;
   defaultConfig: unknown;
   sourceConfig: unknown;
   lockedConfig: unknown;
@@ -39,6 +40,7 @@ function serializeModel(model: RestorableModelRow): UploadedModelDto {
     bboxMm,
     volumeCm3: model.volumeCm3 ?? 0,
     fitsBed: fitsBed(bboxMm),
+    ...(model.partCount && model.partCount > 1 ? { partCount: model.partCount } : {}),
     defaultConfig: parseDefaultConfig(model.defaultConfig),
     sourceConfig: parseDefaultConfig(model.sourceConfig),
     lockedConfig: parseLockedConfig(model.lockedConfig),
@@ -86,6 +88,7 @@ export async function GET(request: NextRequest) {
         bboxYMm: true,
         bboxZMm: true,
         volumeCm3: true,
+        partCount: true,
         defaultConfig: true,
         sourceConfig: true,
         lockedConfig: true,

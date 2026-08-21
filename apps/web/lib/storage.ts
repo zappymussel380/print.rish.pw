@@ -5,6 +5,7 @@ import { UUID_RE } from "@print/shared";
 import { env } from "./env";
 
 const MODEL_FORMATS = new Set(["stl", "3mf", "obj", "amf"]);
+const SHOWCASE_PHOTO_EXTS = new Set(["jpg", "png"]);
 const QUOTATION_NUMBER_RE = /^RSP-\d{4}-\d{4,}$/;
 
 /** Paths for customer files. Everything lives under UPLOAD_DIR / PDF_DIR —
@@ -31,6 +32,19 @@ export function thumbPath(modelId: string): string {
   return join(uploadRoot(), "thumbs", `${modelId}.png`);
 }
 
+/** Admin-uploaded showcase photo.
+ *
+ * Deliberately its own directory rather than `thumbs/`: the retention sweep
+ * reaps any `<uuid>.png` it finds there whose model row has gone, and these
+ * photos have no model row at all. `showcase/` matches none of the reaper's
+ * patterns, so a curated gallery does not quietly disappear overnight. */
+export function showcasePath(printId: string, ext: string): string {
+  if (!UUID_RE.test(printId) || !SHOWCASE_PHOTO_EXTS.has(ext)) {
+    throw new Error("Invalid showcase storage identity");
+  }
+  return join(uploadRoot(), "showcase", `${printId}.${ext}`);
+}
+
 /** Original CAD file kept beside a model converted at ingest (STEP only). */
 export function sourceStepPath(modelId: string): string {
   if (!UUID_RE.test(modelId)) throw new Error("Invalid source storage identity");
@@ -45,7 +59,13 @@ export function pdfPath(quotationNumber: string): string {
 }
 
 export async function ensureStorageDirs(): Promise<void> {
-  const privateDirs = [uploadRoot(), join(uploadRoot(), "thumbs"), join(uploadRoot(), "tmp"), pdfRoot()];
+  const privateDirs = [
+    uploadRoot(),
+    join(uploadRoot(), "thumbs"),
+    join(uploadRoot(), "tmp"),
+    join(uploadRoot(), "showcase"),
+    pdfRoot(),
+  ];
   for (const dir of privateDirs) {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     await chmod(dir, 0o700);

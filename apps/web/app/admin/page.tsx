@@ -8,6 +8,7 @@ import {
   type QuotationRow,
 } from "@/components/admin/admin-dashboard";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getRecentPrints } from "@/lib/recent-prints";
 import { isAdmin } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -50,8 +51,16 @@ export default async function AdminPage() {
 
   const stats = computeStats(quotations);
   const catalog = toPublicCatalog(await getCatalogAvailability());
+  const recentPrints = await getRecentPrints();
 
-  return <AdminDashboard quotations={rows} stats={stats} catalog={catalog} />;
+  return (
+    <AdminDashboard
+      quotations={rows}
+      stats={stats}
+      catalog={catalog}
+      recentPrints={recentPrints}
+    />
+  );
 }
 
 type QuotationWithItems = Prisma.QuotationGetPayload<{ include: { items: true } }>;

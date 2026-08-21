@@ -4,11 +4,13 @@ import {
   isZip,
   ModelParseError,
   parseModel,
+  PREARRANGED_PLATE_STL_HEADER,
   serializeBinaryStl,
   type ParsedModel,
   type ThreeMfSourceConfig,
 } from "@print/geometry";
 import {
+  CATALOG,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
   LAYER_HEIGHTS_UM,
@@ -22,6 +24,10 @@ import {
 
 const CANONICAL_ARCHIVE_HEADER = "print.rish.pw canonical archive geometry";
 
+/** The machine we quote for. Loose 3MF build items are packed onto plates this
+ *  size, so a part the source slicer left off its plate still gets sliced. */
+const BED_MM = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
+
 export interface PreparedUploadModel {
   originalName: string;
   format: ModelFormat;
@@ -31,6 +37,9 @@ export interface PreparedUploadModel {
   sizeBytes: number;
   /** False only when the original upload bytes can be copied as-is. */
   derived: boolean;
+  /** Build items merged into this model. Above one, the customer is looking at
+   *  several parts packed together and should be told so. */
+  partCount?: number;
   defaultConfig?: Partial<ModelConfig>;
   sourceConfig?: Partial<ModelConfig>;
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
@@ -68,7 +77,10 @@ function derivedModel(
   originalName: string,
   contents: Buffer,
   parsed: ParsedModel,
-  config: Pick<PreparedUploadModel, "defaultConfig" | "sourceConfig" | "lockedConfig"> = {},
+  config: Pick<
+    PreparedUploadModel,
+    "defaultConfig" | "sourceConfig" | "lockedConfig" | "partCount"
+  > = {},
 ): PreparedUploadModel {
   return {
     originalName,
@@ -125,7 +137,7 @@ export function prepareUploadModels(input: PrepareUploadInput): PreparedUpload {
   let models: PreparedUploadModel[];
 
   if (format === "3mf") {
-    const inspection = inspect3mfUpload(contents);
+    const inspection = inspect3mfUpload(contents, { bedMm: BED_MM });
     if (inspection.plates.length > 1) {
       models = inspection.plates.map((plate) => {
         const sourceConfig =
@@ -138,18 +150,28 @@ export function prepareUploadModels(input: PrepareUploadInput): PreparedUpload {
           {
             defaultConfig: sourceConfig,
             sourceConfig,
-            lockedConfig: { supports: true },
+            // A plate we packed ourselves carries no support decision from the
+            // source file, so the customer keeps that choice.
+            ...(plate.computed ? {} : { lockedConfig: { supports: true } }),
+            partCount: plate.partCount,
           },
         );
       });
     } else {
       const parsed = inspection.model;
       if (!parsed) throw new ModelParseError("3MF contains no canonical model", "EMPTY");
-      const stl = serializeBinaryStl(parsed.positions, CANONICAL_ARCHIVE_HEADER);
+      // Several parts means we arranged this plate. Say so in the STL header:
+      // the slicer must keep our layout rather than re-orienting the merged
+      // soup as if it were one object.
+      const stl = serializeBinaryStl(
+        parsed.positions,
+        inspection.partCount > 1 ? `${PREARRANGED_PLATE_STL_HEADER} 1` : CANONICAL_ARCHIVE_HEADER,
+      );
       const sourceConfig = normalize3mfSourceConfig(inspection.sourceConfig);
       models = [
         derivedModel(asStlName(originalName), stl, parsed, {
           ...(sourceConfig ? { defaultConfig: sourceConfig, sourceConfig } : {}),
+          partCount: inspection.partCount,
         }),
       ];
     }

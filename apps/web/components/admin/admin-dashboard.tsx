@@ -11,7 +11,8 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { formatPaise, type PublicMaterial } from "@print/shared";
+import { formatPaise, type PublicMaterial, type RecentPrint } from "@print/shared";
+import { ShowcaseEditor } from "./showcase-editor";
 
 export interface QuotationRow {
   id: string;
@@ -59,10 +60,12 @@ export function AdminDashboard({
   quotations,
   stats,
   catalog,
+  recentPrints,
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
   catalog: { materials: PublicMaterial[] };
+  recentPrints: RecentPrint[];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -170,6 +173,9 @@ export function AdminDashboard({
 
       {/* Catalog availability */}
       <CatalogEditor catalog={catalog} />
+
+      {/* Public "recent prints" showcase */}
+      <ShowcaseEditor prints={recentPrints} />
 
       {/* Controls */}
       <div className="mt-8 flex flex-wrap items-center gap-3">

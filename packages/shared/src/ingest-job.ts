@@ -61,6 +61,8 @@ export interface UploadedModelDto {
   volumeCm3: number;
   triangleCount?: number;
   fitsBed: boolean;
+  /** Parts packed into this model. Present only when it holds more than one. */
+  partCount?: number;
   defaultConfig?: Partial<ModelConfig>;
   sourceConfig?: Partial<ModelConfig>;
   lockedConfig?: Partial<Record<keyof ModelConfig, true>>;
@@ -100,6 +102,7 @@ export const uploadedModelDtoSchema: z.ZodType<UploadedModelDto> = z
     volumeCm3: z.number().nonnegative(),
     triangleCount: z.number().int().nonnegative().optional(),
     fitsBed: z.boolean(),
+    partCount: z.number().int().positive().max(1024).optional(),
     defaultConfig: partialConfigSchema.optional(),
     sourceConfig: partialConfigSchema.optional(),
     lockedConfig: lockedConfigSchema.optional(),

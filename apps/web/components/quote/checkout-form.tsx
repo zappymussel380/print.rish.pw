@@ -284,7 +284,7 @@ export function CheckoutForm() {
             {shippingValid ? (
               <Row label={`Shipping (to ${shippingValid.pincode})`} value={formatPaise(shippingValid.amountPaise)} />
             ) : (
-              <Row label="Shipping" value="Not included" muted />
+              <Row label="Shipping" value="Confirmed on WhatsApp" muted />
             )}
             <Row label="Print time" value={formatDuration(breakdown.totals.printSeconds)} muted />
             {completion && <Row label="Ready by" value={dateFmt.format(completion)} muted />}

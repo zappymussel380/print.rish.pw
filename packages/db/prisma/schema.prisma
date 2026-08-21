@@ -66,6 +66,10 @@ model UploadedModel {
   bboxYMm      Float?
   bboxZMm      Float?
   volumeCm3    Float?
+  /// Build items packed into this mesh. A multi-part 3MF is arranged onto our
+  /// own plates at ingest, so the customer is told how many parts a quote
+  /// covers. Null for single-part uploads and rows created before this existed.
+  partCount    Int?
   thumbPath    String?
   /// Optional server-provided UI defaults inferred from source files, e.g.
   /// Bambu/Orca 3MF plate support settings.

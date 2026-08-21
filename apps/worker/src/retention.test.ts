@@ -135,4 +135,21 @@ describe("retention and STEP sources", () => {
     expect(existsSync(liveSource)).toBe(true);
     expect(existsSync(deadSource)).toBe(false);
   });
+
+  it("leaves the public showcase alone", async () => {
+    // The showcase lives under uploadDir/showcase and has no model row, so an
+    // orphan sweep that walked it — or that ever started matching directories
+    // recursively — would silently delete the published gallery. Nothing else
+    // catches that; the photos would simply stop loading one morning.
+    const showcase = join(mocks.state.dir, "showcase");
+    await mkdir(showcase);
+    const photo = await putOld(join(showcase, `${DEAD_ID}.png`));
+    const jpeg = await putOld(join(showcase, `${LIVE_ID}.jpg`));
+
+    await runRetention(log);
+
+    expect(existsSync(photo)).toBe(true);
+    expect(existsSync(jpeg)).toBe(true);
+  });
+
 });
