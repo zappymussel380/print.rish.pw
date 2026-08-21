@@ -277,7 +277,13 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
             Nothing published yet. Add a photo to start the homepage showcase.
           </p>
         ) : (
-          <ul className="space-y-3">
+          // The queue only ever grows — every photo that has ever been
+          // published stays in it — so cap its height and scroll rather than
+          // pushing the Save button metres off the bottom of the page. The cap
+          // only bites once there are more rows than fit, so a short list looks
+          // exactly as it did. New uploads are prepended, so they land at the
+          // top of the viewport and never need scrolling to.
+          <ul className="max-h-[28rem] space-y-3 overflow-y-auto overscroll-contain pr-1">
             {items.map((item, index) => (
               <li key={item.id} className="flex flex-wrap items-start gap-3 border-t border-line pt-3 first:border-t-0 first:pt-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
