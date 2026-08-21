@@ -62,6 +62,9 @@ export const parseChildModelSchema = z
       .strict(),
     volumeCm3: finiteNonNegative,
     triangleCount: z.number().int().nonnegative(),
+    /** Build items packed into this model. Above one, the model card tells the
+     *  customer how many parts they are being quoted for. */
+    partCount: z.number().int().positive().max(1024).optional(),
     defaultConfig: partialConfigSchema.optional(),
     sourceConfig: partialConfigSchema.optional(),
     lockedConfig: lockedConfigSchema.optional(),

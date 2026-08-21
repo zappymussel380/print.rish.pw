@@ -163,6 +163,11 @@ export function ModelCard({ model }: { model: QuoteModel }) {
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
                 <span>{formatDimensions(server.bboxMm)}</span>
                 <span>{formatVolume(server.volumeCm3)}</span>
+                {!!server.partCount && server.partCount > 1 && (
+                  <span title="Parts from your file, arranged onto the plate and priced together">
+                    {server.partCount} parts
+                  </span>
+                )}
                 {!server.fitsBed && (
                   <span className="inline-flex items-center gap-1 text-accent">
                     <AlertTriangle strokeWidth={1.65} className="h-3.5 w-3.5" />

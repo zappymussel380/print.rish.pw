@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isZip, parseModel } from "@print/geometry";
+import { isZip, parseModel, PREARRANGED_PLATE_STL_HEADER } from "@print/geometry";
 import { prepareUploadModels } from "./upload-prepare";
 
 function fixture(name: string): Promise<Buffer> {
@@ -304,4 +304,84 @@ describe("archive upload canonicalization", () => {
       prepared.models.reduce((sum, model) => sum + model.contents.length, 0),
     );
   });
+
+  it("packs an off-plate, unprintable part back into the quote", () => {
+    // The shape of a PrusaSlicer project with a spare copy parked past the bed
+    // edge and flagged printable="0". That copy used to be dropped silently,
+    // so the customer was quoted for half of what they uploaded.
+    const box = (id: number) => `
+      <object id="${id}" type="model"><mesh>
+        <vertices>
+          <vertex x="0" y="0" z="0"/><vertex x="20" y="0" z="0"/>
+          <vertex x="0" y="20" z="0"/><vertex x="0" y="0" z="20"/>
+        </vertices>
+        <triangles>
+          <triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/>
+          <triangle v1="1" v2="2" v3="3"/><triangle v1="2" v2="0" v3="3"/>
+        </triangles>
+      </mesh></object>`;
+    const model = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources>${box(1)}${box(2)}</resources>
+        <build>
+          <item objectid="1" transform="1 0 0 0 1 0 0 0 1 30 0 0" printable="1"/>
+          <item objectid="2" transform="1 0 0 0 1 0 0 0 1 300 0 0" printable="0"/>
+        </build>
+      </model>`);
+    const archive = zip([{ localName: "3D/3dmodel.model", data: model }]);
+
+    const prepared = prepareUploadModels({
+      contents: archive,
+      originalName: "adapter.3mf",
+      format: "3mf",
+      sourceSha256: digest(archive),
+    });
+
+    expect(prepared.models).toHaveLength(1);
+    const only = prepared.models[0]!;
+    expect(only.partCount).toBe(2);
+    // Both parts made it into the bytes that actually get sliced.
+    expect(parseModel(only.contents, "stl").triangleCount).toBe(8);
+    // ...and the STL announces itself as a plate we arranged, so the slicer
+    // keeps our layout instead of re-orienting the pair as one lump.
+    expect(only.contents.subarray(0, PREARRANGED_PLATE_STL_HEADER.length).toString()).toBe(
+      PREARRANGED_PLATE_STL_HEADER,
+    );
+  });
+
+  it("leaves supports unlocked on plates it packed itself", () => {
+    const box = (id: number, size: number) => `
+      <object id="${id}" type="model"><mesh>
+        <vertices>
+          <vertex x="0" y="0" z="0"/><vertex x="${size}" y="0" z="0"/>
+          <vertex x="0" y="${size}" z="0"/><vertex x="0" y="0" z="${size}"/>
+        </vertices>
+        <triangles>
+          <triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/>
+          <triangle v1="1" v2="2" v3="3"/><triangle v1="2" v2="0" v3="3"/>
+        </triangles>
+      </mesh></object>`;
+    const model = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources>${box(1, 150)}${box(2, 150)}${box(3, 150)}${box(4, 150)}</resources>
+        <build>
+          <item objectid="1"/><item objectid="2"/><item objectid="3"/><item objectid="4"/>
+        </build>
+      </model>`);
+    const archive = zip([{ localName: "3D/3dmodel.model", data: model }]);
+
+    const prepared = prepareUploadModels({
+      contents: archive,
+      originalName: "many.3mf",
+      format: "3mf",
+      sourceSha256: digest(archive),
+    });
+
+    // Four 150mm parts need more than one bed, and none of them came with a
+    // support decision we could honour.
+    expect(prepared.models.length).toBeGreaterThan(1);
+    expect(prepared.models.every((m) => m.lockedConfig === undefined)).toBe(true);
+    expect(prepared.models.reduce((sum, m) => sum + (m.partCount ?? 0), 0)).toBe(4);
+  });
+
 });

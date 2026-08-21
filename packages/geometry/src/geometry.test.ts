@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   extract3mfPlates,
   extract3mfSourceConfig,
+  inspect3mfUpload,
   MAX_3MF_PLATES,
   ModelParseError,
   parseModel,
@@ -101,7 +102,6 @@ describe("parseModel", () => {
           <triangles><triangle v1="0" v2="1" v3="2"/></triangles>
         </mesh></object></resources>
         <build>
-          <item objectid="1"/>
           <item objectid="1" transform="1 0 0 0 1 0 0 0 1 2 0 0"/>
         </build>
       </model>`;
@@ -109,9 +109,15 @@ describe("parseModel", () => {
 
     const parsed = parseModel(archive, "3mf");
 
-    expect(parsed.triangleCount).toBe(2);
-    expect(parsed.bboxMm.x).toBeCloseTo(76.2, 4);
+    expect(parsed.triangleCount).toBe(1);
+    expect(parsed.bboxMm.x).toBeCloseTo(25.4, 4);
     expect(parsed.bboxMm.y).toBeCloseTo(25.4, 4);
+    // The item's 2-inch translation must be scaled too, not copied through as
+    // 2mm. A single build item keeps its authored position, so the smallest x
+    // coordinate is the translation itself.
+    let minX = Infinity;
+    for (let i = 0; i < parsed.positions.length; i += 3) minX = Math.min(minX, parsed.positions[i]!);
+    expect(minX).toBeCloseTo(50.8, 4);
   });
 
   it("rejects an unknown 3MF unit instead of silently changing print scale", () => {
@@ -203,7 +209,11 @@ describe("parseModel", () => {
     const plates = extract3mfPlates(archive);
     const source = extract3mfSourceConfig(archive);
 
-    expect(full.bboxMm.x).toBeCloseTo(320, 3);
+    // parseModel packs loose build items rather than inheriting the source
+    // slicer's plate coordinates, so the merged model holds both parts without
+    // spanning the 320mm their authored positions were 300mm apart across.
+    expect(full.triangleCount).toBe(8);
+    expect(full.bboxMm.x).toBeLessThanOrEqual(256);
     expect(plates).toHaveLength(2);
     expect(plates.map((plate) => plate.configuredSupports)).toEqual([false, true]);
     expect(plates.map((plate) => plate.sourceConfig)).toEqual([
@@ -316,5 +326,126 @@ describe("parseXml guards", () => {
     expect(() =>
       parseXml(`${"<x>".repeat(MAX_XML_DEPTH + 1)}${"</x>".repeat(MAX_XML_DEPTH + 1)}`, "test"),
     ).toThrowError(/nesting/);
+  });
+});
+
+describe("multi-part 3MF packing", () => {
+  /** One axis-aligned box, `size` mm on a side, as a 3MF mesh object. */
+  const boxObject = (id: number, size: number) => `
+    <object id="${id}" type="model"><mesh>
+      <vertices>
+        <vertex x="0" y="0" z="0"/>
+        <vertex x="${size}" y="0" z="0"/>
+        <vertex x="0" y="${size}" z="0"/>
+        <vertex x="0" y="0" z="${size}"/>
+      </vertices>
+      <triangles>
+        <triangle v1="0" v2="2" v3="1"/>
+        <triangle v1="0" v2="1" v3="3"/>
+        <triangle v1="1" v2="2" v3="3"/>
+        <triangle v1="2" v2="0" v3="3"/>
+      </triangles>
+    </mesh></object>`;
+
+  const archiveOf = (objects: string, items: string) =>
+    Buffer.from(
+      zipSync({
+        "3D/3dmodel.model": strToU8(`<?xml version="1.0" encoding="UTF-8"?>
+          <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+            <resources>${objects}</resources>
+            <build>${items}</build>
+          </model>`),
+      }),
+    );
+
+  const translate = (x: number) => `1 0 0 0 1 0 0 0 1 ${x} 0 0`;
+
+  it("quotes a part the source slicer parked off the plate and flagged unprintable", () => {
+    // The shape of hdd-adapter-x4.3mf: two copies of the same part, the second
+    // sitting past the right-hand bed edge with printable="0". Before this was
+    // fixed the second copy was dropped outright, halving filament and price.
+    const archive = archiveOf(
+      `${boxObject(1, 20)}${boxObject(2, 20)}`,
+      `<item objectid="1" transform="${translate(30)}" printable="1"/>
+       <item objectid="2" transform="${translate(300)}" printable="0"/>`,
+    );
+
+    const inspection = inspect3mfUpload(archive);
+
+    expect(inspection.partCount).toBe(2);
+    expect(inspection.droppedParts).toBe(0);
+    expect(inspection.plates).toHaveLength(0);
+    expect(inspection.model?.triangleCount).toBe(8);
+    // Both parts, and the whole thing sits inside the bed rather than spanning
+    // the 320mm their authored positions were apart.
+    expect(inspection.model!.bboxMm.x).toBeLessThanOrEqual(256);
+    expect(inspection.model!.bboxMm.y).toBeLessThanOrEqual(256);
+  });
+
+  it("splits parts across plates once one bed is full", () => {
+    const objects = Array.from({ length: 4 }, (_, i) => boxObject(i + 1, 150)).join("");
+    const items = Array.from(
+      { length: 4 },
+      (_, i) => `<item objectid="${i + 1}" transform="${translate(i * 200)}"/>`,
+    ).join("");
+
+    const inspection = inspect3mfUpload(archiveOf(objects, items));
+
+    // Four 150mm parts cannot share a 256mm bed: two per plate at most.
+    expect(inspection.model).toBeNull();
+    expect(inspection.plates.length).toBeGreaterThan(1);
+    expect(inspection.plates.reduce((sum, plate) => sum + plate.partCount, 0)).toBe(4);
+    for (const plate of inspection.plates) {
+      expect(plate.computed).toBe(true);
+      expect(plate.model.bboxMm.x).toBeLessThanOrEqual(256);
+      expect(plate.model.bboxMm.y).toBeLessThanOrEqual(256);
+      expect(parseModel(plate.stl, "stl").triangleCount).toBe(plate.partCount * 4);
+    }
+  });
+
+  it("gives a part larger than the bed a plate of its own instead of failing", () => {
+    const archive = archiveOf(
+      `${boxObject(1, 20)}${boxObject(2, 400)}`,
+      `<item objectid="1"/><item objectid="2" transform="${translate(500)}"/>`,
+    );
+
+    const inspection = inspect3mfUpload(archive);
+
+    expect(inspection.plates).toHaveLength(2);
+    expect(inspection.plates.some((plate) => plate.model.bboxMm.x > 256)).toBe(true);
+  });
+
+  it("honours a caller-supplied bed size when packing", () => {
+    const archive = archiveOf(
+      `${boxObject(1, 60)}${boxObject(2, 60)}`,
+      `<item objectid="1"/><item objectid="2" transform="${translate(300)}"/>`,
+    );
+
+    // Both parts share the default 256mm bed, but not a 100mm one.
+    expect(inspect3mfUpload(archive).plates).toHaveLength(0);
+    expect(inspect3mfUpload(archive, { bedMm: [100, 100, 100] }).plates).toHaveLength(2);
+  });
+
+  it("leaves a single-item 3MF at its authored coordinates", () => {
+    const archive = archiveOf(boxObject(1, 20), `<item objectid="1" transform="${translate(40)}"/>`);
+
+    const model = parseModel(archive, "3mf");
+
+    let minX = Infinity;
+    for (let i = 0; i < model.positions.length; i += 3) minX = Math.min(minX, model.positions[i]!);
+    expect(minX).toBeCloseTo(40, 4);
+    expect(model.triangleCount).toBe(4);
+  });
+
+  it("counts build items whose geometry cannot be resolved", () => {
+    const archive = archiveOf(
+      boxObject(1, 20),
+      `<item objectid="1"/><item objectid="1" transform="${translate(50)}"/><item objectid="99"/>`,
+    );
+
+    const inspection = inspect3mfUpload(archive);
+
+    expect(inspection.partCount).toBe(2);
+    expect(inspection.droppedParts).toBe(1);
   });
 });
