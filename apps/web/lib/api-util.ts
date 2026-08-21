@@ -97,6 +97,53 @@ export async function readJsonBody(
   }
 }
 
+type BinaryBodyResult =
+  | { ok: true; value: Buffer }
+  | { ok: false; response: NextResponse };
+
+/** Read a raw request body with the same enforced byte ceiling `readJsonBody`
+ * applies, for endpoints that take bytes rather than JSON. Same reasoning: the
+ * proxy's large upload allowance means an endpoint that trusts Content-Length
+ * can be made to buffer hundreds of MiB. */
+export async function readBinaryBody(
+  request: NextRequest,
+  maxBytes: number,
+): Promise<BinaryBodyResult> {
+  const declaredError = assertBodySize(request, maxBytes);
+  if (declaredError) return { ok: false, response: declaredError };
+  if (!request.body) {
+    return { ok: false, response: jsonError(400, "EMPTY_BODY", "Request body is empty.") };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return {
+          ok: false,
+          response: jsonError(413, "BODY_TOO_LARGE", "Request body too large."),
+        };
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } catch {
+    return { ok: false, response: jsonError(400, "EMPTY_BODY", "Could not read request body.") };
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (total === 0) {
+    return { ok: false, response: jsonError(400, "EMPTY_BODY", "Request body is empty.") };
+  }
+  return { ok: true, value: Buffer.concat(chunks, total) };
+}
+
 /** Shared preamble for mutating endpoints: CSRF origin check + rate limit.
  *  Returns a response to short-circuit with, or null to proceed. */
 export async function guardMutation(

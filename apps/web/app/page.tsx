@@ -1,7 +1,9 @@
 import { ArrowRight, ExternalLink, FileUp, IndianRupee, ScanEye, Send } from "lucide-react";
 import Link from "next/link";
 import { CATALOG, formatPaise } from "@print/shared";
+import { RecentPrintsGrid } from "@/components/showcase/recent-prints-grid";
 import { HOMEPAGE_MODEL_SOURCES } from "@/lib/model-sources";
+import { getRecentPrints } from "@/lib/recent-prints";
 
 const steps = [
   {
@@ -26,7 +28,15 @@ const steps = [
   },
 ];
 
-export default function HomePage() {
+/** The showcase reads the database, so the page cannot be static. */
+export const dynamic = "force-dynamic";
+
+/** Enough to fill the grid without turning the homepage into the gallery. */
+const HOMEPAGE_PRINT_COUNT = 6;
+
+export default async function HomePage() {
+  const recentPrints = (await getRecentPrints()).slice(0, HOMEPAGE_PRINT_COUNT);
+
   return (
     <div className="mx-auto max-w-6xl px-5">
       {/* Hero */}
@@ -74,6 +84,31 @@ export default function HomePage() {
           ))}
         </ol>
       </section>
+
+      {/* What the machine actually makes. Placed before the "where to get a
+          model" section so the order reads: how it works, what comes out, and
+          then where to get a file — which is the order a newcomer thinks in.
+          Omitted entirely when nothing is published, rather than shipping an
+          empty strip. */}
+      {recentPrints.length > 0 && (
+        <section className="pb-16 sm:pb-20" aria-labelledby="prints-title">
+          <p className="eyebrow">Recent prints</p>
+          <h2 id="prints-title" className="section-title mt-3">
+            What comes off the plate
+          </h2>
+          <p className="mt-4 max-w-xl text-[0.95rem] leading-7 text-muted">
+            Real parts, photographed as they finished. Not renders.
+          </p>
+          <div className="mt-10">
+            <RecentPrintsGrid prints={recentPrints} />
+          </div>
+          <div className="mt-8">
+            <Link href="/recent-prints" className="btn-ghost">
+              See more recent prints
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Where to get a model. Deliberately above the fold-ish and naming the
           sites outright: the most common reason a first-time visitor bounces is

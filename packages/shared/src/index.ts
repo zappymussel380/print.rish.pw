@@ -10,6 +10,7 @@ export * from "./money";
 export * from "./order-summary";
 export * from "./pricing";
 export * from "./quote-types";
+export * from "./recent-prints";
 export * from "./session-constants";
 export * from "./settings-key";
 export * from "./slice-job";
