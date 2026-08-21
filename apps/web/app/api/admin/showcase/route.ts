@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
-import { recentPrintsSchema, toPublicRecentPrints } from "@print/shared";
+import {
+  MAX_SHOWCASE_PHOTO_BYTES,
+  recentPrintsSchema,
+  toPublicRecentPrints,
+} from "@print/shared";
 import { jsonError, readBinaryBody, readJsonBody, requireAdminApi } from "@/lib/api-util";
 import { ImageRejected, sanitizeImage } from "@/lib/image-sanitize";
 import { getRecentPrints, saveRecentPrints } from "@/lib/recent-prints";
@@ -13,9 +17,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 64 * 1024;
-/** Generous for a photo of a print, small enough that a mistake (a RAW file, a
- *  screen recording renamed) is refused rather than served on the homepage. */
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 /** Admin: the current showcase, in display order. */
 export async function GET() {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
   if (auth) return auth;
   if (!assertSameOrigin(request)) return jsonError(403, "CSRF", "Cross-origin request rejected");
 
-  const body = await readBinaryBody(request, MAX_PHOTO_BYTES);
+  const body = await readBinaryBody(request, MAX_SHOWCASE_PHOTO_BYTES);
   if (!body.ok) return body.response;
 
   let photo;

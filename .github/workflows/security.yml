@@ -118,6 +118,16 @@ jobs:
             -v "$PWD/docker/proxy/nginx.conf:/etc/nginx/templates/default.conf.template:ro" \
             nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa nginx -t
 
+      - name: Verify proxy request-body limits
+        # `nginx -t` cannot see this class of mistake: a route that accepts large
+        # bodies but was never granted an allowance is valid configuration that
+        # returns 413 for every real payload, with no application log to explain
+        # it because the request never reaches the app. That is how the showcase
+        # photo upload shipped broken.
+        env:
+          NGINX_IMAGE: nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa
+        run: docker/proxy/body-limits-test.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

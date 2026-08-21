@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { NextResponse, type NextRequest } from "next/server";
-import { UUID_RE } from "@print/shared";
+import { MAX_SHOWCASE_PHOTO_BYTES, UUID_RE } from "@print/shared";
 import { jsonError } from "@/lib/api-util";
 import { getRecentPrints } from "@/lib/recent-prints";
 import { openPrivateFile, showcasePath } from "@/lib/storage";
@@ -8,9 +8,6 @@ import { openPrivateFile, showcasePath } from "@/lib/storage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Matches the upload ceiling in the admin route; a stored photo can never be
- *  larger, so this only bounds what a tampered-with file could stream out. */
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const CONTENT_TYPES = { jpg: "image/jpeg", png: "image/png" } as const;
 
 /** Public: serve one showcase photo.
@@ -27,7 +24,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
 
   let opened: Awaited<ReturnType<typeof openPrivateFile>>;
   try {
-    opened = await openPrivateFile(showcasePath(print.id, print.photoExt), MAX_PHOTO_BYTES);
+    opened = await openPrivateFile(showcasePath(print.id, print.photoExt), MAX_SHOWCASE_PHOTO_BYTES);
   } catch {
     return jsonError(404, "NOT_FOUND", "No photo");
   }
