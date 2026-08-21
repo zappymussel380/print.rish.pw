@@ -39,20 +39,50 @@ docker run -d --name "proxy-$$" --network "$NET" \
   -v "$repo/docker/proxy/nginx.conf:/etc/nginx/templates/default.conf.template:ro" \
   "$NGINX_IMAGE" >/dev/null
 
-for _ in $(seq 1 30); do
-  docker exec "proxy-$$" sh -c 'nginx -t' >/dev/null 2>&1 && break
+# Wait for the listener, not for the config.
+#
+# `nginx -t` only proves the template rendered — it runs a throwaway process and
+# says nothing about whether the master has bound :8080, or whether the stub
+# upstream is answering yet. Breaking on it raced the real thing into being, and
+# the first check then died on a bare "connection refused" with nothing to say
+# why. Probe both hops for an actual HTTP status line instead.
+probe() { # container url
+  docker exec "$1" sh -c "wget -q -S -O /dev/null -T 2 -t 1 '$2' 2>&1 | grep -q 'HTTP/'"
+}
+
+ready=""
+for _ in $(seq 1 60); do
+  if probe "stub-$$" http://127.0.0.1:3000/ && probe "proxy-$$" http://127.0.0.1:8080/; then
+    ready=yes
+    break
+  fi
   sleep 1
 done
+if [ -z "$ready" ]; then
+  echo "proxy or stub never came up; logs follow" >&2
+  docker logs "stub-$$" 2>&1 | tail -20 >&2
+  docker logs "proxy-$$" 2>&1 | tail -20 >&2
+  exit 1
+fi
 
 # path <kib> <expected: pass|reject>
 check() {
   local path="$1" kib="$2" expect="$3"
   local code
+  # `|| true` so a transport failure is reported as a failed expectation with
+  # the code it got, rather than tripping `set -e` and ending the run on a bare
+  # exit status with no indication of which check died.
   code=$(docker run --rm --network "$NET" --ip "$CLIENT_IP" "$NGINX_IMAGE" sh -c "
     head -c $((kib * 1024)) /dev/zero > /tmp/body
     curl -s -o /dev/null -w '%{http_code}' -X POST --data-binary @/tmp/body \
       -H 'Content-Type: application/octet-stream' http://proxy-$$:8080$path
-  " 2>/dev/null)
+  " 2>/dev/null || true)
+
+  if [ -z "$code" ] || [ "$code" = "000" ]; then
+    printf '  FAIL  %-28s %5sKiB -> no response from the proxy\n' "$path" "$kib"
+    failures=$((failures + 1))
+    return
+  fi
 
   local got="pass"
   [ "$code" = "413" ] && got="reject"
