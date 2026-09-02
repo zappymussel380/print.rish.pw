@@ -22,21 +22,21 @@
     "@radix-ui/react-select": "^2.3.7",
     "@radix-ui/react-slider": "^1.4.7",
     "@radix-ui/react-tooltip": "^1.2.16",
-    "@react-pdf/renderer": "^4.6.0",
+    "@react-pdf/renderer": "^4.6.1",
     "bcryptjs": "^3.0.3",
-    "bullmq": "^6.0.11",
+    "bullmq": "^6.3.2",
     "busboy": "^1.6.0",
     "fflate": "^0.8.3",
     "ioredis": "^6.0.0",
-    "jose": "^6.2.8",
-    "lucide-react": "^1.30.0",
-    "next": "^16.3.0",
+    "jose": "^6.2.9",
+    "lucide-react": "^1.33.0",
+    "next": "^16.3.1",
     "pino": "^10.3.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.185.1",
     "zod": "^4.4.3",
-    "zustand": "^5.0.3"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -45,9 +45,9 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@types/three": "^0.185.4",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
