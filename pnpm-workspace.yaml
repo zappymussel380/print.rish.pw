@@ -20,6 +20,13 @@ overrides:
   # — deliberately. The merged input is our own committed config file, never
   # anything a customer supplies, and it runs in the migrate image only.
   "deepmerge-ts@<8.0.0": "^8.0.1"
+  # CLI-only: the prisma CLI pins mysql2 exactly, so nothing but an override
+  # reaches it. GHSA-3f6p-5ww8-9rcr lets a hostile server downgrade auth to
+  # mysql_clear_password and collect the plaintext password. We connect only to
+  # PostgreSQL (@prisma/adapter-pg), so this code path is never executed here —
+  # the override exists to keep `pnpm audit --audit-level low` clean rather than
+  # to close a reachable hole. Stays inside major 3.
+  "mysql2@<3.22.0": "^3.22.0"
   # Dev-only: eslint and vitest toolchains. Three majors are live at once.
   "brace-expansion@<1.1.18": "^1.1.18"
   "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4"
