@@ -29,7 +29,11 @@ export class ModelParseError extends Error {
  * 300 MiB upload ceiling to dictate allocations would make memory exhaustion
  * trivial with a syntactically valid file. */
 export const MAX_TRIANGLES = 4_000_000;
-export const MAX_VERTICES = 1_000_000;
+/** Sized so MAX_TRIANGLES is actually reachable rather than nominal: a closed
+ * mesh has roughly half as many vertices as triangles, so a 4M triangle model
+ * carries about 2M. At 1M this was the limit a dense 3MF hit first, and the
+ * advertised triangle ceiling could never be met. Costs 12 bytes each. */
+export const MAX_VERTICES = 2_500_000;
 
 /** Text formats create a decoded string plus parser-side arrays. Keep their
  * ceiling below the binary upload ceiling so one request cannot multiply into

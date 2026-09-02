@@ -2,7 +2,17 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { finalizeModel } from "./math";
 import { serializeBinaryStl } from "./stl";
 import { MAX_TRIANGLES, MAX_VERTICES, ModelParseError, type ParsedModel } from "./types";
-import { MAX_XML_BYTES, parseXmlBuffer } from "./xml";
+import {
+  MAX_MESH_XML_BYTES,
+  MAX_SKELETON_ELEMENTS,
+  MAX_XML_BYTES,
+  bytesAre,
+  parseXmlBuffer,
+  rejectDoctypeBytes,
+  scanTagAttributes,
+  scanXmlTags,
+  tagNameIs,
+} from "./xml";
 import { extractZipEntries, isZip } from "./zip";
 
 export const PREARRANGED_PLATE_STL_HEADER = "print.rish.pw prearranged plate";
@@ -71,6 +81,8 @@ interface GeometryBudget {
 interface ResolveBudget extends GeometryBudget {
   references: number;
 }
+
+const EMPTY_BUFFER = Buffer.alloc(0);
 
 const MAX_COMPONENT_REFERENCES = 50_000;
 const MAX_COMPONENT_DEPTH = 128;
@@ -474,7 +486,9 @@ function load3mfProject(buf: Buffer): ThreeMfProject {
         const normalized = normalizePackagePath(name);
         if (normalized === projectSettingsName) return 512 * 1024;
         if (normalized === modelSettingsName) return 2 * 1024 * 1024;
-        return MAX_XML_BYTES;
+        // Model parts are streamed, not DOM-parsed, so they carry the far
+        // larger mesh ceiling; the settings above still reach xmldom.
+        return MAX_MESH_XML_BYTES;
       },
     },
   );
@@ -486,9 +500,14 @@ function load3mfProject(buf: Buffer): ThreeMfProject {
   if (modelEntries.length === 0) throw new ModelParseError("3MF is missing model XML");
 
   const geometryBudget: GeometryBudget = { triangles: 0, vertices: 0 };
-  const entries = modelEntries.map((entry) =>
-    parseModelDocument(entry.name, entry.data, geometryBudget),
-  );
+  const entries: ModelDocument[] = [];
+  for (const entry of modelEntries) {
+    entries.push(parseModelDocument(entry.name, entry.data, geometryBudget));
+    // Drop each part's XML the moment its geometry has been read. Model parts
+    // may now be hundreds of MiB each, and a split project has several;
+    // holding them all live would cost more than the meshes they produced.
+    entry.data = EMPTY_BUFFER;
+  }
   const main = entries.find((entry) => entry.name.toLowerCase().endsWith("3dmodel.model")) ?? entries[0]!;
   const entriesByName = new Map(entries.map((entry) => [normalizePackagePath(entry.name), entry]));
   const meshCount = entries.reduce((sum, entry) => {
@@ -518,7 +537,11 @@ function isModelEntry(name: string): boolean {
 }
 
 function parseModelDocument(name: string, xml: Buffer, budget: GeometryBudget): ModelDocument {
-  const doc = parseXmlBuffer(xml, `3MF model ${name}`);
+  const what = `3MF model ${name}`;
+  // Mesh data never becomes DOM: the scan lifts every <mesh> out into a byte
+  // span, and xmldom only ever sees the structural skeleton left behind.
+  const { skeleton, spans } = exciseMeshes(xml, what);
+  const doc = parseXmlBuffer(skeleton, what);
   const root = doc.documentElement;
   if (!root) throw new ModelParseError("3MF model has no root element");
   const declaredUnit = (root.getAttribute("unit") ?? "millimeter").toLowerCase();
@@ -532,7 +555,12 @@ function parseModelDocument(name: string, xml: Buffer, budget: GeometryBudget): 
     const id = object.getAttribute("id") ?? "";
     const mesh = firstElement(object, "mesh");
     if (mesh) {
-      objects.set(id, { kind: "mesh", mesh: meshToTriangles(mesh, budget, unitScale) });
+      // Spans are read here, not during the scan, so a <mesh> no object
+      // references still costs nothing and consumes no geometry budget —
+      // exactly as when unreferenced meshes were simply never walked.
+      const span = spans[Number(mesh.getAttribute(MESH_SPAN_ATTR))];
+      if (!span) throw new ModelParseError("3MF mesh could not be located");
+      objects.set(id, { kind: "mesh", mesh: readMeshSpan(xml, span, budget, unitScale) });
       continue;
     }
 
@@ -880,46 +908,270 @@ function normalizeToOrigin(positions: Float32Array): Float32Array {
   return out;
 }
 
-function meshToTriangles(
-  mesh: Element,
+/** Marks where a mesh used to sit, so the skeleton's `<mesh>` element can be
+ *  matched back to the byte span its geometry was lifted into. */
+const MESH_SPAN_ATTR = "data-mesh-span";
+
+/** Byte range of one mesh's *interior*, between its open and close tags. */
+interface MeshSpan {
+  start: number;
+  end: number;
+}
+
+interface ExcisedModel {
+  /** The document with every `<mesh>…</mesh>` replaced by a marker element. */
+  skeleton: Buffer;
+  spans: MeshSpan[];
+}
+
+/**
+ * Lift every mesh out of a model part, leaving a skeleton small enough to hand
+ * to a DOM parser.
+ *
+ * This is the whole point of the streaming path. A 3MF stores its mesh as XML
+ * text, so a detailed model arrives as millions of `<vertex>` and `<triangle>`
+ * elements; at ~1.7 KiB of xmldom DOM apiece the reference 1.26M triangle
+ * export cost roughly 3 GB to parse. Structure — objects, components, build
+ * items — is tiny no matter how dense the geometry, so excising the meshes
+ * leaves a few dozen elements and the DOM cost collapses to nothing.
+ *
+ * Meshes are found through `scanXmlTags`, never by searching for the literal
+ * `<mesh`: the scanner skips comments and CDATA as units, so quoted markup
+ * inside them cannot be mistaken for a real element.
+ */
+function exciseMeshes(xml: Buffer, what: string): ExcisedModel {
+  if (xml.length > MAX_MESH_XML_BYTES) {
+    throw new ModelParseError(`${what}: XML exceeds ${MAX_MESH_XML_BYTES} bytes`, "TOO_COMPLEX");
+  }
+  rejectDoctypeBytes(xml, what);
+
+  const spans: MeshSpan[] = [];
+  const pieces: Buffer[] = [];
+  let skeletonBytes = 0;
+  let structural = 0;
+  let cut = 0;
+  let openStart = -1;
+  let interiorStart = -1;
+  let meshDepth = 0;
+
+  const keep = (upTo: number, replacement: Buffer, resumeAt: number) => {
+    pieces.push(xml.subarray(cut, upTo), replacement);
+    skeletonBytes += upTo - cut + replacement.length;
+    // Checked before Buffer.concat rather than after: the skeleton is the only
+    // part of this document we ever allocate a copy of.
+    if (skeletonBytes > MAX_XML_BYTES) {
+      throw new ModelParseError(`${what}: XML exceeds ${MAX_XML_BYTES} bytes`, "TOO_COMPLEX");
+    }
+    cut = resumeAt;
+  };
+  const marker = () => Buffer.from(`<mesh ${MESH_SPAN_ATTR}="${spans.length}"/>`, "latin1");
+
+  scanXmlTags(xml, what, (tag) => {
+    if (openStart >= 0) {
+      // Inside a mesh, only its own close tag matters. Everything between is
+      // geometry, and geometry is read later, straight from these bytes.
+      if (tag.closing && tag.depth === meshDepth && tagNameIs(xml, tag, "mesh")) {
+        keep(openStart, marker(), tag.end);
+        spans.push({ start: interiorStart, end: tag.start });
+        openStart = -1;
+      }
+      return;
+    }
+    if (tag.closing) return;
+
+    structural += 1;
+    if (structural > MAX_SKELETON_ELEMENTS) {
+      throw new ModelParseError(
+        `${what}: XML exceeds ${MAX_SKELETON_ELEMENTS} elements`,
+        "TOO_COMPLEX",
+      );
+    }
+    if (!tagNameIs(xml, tag, "mesh")) return;
+
+    if (tag.selfClosing) {
+      // Degenerate but legal to write; it reads back as a mesh with no
+      // vertices, which is the error readMeshSpan already reports.
+      keep(tag.start, marker(), tag.end);
+      spans.push({ start: tag.end, end: tag.end });
+      return;
+    }
+    openStart = tag.start;
+    interiorStart = tag.end;
+    meshDepth = tag.depth;
+  });
+
+  if (openStart >= 0) throw new ModelParseError(`${what}: not valid XML`);
+  pieces.push(xml.subarray(cut));
+  skeletonBytes += xml.length - cut;
+  if (skeletonBytes > MAX_XML_BYTES) {
+    throw new ModelParseError(`${what}: XML exceeds ${MAX_XML_BYTES} bytes`, "TOO_COMPLEX");
+  }
+  return { skeleton: Buffer.concat(pieces), spans };
+}
+
+/** Read one mesh's geometry straight out of the model buffer.
+ *
+ * Two passes: the first locates the `<vertices>` and `<triangles>` sections
+ * and counts their members, the second fills exactly-sized typed arrays. That
+ * ordering is deliberate — counting first means both budgets are enforced
+ * *before* anything is allocated, where the DOM path could only check after
+ * xmldom had already materialised every element. */
+function readMeshSpan(
+  xml: Buffer,
+  span: MeshSpan,
   budget: GeometryBudget,
   unitScale: number,
 ): Float32Array {
-  const verticesEl = firstElement(mesh, "vertices");
-  const trianglesEl = firstElement(mesh, "triangles");
-  if (!verticesEl || !trianglesEl) throw new ModelParseError("3MF mesh missing vertices/triangles");
+  let verticesFrom = -1;
+  let verticesTo = -1;
+  let verticesDepth = 0;
+  let inVertices = false;
+  let trianglesFrom = -1;
+  let trianglesTo = -1;
+  let trianglesDepth = 0;
+  let inTriangles = false;
+  let vertexCount = 0;
+  let triangleCount = 0;
 
-  const verts: number[] = [];
-  for (const v of elements(verticesEl, "vertex")) {
-    verts.push(
-      Number(v.getAttribute("x")) * unitScale,
-      Number(v.getAttribute("y")) * unitScale,
-      Number(v.getAttribute("z")) * unitScale,
-    );
-    budget.vertices += 1;
-    if (budget.vertices > MAX_VERTICES) {
-      throw new ModelParseError(`3MF exceeds ${MAX_VERTICES} vertices`, "TOO_COMPLEX");
-    }
+  scanXmlTags(
+    xml,
+    "3MF mesh",
+    (tag) => {
+      if (tag.closing) {
+        if (inVertices && tag.depth === verticesDepth && tagNameIs(xml, tag, "vertices")) {
+          verticesTo = tag.start;
+          inVertices = false;
+        } else if (inTriangles && tag.depth === trianglesDepth && tagNameIs(xml, tag, "triangles")) {
+          trianglesTo = tag.start;
+          inTriangles = false;
+        }
+        return;
+      }
+      if (verticesFrom < 0 && tagNameIs(xml, tag, "vertices")) {
+        verticesFrom = tag.end;
+        if (tag.selfClosing) verticesTo = tag.end;
+        else {
+          inVertices = true;
+          verticesDepth = tag.depth;
+        }
+        return;
+      }
+      if (trianglesFrom < 0 && tagNameIs(xml, tag, "triangles")) {
+        trianglesFrom = tag.end;
+        if (tag.selfClosing) trianglesTo = tag.end;
+        else {
+          inTriangles = true;
+          trianglesDepth = tag.depth;
+        }
+        return;
+      }
+      // Checked as we count, not afterwards: a hostile part may be hundreds of
+      // MiB of bare <vertex/> tags, and there is no reason to scan all of it
+      // once the budget is already blown. Document order puts vertices first,
+      // so this reports the same limit first that counting-then-checking did.
+      if (inVertices && tagNameIs(xml, tag, "vertex")) {
+        vertexCount += 1;
+        if (budget.vertices + vertexCount > MAX_VERTICES) {
+          throw new ModelParseError(`3MF exceeds ${MAX_VERTICES} vertices`, "TOO_COMPLEX");
+        }
+      } else if (inTriangles && tagNameIs(xml, tag, "triangle")) {
+        triangleCount += 1;
+        if (budget.triangles + triangleCount > MAX_TRIANGLES) {
+          throw new ModelParseError(`3MF exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
+        }
+      }
+    },
+    { from: span.start, to: span.end },
+  );
+
+  if (verticesFrom < 0 || trianglesFrom < 0) {
+    throw new ModelParseError("3MF mesh missing vertices/triangles");
   }
-  const tris = elements(trianglesEl, "triangle");
-  budget.triangles += tris.length;
+  if (verticesTo < 0) verticesTo = span.end;
+  if (trianglesTo < 0) trianglesTo = span.end;
+
+  budget.vertices += vertexCount;
+  if (budget.vertices > MAX_VERTICES) {
+    throw new ModelParseError(`3MF exceeds ${MAX_VERTICES} vertices`, "TOO_COMPLEX");
+  }
+  budget.triangles += triangleCount;
   if (budget.triangles > MAX_TRIANGLES) {
     throw new ModelParseError(`3MF exceeds ${MAX_TRIANGLES} triangles`, "TOO_MANY_TRIANGLES");
   }
-  const positions = new Float32Array(tris.length * 9);
-  const vertexCount = verts.length / 3;
-  tris.forEach((t, i) => {
-    (["v1", "v2", "v3"] as const).forEach((attr, j) => {
-      const idx = Number(t.getAttribute(attr));
-      if (!Number.isInteger(idx) || idx < 0 || idx >= vertexCount) {
-        throw new ModelParseError("3MF triangle references a missing vertex");
-      }
-      positions[i * 9 + j * 3] = verts[idx * 3]!;
-      positions[i * 9 + j * 3 + 1] = verts[idx * 3 + 1]!;
-      positions[i * 9 + j * 3 + 2] = verts[idx * 3 + 2]!;
-    });
-  });
+
+  // Float32Array rather than a number[]: the values were being rounded to
+  // float32 on their way into `positions` anyway, so this is the same
+  // arithmetic at a third of the residency and with no growth copies.
+  const verts = new Float32Array(vertexCount * 3);
+  let at = 0;
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  // Hoisted out of the visitor: a mesh this size would otherwise allocate one
+  // closure per vertex.
+  const readVertexAttr = (ns: number, ne: number, vs: number, ve: number) => {
+    if (bytesAre(xml, ns, ne, "x")) x = attrNumber(xml, vs, ve);
+    else if (bytesAre(xml, ns, ne, "y")) y = attrNumber(xml, vs, ve);
+    else if (bytesAre(xml, ns, ne, "z")) z = attrNumber(xml, vs, ve);
+  };
+  scanXmlTags(
+    xml,
+    "3MF mesh",
+    (tag) => {
+      if (tag.closing || at >= verts.length || !tagNameIs(xml, tag, "vertex")) return;
+      // A missing coordinate reads as 0, matching Number(getAttribute(...)).
+      x = 0;
+      y = 0;
+      z = 0;
+      scanTagAttributes(xml, tag.start, tag.end, readVertexAttr);
+      verts[at++] = x * unitScale;
+      verts[at++] = y * unitScale;
+      verts[at++] = z * unitScale;
+    },
+    { from: verticesFrom, to: verticesTo },
+  );
+
+  const positions = new Float32Array(triangleCount * 9);
+  let out = 0;
+  let v1 = 0;
+  let v2 = 0;
+  let v3 = 0;
+  const readTriangleAttr = (ns: number, ne: number, vs: number, ve: number) => {
+    if (bytesAre(xml, ns, ne, "v1")) v1 = attrNumber(xml, vs, ve);
+    else if (bytesAre(xml, ns, ne, "v2")) v2 = attrNumber(xml, vs, ve);
+    else if (bytesAre(xml, ns, ne, "v3")) v3 = attrNumber(xml, vs, ve);
+  };
+  const emit = (index: number) => {
+    if (!Number.isInteger(index) || index < 0 || index >= vertexCount) {
+      throw new ModelParseError("3MF triangle references a missing vertex");
+    }
+    positions[out++] = verts[index * 3]!;
+    positions[out++] = verts[index * 3 + 1]!;
+    positions[out++] = verts[index * 3 + 2]!;
+  };
+  scanXmlTags(
+    xml,
+    "3MF mesh",
+    (tag) => {
+      if (tag.closing || out >= positions.length || !tagNameIs(xml, tag, "triangle")) return;
+      v1 = 0;
+      v2 = 0;
+      v3 = 0;
+      scanTagAttributes(xml, tag.start, tag.end, readTriangleAttr);
+      emit(v1);
+      emit(v2);
+      emit(v3);
+    },
+    { from: trianglesFrom, to: trianglesTo },
+  );
+
   return positions;
+}
+
+function attrNumber(buf: Buffer, start: number, end: number): number {
+  // Numeric attributes are ASCII; latin1 skips UTF-8 decoding, and anything
+  // that is not a number becomes NaN here exactly as Number(...) would.
+  return Number(buf.toString("latin1", start, end));
 }
 
 /** 3MF transform: 12 space-separated numbers, row-major 4x3. Translation is

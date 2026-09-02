@@ -1,3 +1,4 @@
+import { DOMParser, type Document, type Element } from "@xmldom/xmldom";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -10,7 +11,13 @@ import {
   ModelParseError,
   parseModel,
 } from "./index";
-import { MAX_XML_BYTES, MAX_XML_DEPTH, MAX_XML_ELEMENTS, parseXml } from "./xml";
+import {
+  MAX_SKELETON_ELEMENTS,
+  MAX_XML_BYTES,
+  MAX_XML_DEPTH,
+  MAX_XML_ELEMENTS,
+  parseXml,
+} from "./xml";
 import { extractZipEntries, MAX_ZIP_ENTRIES } from "./zip";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "..", "fixtures", name));
@@ -508,5 +515,224 @@ describe("multi-part 3MF packing", () => {
 
     expect(inspection.partCount).toBe(2);
     expect(inspection.droppedParts).toBe(1);
+  });
+});
+
+describe("streamed 3MF mesh reading", () => {
+  /** Units the 3MF parser accepts, mirrored here so the oracle below scales
+   *  coordinates the same way the parser does. */
+  const UNIT_TO_MM: Record<string, number> = {
+    micron: 0.001,
+    millimeter: 1,
+    centimeter: 10,
+    inch: 25.4,
+    foot: 304.8,
+    meter: 1000,
+  };
+
+  const byLocalName = (parent: Element | Document, name: string): Element[] => {
+    const all = parent.getElementsByTagName("*");
+    const out: Element[] = [];
+    for (let i = 0; i < all.length; i++) {
+      if (all[i]!.localName === name) out.push(all[i]! as unknown as Element);
+    }
+    return out;
+  };
+
+  /**
+   * The mesh reader exactly as it worked before streaming: an xmldom DOM with
+   * one node per vertex and per triangle.
+   *
+   * Kept as an executable oracle rather than deleted. The rewrite's whole
+   * claim is that it reads identical geometry for a fraction of the memory,
+   * and the only way to check the first half of that claim is to keep the
+   * implementation it replaced and compare against it.
+   */
+  const meshViaDom = (modelXml: string, meshIndex = 0): Float32Array => {
+    const doc = new DOMParser().parseFromString(modelXml, "text/xml");
+    const root = doc.documentElement!;
+    const unitScale = UNIT_TO_MM[(root.getAttribute("unit") ?? "millimeter").toLowerCase()]!;
+    const mesh = byLocalName(root, "mesh")[meshIndex]!;
+
+    const verts: number[] = [];
+    for (const v of byLocalName(byLocalName(mesh, "vertices")[0]!, "vertex")) {
+      verts.push(
+        Number(v.getAttribute("x")) * unitScale,
+        Number(v.getAttribute("y")) * unitScale,
+        Number(v.getAttribute("z")) * unitScale,
+      );
+    }
+    const tris = byLocalName(byLocalName(mesh, "triangles")[0]!, "triangle");
+    const positions = new Float32Array(tris.length * 9);
+    const vertexCount = verts.length / 3;
+    tris.forEach((t, i) => {
+      (["v1", "v2", "v3"] as const).forEach((attr, j) => {
+        const idx = Number(t.getAttribute(attr));
+        if (!Number.isInteger(idx) || idx < 0 || idx >= vertexCount) {
+          throw new ModelParseError("3MF triangle references a missing vertex");
+        }
+        positions[i * 9 + j * 3] = verts[idx * 3]!;
+        positions[i * 9 + j * 3 + 1] = verts[idx * 3 + 1]!;
+        positions[i * 9 + j * 3 + 2] = verts[idx * 3 + 2]!;
+      });
+    });
+    return positions;
+  };
+
+  const archiveOf = (modelXml: string) =>
+    Buffer.from(zipSync({ "3D/3dmodel.model": strToU8(modelXml) }));
+
+  /** A single-object, single-build-item, untransformed 3MF. That shape leaves
+   *  `parseModel().positions` byte-identical to the mesh the reader produced —
+   *  nothing downstream translates or normalizes it — so any difference here
+   *  is a difference in mesh reading and nothing else. */
+  const wrap = (body: string, unit = "millimeter", objectId = "1") =>
+    `<?xml version="1.0" encoding="UTF-8"?>
+    <model unit="${unit}" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+      <resources>${body}</resources>
+      <build><item objectid="${objectId}"/></build>
+    </model>`;
+
+  const TETRA_VERTICES = `
+    <vertex x="0" y="0" z="0"/>
+    <vertex x="10.5" y="0" z="0"/>
+    <vertex x="0" y="7.25" z="0"/>
+    <vertex x="0" y="0" z="3.125"/>`;
+  const TETRA_TRIANGLES = `
+    <triangle v1="0" v2="1" v3="2"/>
+    <triangle v1="0" v2="1" v3="3"/>
+    <triangle v1="0" v2="2" v3="3"/>
+    <triangle v1="1" v2="2" v3="3"/>`;
+  const object = (id: string, vertices = TETRA_VERTICES, triangles = TETRA_TRIANGLES) =>
+    `<object id="${id}" type="model"><mesh>
+       <vertices>${vertices}</vertices><triangles>${triangles}</triangles>
+     </mesh></object>`;
+
+  const expectSameAsDom = (modelXml: string, meshIndex = 0) => {
+    const streamed = parseModel(archiveOf(modelXml), "3mf");
+    expect(streamed.positions).toEqual(meshViaDom(modelXml, meshIndex));
+  };
+
+  it("reads the same geometry as the DOM parser it replaced", () => {
+    expectSameAsDom(wrap(object("1")));
+  });
+
+  it.each([
+    ["inch", "inch"],
+    ["micron", "micron"],
+    ["meter", "meter"],
+  ])("applies the %s unit scale exactly as the DOM parser did", (_label, unit) => {
+    expectSameAsDom(wrap(object("1"), unit));
+  });
+
+  /** The scanner must find meshes through real tokenization. Searching the
+   *  bytes for "<mesh" would pick up every one of these. */
+  it("ignores markup quoted inside comments, CDATA and processing instructions", () => {
+    const decoys = `
+      <!-- <mesh><vertices><vertex x="999" y="999" z="999"/></vertices></mesh> -->
+      <metadata name="notes"><![CDATA[ <triangle v1="9" v2="9" v3="9"/> ]]></metadata>
+      <?sliced <mesh><vertex x="42"/> ?>`;
+    expectSameAsDom(wrap(`${decoys}${object("1")}`));
+  });
+
+  it("does not mistake a '>' inside an attribute value for the end of a tag", () => {
+    // Legal XML: only '<' and '&' must be escaped in an attribute value.
+    const body = `<object id="1" type="model" name="a > b then /> more"><mesh>
+        <vertices>${TETRA_VERTICES}</vertices><triangles>${TETRA_TRIANGLES}</triangles>
+      </mesh></object>`;
+    expectSameAsDom(wrap(body));
+  });
+
+  it("reads single-quoted attributes and tolerates spacing and attribute order", () => {
+    const vertices = `
+      <vertex y='0' x='0' z='0' />
+      <vertex   x='10.5'   y='0'   z='0'  />
+      <vertex z='0' y='7.25' x='0'/>
+      <vertex x='0' z='3.125' y='0' extra='ignored'/>`;
+    expectSameAsDom(wrap(object("1", vertices)));
+  });
+
+  it("strips namespace prefixes when matching mesh elements", () => {
+    const model = `<?xml version="1.0" encoding="UTF-8"?>
+      <m:model unit="millimeter" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <m:resources><m:object id="1" type="model"><m:mesh>
+          <m:vertices>
+            <m:vertex x="0" y="0" z="0"/><m:vertex x="10.5" y="0" z="0"/>
+            <m:vertex x="0" y="7.25" z="0"/><m:vertex x="0" y="0" z="3.125"/>
+          </m:vertices>
+          <m:triangles>
+            <m:triangle v1="0" v2="1" v3="2"/><m:triangle v1="0" v2="1" v3="3"/>
+            <m:triangle v1="0" v2="2" v3="3"/><m:triangle v1="1" v2="2" v3="3"/>
+          </m:triangles>
+        </m:mesh></m:object></m:resources>
+        <m:build><m:item objectid="1"/></m:build>
+      </m:model>`;
+    expectSameAsDom(model);
+  });
+
+  /** Number(getAttribute(...)) reads a missing attribute as 0; the streaming
+   *  reader has to agree, or meshes silently shift. */
+  it("treats a missing coordinate as zero, as the DOM parser did", () => {
+    const vertices = `
+      <vertex y="0" z="0"/>
+      <vertex x="10.5" z="0"/>
+      <vertex x="0" y="7.25"/>
+      <vertex x="0" y="0" z="3.125"/>`;
+    expectSameAsDom(wrap(object("1", vertices)));
+  });
+
+  it("picks the right mesh when a document holds several", () => {
+    const twoObjects = `${object("1")}${object("2", TETRA_VERTICES.replace(/10\.5/, "4.75"))}`;
+    expectSameAsDom(wrap(twoObjects, "millimeter", "2"), 1);
+  });
+
+  it("still rejects a triangle pointing past the vertex list", () => {
+    const model = wrap(object("1", TETRA_VERTICES, '<triangle v1="0" v2="1" v3="99"/>'));
+    expect(() => parseModel(archiveOf(model), "3mf")).toThrowError(/missing vertex/);
+  });
+
+  it("still rejects a mesh with no vertices or triangles", () => {
+    const model = wrap('<object id="1" type="model"><mesh/></object>');
+    expect(() => parseModel(archiveOf(model), "3mf")).toThrowError(
+      /missing vertices\/triangles/,
+    );
+  });
+
+  it("rejects a model part whose mesh is never closed", () => {
+    const model = `<?xml version="1.0"?>
+      <model unit="millimeter"><resources><object id="1"><mesh>
+        <vertices>${TETRA_VERTICES}</vertices><triangles>${TETRA_TRIANGLES}</triangles>
+      </object></resources><build><item objectid="1"/></build></model>`;
+    expect(() => parseModel(archiveOf(model), "3mf")).toThrowError(ModelParseError);
+  });
+
+  /** Structure is bounded separately from geometry now, so a file can be dense
+   *  in triangles or dense in objects but not unbounded in either. */
+  it("rejects a model whose structure exceeds the skeleton element ceiling", () => {
+    const filler = "<metadata/>".repeat(MAX_SKELETON_ELEMENTS + 1);
+    const model = wrap(`${filler}${object("1")}`);
+    expect(() => parseModel(archiveOf(model), "3mf")).toThrowError(/elements/);
+  });
+
+  /** The regression this whole change exists for: mesh XML is no longer
+   *  measured against the DOM ceiling, so a model part far past it parses. */
+  it("parses a model part larger than the DOM byte ceiling", () => {
+    const triangleCount = 500_000;
+    const vertexCount = triangleCount / 2;
+    const vertices = Array.from(
+      { length: vertexCount },
+      (_, i) =>
+        `<vertex x="${(Math.sin(i) * 40).toFixed(6)}" y="${(Math.cos(i) * 40).toFixed(6)}" z="${((i % 500) * 0.05).toFixed(6)}"/>`,
+    ).join("");
+    const triangles = Array.from(
+      { length: triangleCount },
+      (_, i) =>
+        `<triangle v1="${i % vertexCount}" v2="${(i + 1) % vertexCount}" v3="${(i + 2) % vertexCount}"/>`,
+    ).join("");
+    const model = wrap(object("1", vertices, triangles));
+
+    expect(Buffer.byteLength(model)).toBeGreaterThan(MAX_XML_BYTES);
+    const parsed = parseModel(archiveOf(model), "3mf");
+    expect(parsed.triangleCount).toBe(triangleCount);
   });
 });
