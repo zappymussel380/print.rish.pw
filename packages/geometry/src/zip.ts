@@ -8,14 +8,21 @@ import { ModelParseError } from "./types";
  *
  *  This is the fallback for callers that pass no `maxEntryBytes`, which today
  *  means zipped AMF. 3MF overrides it per entry (see `load3mfProject`), since
- *  a detailed `3D/*.model` part legitimately runs to MAX_XML_BYTES - well past
- *  this default. Do not assume this value bounds every extraction. */
+ *  a detailed `3D/*.model` part is streamed rather than DOM-parsed and
+ *  legitimately runs to MAX_MESH_XML_BYTES - far past this default. Do not
+ *  assume this value bounds every extraction. */
 export const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
 /** Aggregate decompressed budget across every entry we extract from one
  *  container. A multi-part 3MF spends this across several `3D/*.model` parts,
  *  so it has to clear the single-entry ceiling with room to spare rather than
- *  merely match it. */
-export const MAX_EXTRACTED_BYTES = 192 * 1024 * 1024;
+ *  merely match it.
+ *
+ *  Sized against MAX_MESH_XML_BYTES (512 MiB) so a single maximal model part
+ *  still leaves room for the rest of a split project. Note this is the one
+ *  place a whole project is briefly resident at once: extraction completes
+ *  before any part is parsed, so this — not the per-part ceiling — is what
+ *  bounds buffer residency for a split 3MF. */
+export const MAX_EXTRACTED_BYTES = 768 * 1024 * 1024;
 export const MAX_ZIP_ENTRIES = 1024;
 
 export interface ExtractedZipEntry {

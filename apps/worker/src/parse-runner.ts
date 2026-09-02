@@ -77,10 +77,27 @@ function runningAsRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
 }
 
-/** Heap ceiling for the untrusted parse child, in MiB. Measured: a 1.26M
- *  triangle 3MF needs ~3 GB, as does a synthetic model sitting on every parser
- *  limit at once. */
-const PARSE_CHILD_HEAP_MB = 4096;
+/** Heap ceiling for the untrusted parse child, in MiB.
+ *
+ *  Measured by bisecting this value until the parse stops completing — never
+ *  by sampling RSS, which under-reported a DOM parse by 9x. Worst observed
+ *  cases, all on the streaming 3MF parser:
+ *
+ *    1.26M triangle 3MF (the real customer file)      63 MiB
+ *    4M triangle 3MF, sitting on every geometry cap   95 MiB
+ *    AMF at MAX_XML_ELEMENTS, the DOM path's ceiling  347 MiB
+ *
+ *  So AMF, not 3MF, is what sizes this now: 3MF mesh data no longer becomes
+ *  DOM at all. 1024 leaves roughly 3x over the worst measured case, and is a
+ *  deliberate step down from the 4096 the old DOM-based 3MF parse needed —
+ *  small enough that reintroducing a DOM on the mesh path fails loudly here
+ *  instead of quietly growing into the memory a concurrent slice needs.
+ *
+ *  Note this bounds the JS heap only. Decompressed model XML and the meshes
+ *  read out of it are Buffers and typed arrays living outside it; those are
+ *  bounded by MAX_EXTRACTED_BYTES in the geometry package, with the worker's
+ *  cgroup as the backstop. */
+const PARSE_CHILD_HEAP_MB = 1024;
 
 /** The bundled image ships dist/parse-child.js beside this module; the tsx dev
  * server runs straight from src, where the TS entry needs the tsx binary. */
@@ -185,13 +202,12 @@ async function runChild(
         PATH: process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         LANG: process.env.LANG ?? "en_US.UTF-8",
         LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
-        // Bound the child's heap well under the worker cgroup. A model at the
-        // MAX_XML_ELEMENTS ceiling needs a little under 3 GB to build its DOM,
-        // so 4 GB parses every accepted file while stopping a single upload
-        // from growing into the memory the concurrent slice job needs. Without
-        // it the ceiling is the whole cgroup, and the loser is whichever child
-        // the kernel reaps. A fixed constant, not read from process.env: the
-        // child's environment stays a deliberate, minimal, auditable set.
+        // Bound the child's heap well under the worker cgroup, so a single
+        // upload cannot grow into the memory the concurrent slice job needs.
+        // Without it the ceiling is the whole cgroup, and the loser is
+        // whichever child the kernel reaps. See PARSE_CHILD_HEAP_MB for how
+        // the value was measured. A fixed constant, not read from process.env:
+        // the child's environment stays a deliberate, minimal, auditable set.
         NODE_OPTIONS: `--max-old-space-size=${PARSE_CHILD_HEAP_MB}`,
         // Not sensitive, and Next's ProcessEnv augmentation marks it required
         // wherever the web tsconfig typechecks these worker sources.
