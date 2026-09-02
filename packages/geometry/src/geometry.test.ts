@@ -11,7 +11,7 @@ import {
   parseModel,
 } from "./index";
 import { MAX_XML_BYTES, MAX_XML_DEPTH, MAX_XML_ELEMENTS, parseXml } from "./xml";
-import { MAX_ZIP_ENTRIES } from "./zip";
+import { extractZipEntries, MAX_ZIP_ENTRIES } from "./zip";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "..", "fixtures", name));
 
@@ -40,6 +40,67 @@ describe("parseModel", () => {
     } catch (err) {
       expect((err as ModelParseError).code).toBe("ZIP_BOMB");
     }
+  });
+
+  /** Regression: a detailed but entirely ordinary Bambu Studio export was
+   *  refused as a zip bomb. Its `3D/3dmodel.model` was 99.8 MiB of XML at a
+   *  6:1 deflate ratio, over both the old 8 MiB byte ceiling and the old
+   *  100k element ceiling. This builds a mesh large enough to clear both of
+   *  those old limits while staying small enough to keep the suite quick. */
+  it("parses a detailed model whose XML exceeds the former 8 MiB ceiling", () => {
+    const triangleCount = 150_000;
+    const vertexCount = triangleCount / 2;
+    const vertices = Array.from(
+      { length: vertexCount },
+      (_, i) =>
+        `<vertex x="${(Math.sin(i) * 40).toFixed(6)}" y="${(Math.cos(i) * 40).toFixed(6)}" z="${((i % 500) * 0.05).toFixed(6)}"/>`,
+    ).join("");
+    const triangles = Array.from(
+      { length: triangleCount },
+      (_, i) =>
+        `<triangle v1="${i % vertexCount}" v2="${(i + 1) % vertexCount}" v3="${(i + 2) % vertexCount}"/>`,
+    ).join("");
+    const model = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources><object id="1" type="model"><mesh>
+          <vertices>${vertices}</vertices><triangles>${triangles}</triangles>
+        </mesh></object></resources>
+        <build><item objectid="1"/></build>
+      </model>`;
+
+    // The guards this regression is about are the ones the old limits tripped.
+    expect(Buffer.byteLength(model)).toBeGreaterThan(8 * 1024 * 1024);
+    expect(triangleCount + vertexCount).toBeGreaterThan(100_000);
+
+    const archive = Buffer.from(
+      zipSync({
+        "[Content_Types].xml": strToU8(
+          '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>',
+        ),
+        "_rels/.rels": strToU8(
+          '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rel0" Target="/3D/3dmodel.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
+        ),
+        "3D/3dmodel.model": strToU8(model),
+      }),
+    );
+
+    const parsed = parseModel(archive, "3mf");
+    expect(parsed.triangleCount).toBe(triangleCount);
+  });
+
+  /** The old wording ("Compressed entry expands beyond the allowed size") read
+   *  as an accusation of hostility to anyone who had simply exported a dense
+   *  mesh, and hinted at nothing they could act on. */
+  it("describes an oversized entry as too detailed rather than as an attack", () => {
+    const archive = Buffer.from(zipSync({ "3D/3dmodel.model": strToU8("<model/>".repeat(1000)) }));
+    let message = "";
+    try {
+      extractZipEntries(archive, (name) => name.endsWith(".model"), { maxEntryBytes: 64 });
+    } catch (err) {
+      message = (err as ModelParseError).message;
+    }
+    expect(message).toMatch(/more detailed/);
+    expect(message).not.toMatch(/expands beyond/);
   });
 
   it("rejects containers with an excessive number of entries", () => {

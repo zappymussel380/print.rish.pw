@@ -213,10 +213,19 @@ services:
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,size=3g,mode=1777
     pids_limit: 256
-    # OrcaSlicer alone peaks past 4 GB RSS on ~220 MB STLs (OOM-killed at 97%
-    # on 2026-07-15), and /tmp is a 3 GB tmpfs charged to this same cgroup.
-    mem_limit: 8g
-    memswap_limit: 8g
+    # Three consumers share this cgroup and can peak together:
+    #   - /tmp, a 3 GB tmpfs, charged here in full;
+    #   - OrcaSlicer, past 4 GB RSS on ~220 MB STLs (OOM-killed at 97% on
+    #     2026-07-15);
+    #   - the parse child, up to ~3.4 GB building an xmldom tree for a model at
+    #     the MAX_XML_ELEMENTS ceiling (a 1.26M triangle 3MF measures 3.2 GB).
+    # Ingest and slice are separate BullMQ workers in one process, so a parse
+    # and a slice do overlap. 8g could not cover that sum once 3MF models this
+    # large became parseable. The parse child runs under `choom -n 1000`, so if
+    # the sum is still exceeded the kernel reaps it first and the customer gets
+    # a parse error rather than the worker dying mid-slice.
+    mem_limit: 12g
+    memswap_limit: 12g
     ulimits:
       core: 0
     init: true
@@ -231,7 +240,7 @@ services:
       resources:
         limits:
           cpus: "4"
-          memory: 8g
+          memory: 12g
           pids: 256
     # The trusted orchestrator gets only the capabilities needed to maintain
     # storage ownership, reap escaped child processes, and switch each Orca job

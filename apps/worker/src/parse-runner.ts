@@ -77,6 +77,11 @@ function runningAsRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
 }
 
+/** Heap ceiling for the untrusted parse child, in MiB. Measured: a 1.26M
+ *  triangle 3MF needs ~3 GB, as does a synthetic model sitting on every parser
+ *  limit at once. */
+const PARSE_CHILD_HEAP_MB = 4096;
+
 /** The bundled image ships dist/parse-child.js beside this module; the tsx dev
  * server runs straight from src, where the TS entry needs the tsx binary. */
 function defaultChildCommand(): string[] {
@@ -180,6 +185,14 @@ async function runChild(
         PATH: process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         LANG: process.env.LANG ?? "en_US.UTF-8",
         LC_ALL: process.env.LC_ALL ?? "en_US.UTF-8",
+        // Bound the child's heap well under the worker cgroup. A model at the
+        // MAX_XML_ELEMENTS ceiling needs a little under 3 GB to build its DOM,
+        // so 4 GB parses every accepted file while stopping a single upload
+        // from growing into the memory the concurrent slice job needs. Without
+        // it the ceiling is the whole cgroup, and the loser is whichever child
+        // the kernel reaps. A fixed constant, not read from process.env: the
+        // child's environment stays a deliberate, minimal, auditable set.
+        NODE_OPTIONS: `--max-old-space-size=${PARSE_CHILD_HEAP_MB}`,
         // Not sensitive, and Next's ProcessEnv augmentation marks it required
         // wherever the web tsconfig typechecks these worker sources.
         NODE_ENV: process.env.NODE_ENV,
