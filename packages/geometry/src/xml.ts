@@ -3,10 +3,25 @@ import { ModelParseError } from "./types";
 
 /** Ceiling on XML text handed to the DOM parser. The DOM inflates its input
  *  many times over in memory, so this bounds what one hostile upload can make
- *  the process allocate. It is intentionally lower than the generic zip-entry
- *  cap because DOM nodes amplify memory; uploaded 3MF/AMF is the only input. */
-export const MAX_XML_BYTES = 8 * 1024 * 1024;
-export const MAX_XML_ELEMENTS = 100_000;
+ *  the process allocate. Uploaded 3MF/AMF is the only input.
+ *
+ *  Sized from real slicer output, not from the transport ceiling. A 1.26M
+ *  triangle Bambu Studio export carries a 99.8 MiB `3D/3dmodel.model` (at an
+ *  ordinary 6:1 deflate ratio - detailed models are not zip bombs), and the
+ *  previous 8 MiB ceiling rejected it as one. 128 MiB clears that with room
+ *  for roughly 1.6M triangles.
+ *
+ *  Bytes are the cheap first filter; MAX_XML_ELEMENTS below is the bound that
+ *  actually caps memory, since xmldom costs ~1.7 KiB per element regardless of
+ *  how few bytes each one occupies. */
+export const MAX_XML_BYTES = 128 * 1024 * 1024;
+/** Hard bound on DOM node count, enforced by `preflightXml` *before* xmldom
+ *  allocates anything. This is the real memory limit: at ~1.7 KiB of DOM per
+ *  element, 2.5M elements is roughly 3.4 GiB peak in the parse child, which is
+ *  survivable inside the worker's memory limit alongside a concurrent slice.
+ *  The 1.26M triangle reference model needs 1.89M (one element per triangle
+ *  plus one per vertex); raise this only together with that memory budget. */
+export const MAX_XML_ELEMENTS = 2_500_000;
 export const MAX_XML_DEPTH = 128;
 const MAX_TAG_CHARS = 64 * 1024;
 

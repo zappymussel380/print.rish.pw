@@ -1,14 +1,21 @@
 import { Unzip, UnzipInflate } from "fflate";
 import { ModelParseError } from "./types";
 
-/** Decompressed-size ceiling for any single entry we extract from an
- *  uploaded container (3MF / zipped AMF). Keeps zip bombs from exhausting
- *  memory: the input file itself is already capped by the upload limit
- *  (300 MiB), and the only entries we ever extract are model XML - anything
- *  expanding past this is hostile or unparseable in reasonable time anyway
- *  (it would blow the XML parser's own MAX_XML_BYTES cap next). */
+/** Default decompressed-size ceiling for any single entry we extract from an
+ *  uploaded container. Keeps zip bombs from exhausting memory: the input file
+ *  itself is already capped by the upload limit (300 MiB), and the only
+ *  entries we ever extract are model XML.
+ *
+ *  This is the fallback for callers that pass no `maxEntryBytes`, which today
+ *  means zipped AMF. 3MF overrides it per entry (see `load3mfProject`), since
+ *  a detailed `3D/*.model` part legitimately runs to MAX_XML_BYTES - well past
+ *  this default. Do not assume this value bounds every extraction. */
 export const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
-export const MAX_EXTRACTED_BYTES = 64 * 1024 * 1024;
+/** Aggregate decompressed budget across every entry we extract from one
+ *  container. A multi-part 3MF spends this across several `3D/*.model` parts,
+ *  so it has to clear the single-entry ceiling with room to spare rather than
+ *  merely match it. */
+export const MAX_EXTRACTED_BYTES = 192 * 1024 * 1024;
 export const MAX_ZIP_ENTRIES = 1024;
 
 export interface ExtractedZipEntry {
@@ -47,7 +54,9 @@ export function extractZipEntries(
   options: ZipExtractionOptions = {},
 ): ExtractedZipEntry[] {
   const results: ExtractedZipEntry[] = [];
-  let bombed = false;
+  /** Why extraction aborted, so the thrown error names the limit that was hit
+   *  instead of accusing every oversized model of being a zip bomb. */
+  let bombed: "entries" | "entry" | "total" | null = null;
   let extractedTotal = 0;
   let entryCount = 0;
   let matchCount = 0;
@@ -58,7 +67,7 @@ export function extractZipEntries(
   const unzip = new Unzip((file) => {
     entryCount += 1;
     if (entryCount > maxEntries) {
-      bombed = true;
+      bombed = "entries";
       file.terminate();
       return;
     }
@@ -78,7 +87,7 @@ export function extractZipEntries(
       total += chunk.length;
       extractedTotal += chunk.length;
       if (total > maxEntryBytes || extractedTotal > maxExtractedBytes) {
-        bombed = true;
+        bombed = total > maxEntryBytes ? "entry" : "total";
         file.terminate();
         return;
       }
@@ -105,14 +114,23 @@ export function extractZipEntries(
     throw new ModelParseError("Not a valid zip container");
   }
   if (bombed) {
-    throw new ModelParseError(
-      entryCount > maxEntries
-        ? `Zip container exceeds ${maxEntries} entries`
-        : "Compressed entry expands beyond the allowed size",
-      "ZIP_BOMB",
-    );
+    throw new ModelParseError(zipLimitMessage(bombed, maxEntries), "ZIP_BOMB");
   }
   return results;
+}
+
+/** Phrased for the customer who uploaded an ordinary, highly detailed model:
+ *  the old wording called every oversized entry a zip bomb, which reads as an
+ *  accusation and gives no hint that simplifying the mesh is the fix. */
+function zipLimitMessage(reason: "entries" | "entry" | "total", maxEntries: number): string {
+  switch (reason) {
+    case "entries":
+      return `Zip container exceeds ${maxEntries} entries`;
+    case "entry":
+      return "A part of this file is too large to read once decompressed - the model is more detailed than this service can process";
+    case "total":
+      return "This file's parts are too large to read once decompressed - the model is more detailed than this service can process";
+  }
 }
 
 export function isZip(buf: Buffer): boolean {
