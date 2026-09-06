@@ -16,7 +16,7 @@
     "@print/db": "workspace:*",
     "@print/geometry": "workspace:*",
     "@print/shared": "workspace:*",
-    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.9.1",
     "bullmq": "^6.3.2",
     "fflate": "^0.8.2",
