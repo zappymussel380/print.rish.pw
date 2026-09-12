@@ -28,11 +28,17 @@ TARGETS = {
         ("0.16mm Optimal @BBL A1", "process.0.16.json"),
         ("0.20mm Standard @BBL A1", "process.0.20.json"),
     ],
+    # Filament presets are overlay BASES, not shipped profiles: the worker slices
+    # with the supplier's own presets laid on top (overlay-numakers-profiles.py).
     "filament": [
-        ("Bambu PLA Basic @BBL A1", "filament.pla.json"),
-        ("Generic PETG @BBL A1", "filament.petg.json"),
+        ("Bambu PLA Basic @BBL A1", "bambu-pla-basic.json"),
+        ("Generic PETG @BBL A1", "generic-petg.json"),
     ],
 }
+
+# Where each kind is written. Filament bases stay out of apps/worker/profiles so
+# re-flattening can never overwrite the Numakers profiles the worker ships.
+BASE_DIR = Path(__file__).resolve().parent / "profile-sources"
 
 
 def build_index(vendor_root: Path) -> dict[str, Path]:
@@ -77,7 +83,8 @@ def main() -> None:
                 density = float(profile.get("filament_density", ["0"])[0])
                 if density <= 0:
                     raise RuntimeError(f"{source_name}: flattened but density still 0")
-            (out_dir / out_name).write_text(json.dumps(profile, indent=2) + "\n")
+            dest = BASE_DIR if kind == "filament" else out_dir
+            (dest / out_name).write_text(json.dumps(profile, indent=2) + "\n")
             print(f"{out_name}  <-  {source_name}  ({len(profile)} keys)")
 
 

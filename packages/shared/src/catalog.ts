@@ -59,21 +59,46 @@ export const CATALOG: Catalog = {
     },
   },
   defaultPrinterId: "bbl-a1",
+  // Densities match filament_density in each tier's Numakers slicer profile
+  // (apps/worker/profiles/filament.*.json). Informational only: the billed grams
+  // come from the slicer, which scales them by density × flow ratio.
   materials: {
     PLA: {
       name: "PLA",
       sellPerGramPaise: 200,
       costPerKgPaise: 600_00,
-      // Matches filament_density in the flattened Bambu PLA Basic profile.
       densityGcm3: 1.26,
       colours: MATERIAL_COLOURS.PLA,
+    },
+    // Matte, silk, dual/tri-colour silk, metallic, stone, starlight, glow, wood.
+    PLA_AESTHETIC: {
+      name: "Aesthetic PLA",
+      sellPerGramPaise: 300,
+      costPerKgPaise: 750_00,
+      densityGcm3: 1.32,
+      colours: MATERIAL_COLOURS.PLA_AESTHETIC,
+    },
+    PLA_CF: {
+      name: "PLA-CF",
+      sellPerGramPaise: 350,
+      costPerKgPaise: 1499_00,
+      densityGcm3: 1.22,
+      colours: MATERIAL_COLOURS.PLA_CF,
     },
     PETG: {
       name: "PETG",
       sellPerGramPaise: 250,
       costPerKgPaise: 800_00,
-      densityGcm3: 1.27,
+      densityGcm3: 1.28,
       colours: MATERIAL_COLOURS.PETG,
+    },
+    // Translucent (incl. glitter) and carbon-fibre PETG.
+    PETG_PREMIUM: {
+      name: "PETG Premium",
+      sellPerGramPaise: 350,
+      costPerKgPaise: 1149_00,
+      densityGcm3: 1.25,
+      colours: MATERIAL_COLOURS.PETG_PREMIUM,
     },
   },
   electricityPerKwhPaise: 10_00,
@@ -83,6 +108,12 @@ export const CATALOG: Catalog = {
     bufferDays: 2,
   },
 };
+
+/** Customer-facing name for a material id ("PLA_AESTHETIC" → "Aesthetic PLA").
+ *  Unknown values (never expected) fall through verbatim. */
+export function materialName(id: string): string {
+  return id in CATALOG.materials ? CATALOG.materials[id as MaterialId].name : id;
+}
 
 /** True when the bounding box fits the default printer's bed in some axis
  * permutation (models can be rotated at print time). */

@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import type { MaterialId } from "@print/shared";
 
 function str(name: string, fallback: string): string {
   const v = process.env[name];
@@ -97,8 +98,19 @@ export function processProfile(layerHeightUm: number): string {
   }
 }
 
-export function filamentProfile(material: "PLA" | "PETG"): string {
-  return material === "PETG" ? "filament.petg.json" : "filament.pla.json";
+/** Numakers' own slicer preset per material tier (scripts/overlay-numakers-profiles.py).
+ *  A Record, not a fallback branch, so a new material can never silently slice
+ *  with another tier's temperatures and density. */
+const FILAMENT_PROFILES: Record<MaterialId, string> = {
+  PLA: "filament.pla.json",
+  PLA_AESTHETIC: "filament.pla-aesthetic.json",
+  PLA_CF: "filament.pla-cf.json",
+  PETG: "filament.petg.json",
+  PETG_PREMIUM: "filament.petg-premium.json",
+};
+
+export function filamentProfile(material: MaterialId): string {
+  return FILAMENT_PROFILES[material];
 }
 
 export const MACHINE_PROFILE = "machine.bbl-a1-04.json";

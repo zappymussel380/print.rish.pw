@@ -7,7 +7,7 @@ export interface WhatsAppMessageInput {
   number: string;
   quotationNumber: string;
   customerName: string;
-  /** e.g. "2× PLA (black), 1× PETG (white)" */
+  /** e.g. "2× PLA (Pitch Black), 1× PETG (Pure White)" */
   materialsSummary: string;
   totalPaise: number;
   /** Prepaid shipping folded into totalPaise; 0 means the quote excludes

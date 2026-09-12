@@ -3,8 +3,10 @@ import { Download } from "lucide-react";
 import { prisma } from "@print/db";
 import {
   buildWhatsAppUrl,
+  colourName,
   formatGrams,
   formatPaise,
+  materialName,
   summariseItems,
 } from "@print/shared";
 import { WhatsAppLaunch } from "@/components/quote/whatsapp-launch";
@@ -103,7 +105,7 @@ export default async function ConfirmationPage({
               <div className="min-w-0">
                 <p className="font-[600]">
                   {i.quantity > 1 ? `${i.quantity}× ` : ""}
-                  {i.material} · {i.colour}
+                  {materialName(i.material)} · {colourName(i.colour)}
                 </p>
                 <p className="text-xs text-faint">
                   {(i.layerHeightUm / 1000).toFixed(2)}mm · {i.infillPct}% ·{" "}

@@ -41,6 +41,16 @@ describe("priceQuote", () => {
     expect(quote.lines[0]!.materialPaise).toBe(10 * 250);
   });
 
+  it.each([
+    ["PLA_AESTHETIC", 300],
+    ["PLA_CF", 350],
+    ["PETG_PREMIUM", 350],
+  ] as const)("charges %s at its own premium rate (%i paise/g)", (material, rate) => {
+    const quote = priceQuote([line({ config: { ...line().config, material } })], CATALOG);
+    expect(quote.lines[0]!.materialPaise).toBe(10 * rate);
+    expect(quote.totalPaise).toBe(15000 + 10 * rate);
+  });
+
   it("applies the setup fee once regardless of file count", () => {
     const quote = priceQuote([line(), line({ modelId: "m2" }), line({ modelId: "m3" })], CATALOG);
     expect(quote.setupFeePaise).toBe(15000);

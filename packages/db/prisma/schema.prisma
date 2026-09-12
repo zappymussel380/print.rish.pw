@@ -21,7 +21,10 @@ datasource db {
 
 enum MaterialId {
   PLA
+  PLA_AESTHETIC
+  PLA_CF
   PETG
+  PETG_PREMIUM
 }
 
 enum SupportMode {

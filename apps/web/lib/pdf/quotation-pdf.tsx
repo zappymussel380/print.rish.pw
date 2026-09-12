@@ -9,9 +9,11 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import {
+  colourName,
   formatDuration,
   formatGrams,
   formatPaise,
+  materialName,
   type MaterialId,
   type SupportMode,
 } from "@print/shared";
@@ -226,7 +228,7 @@ function AnnexurePage({
           <KV label="File size" value={formatBytes(geometry.sizeBytes)} />
 
           <Text style={[s.sectionLabel, { marginTop: 14 }]}>Print settings</Text>
-          <KV label="Material" value={`${settings.material} · ${settings.colour}`} />
+          <KV label="Material" value={`${materialName(settings.material)} · ${colourName(settings.colour)}`} />
           <KV label="Layer height" value={LAYER(settings.layerHeightUm)} />
           <KV label="Infill" value={`${settings.infillPct}%`} />
           <KV label="Supports" value={settings.supports} />
@@ -306,7 +308,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
               <Text style={{ color: MUTED, marginTop: 1 }}>{formatDuration(l.totalPrintSeconds)}</Text>
             </View>
             <Text style={s.cSpec}>
-              {l.material} · {l.colour}
+              {materialName(l.material)} · {colourName(l.colour)}
               {"\n"}
               {LAYER(l.layerHeightUm)} · {l.infillPct}% · supports {l.supports}
             </Text>

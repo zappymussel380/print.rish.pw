@@ -13,7 +13,7 @@
  * path no customer ever takes. A smoke test run under the wrong identity is
  * worse than no smoke test: it manufactures confidence.
  *
- *   node apps/web/scripts/stack-slice-smoke.mjs <baseUrl> [origin] [fixture]
+ *   node apps/web/scripts/stack-slice-smoke.mjs <baseUrl> [origin] [fixture] [material]
  *
  * `origin` is the value sent as the Origin header and must equal the stack's
  * APP_ORIGIN, or the mutation origin check rejects the upload. It defaults to
@@ -26,6 +26,10 @@
  * type follow its extension. Both legs matter — STEP additionally exercises the
  * OpenCASCADE tessellation the worker performs before anything is sliced.
  *
+ * `material` (default PLA) picks the tier, and with it the filament profile the
+ * worker hands Orca. The tier must be enabled in that stack's catalog, or the
+ * slice request is refused with MATERIAL_UNAVAILABLE.
+ *
  * Leaves nothing behind: the uploaded model is deleted and no quotation is
  * created. Exits non-zero if the slice does not finish.
  */
@@ -34,11 +38,12 @@ import { randomUUID } from "node:crypto";
 
 const baseUrl = process.argv[2];
 if (!baseUrl) {
-  console.error("usage: stack-slice-smoke.mjs <baseUrl> [origin] [fixture]");
+  console.error("usage: stack-slice-smoke.mjs <baseUrl> [origin] [fixture] [material]");
   process.exit(2);
 }
 const origin = process.argv[3] || baseUrl;
-const fixture = process.argv[4] ?? "apps/worker/test-fixtures/calibration-cube.stl";
+const fixture = process.argv[4] || "apps/worker/test-fixtures/calibration-cube.stl";
+const material = process.argv[5] || "PLA";
 const INGEST_TIMEOUT_MS = 120_000;
 const SLICE_TIMEOUT_MS = 600_000;
 
@@ -144,7 +149,7 @@ const queued = await json(
     body: JSON.stringify({
       modelId: ingest.model.id,
       settings: {
-        material: "PLA",
+        material,
         colour: "black",
         quality: "standard",
         layerHeightUm: 200,
@@ -187,7 +192,7 @@ if (slice.status !== "done") {
   failure = `slice reported no measurements: ${JSON.stringify(slice.result ?? {})}`;
 } else {
   console.log(
-    `SLICE OK        filamentGrams=${slice.result.filamentGrams} printSeconds=${slice.result.printSeconds}`,
+    `SLICE OK        material=${material} filamentGrams=${slice.result.filamentGrams} printSeconds=${slice.result.printSeconds}`,
   );
 }
 

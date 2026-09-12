@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ImagePlus, Loader2, Trash2 } from "lucide-react";
 import {
   MATERIAL_IDS,
+  materialName,
   MAX_CAPTION_LENGTH,
   MAX_SHOWCASE_PHOTO_BYTES,
   type RecentPrint,
@@ -327,7 +328,7 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
                     >
                       {MATERIAL_IDS.map((id) => (
                         <option key={id} value={id}>
-                          {id}
+                          {materialName(id)}
                         </option>
                       ))}
                     </select>

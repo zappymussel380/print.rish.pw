@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ChevronDown,
   Download,
   ExternalLink,
   FolderArchive,
@@ -11,7 +12,13 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { formatPaise, type PublicMaterial, type RecentPrint } from "@print/shared";
+import {
+  CATALOG,
+  formatPaise,
+  swatchBackground,
+  type PublicMaterial,
+  type RecentPrint,
+} from "@print/shared";
 import { ShowcaseEditor } from "./showcase-editor";
 
 export interface QuotationRow {
@@ -345,12 +352,19 @@ function toEditState(catalog: { materials: PublicMaterial[] }): CatalogEditState
 }
 
 /** Enable/disable materials and, per material, each colour in the Numakers
- *  palette. Saves the whole availability blob at once. */
+ *  palette. Saves the whole availability blob at once. Each material folds away
+ *  (switched-off tiers start folded), and the filter narrows every tier at once —
+ *  All/None then act on just the matching colours, e.g. "silk" → All. */
 function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }) {
   const router = useRouter();
   const [state, setState] = useState<CatalogEditState>(() => toEditState(catalog));
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(catalog.materials.map((m) => [m.id, m.enabled])),
+  );
+  const needle = filter.trim().toLowerCase();
 
   const mutate = (fn: (draft: CatalogEditState) => void) => {
     setState((prev) => {
@@ -366,9 +380,9 @@ function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }
     setDirty(true);
   };
 
-  const setAllColours = (material: string, on: boolean) =>
+  const setColours = (material: string, ids: string[], on: boolean) =>
     mutate((d) => {
-      for (const id of Object.keys(d.colours[material] ?? {})) d.colours[material]![id] = on;
+      for (const id of ids) d.colours[material]![id] = on;
     });
 
   const save = async () => {
@@ -400,58 +414,90 @@ function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }
         <span>Catalog · materials &amp; colours</span>
         <span className="text-faint">manage</span>
       </summary>
-      <div className="space-y-6 border-t border-line p-4">
+      <div className="space-y-5 border-t border-line p-4">
+        <label className="relative block">
+          <span className="sr-only">Filter colours</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter colours — e.g. silk, glow, translucent"
+            className="input-base w-full pl-9 text-sm"
+          />
+        </label>
         {catalog.materials.map((m) => {
           const enabledCount = m.colours.filter((c) => state.colours[m.id]?.[c.id]).length;
           const materialOn = state.materials[m.id];
+          const shown = needle
+            ? m.colours.filter((c) => c.name.toLowerCase().includes(needle))
+            : m.colours;
+          if (needle && shown.length === 0) return null;
+          const open = needle ? true : expanded[m.id];
+          const shownIds = shown.map((c) => c.id);
           return (
             <div key={m.id}>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="flex items-center gap-2 text-sm font-[650]">
-                  <input
-                    type="checkbox"
-                    checked={materialOn}
-                    onChange={(e) => mutate((d) => (d.materials[m.id] = e.target.checked))}
-                    className="size-4 accent-[var(--accent)]"
-                  />
-                  {m.name}
-                  <span className="text-xs font-[450] text-faint">
-                    {enabledCount}/{m.colours.length} colours
-                  </span>
-                </label>
-                <div className="flex items-center gap-2 text-xs">
-                  <button type="button" className="btn-ghost" onClick={() => setAllColours(m.id, true)}>
-                    All
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-label={`${open ? "Collapse" : "Expand"} ${m.name}`}
+                    onClick={() => setExpanded((e) => ({ ...e, [m.id]: !e[m.id] }))}
+                    disabled={Boolean(needle)}
+                    className="grid size-6 place-items-center rounded text-faint hover:text-text disabled:opacity-40"
+                  >
+                    <ChevronDown className={`size-4 transition-transform ${open ? "" : "-rotate-90"}`} />
                   </button>
-                  <button type="button" className="btn-ghost" onClick={() => setAllColours(m.id, false)}>
+                  <label className="flex items-center gap-2 text-sm font-[650]">
+                    <input
+                      type="checkbox"
+                      checked={materialOn}
+                      onChange={(e) => mutate((d) => (d.materials[m.id] = e.target.checked))}
+                      className="size-4 accent-[var(--accent)]"
+                    />
+                    {m.name}
+                    <span className="text-xs font-[450] text-faint">
+                      {formatPaise(CATALOG.materials[m.id].sellPerGramPaise)}/g ·{" "}
+                      {enabledCount}/{m.colours.length} colours
+                    </span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <button type="button" className="btn-ghost" onClick={() => setColours(m.id, shownIds, true)}>
+                    {needle ? `All ${shown.length}` : "All"}
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={() => setColours(m.id, shownIds, false)}>
                     None
                   </button>
                 </div>
               </div>
-              <div
-                className={`mt-3 flex flex-wrap gap-1.5 ${materialOn ? "" : "pointer-events-none opacity-40"}`}
-              >
-                {m.colours.map((c) => {
-                  const on = state.colours[m.id]?.[c.id] ?? false;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => mutate((d) => (d.colours[m.id]![c.id] = !on))}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                        on ? "border-accent text-text" : "border-line text-faint hover:text-muted"
-                      }`}
-                    >
-                      <span
-                        className="size-3 rounded-full border border-line"
-                        style={{ background: c.hex }}
-                      />
-                      {c.name}
-                    </button>
-                  );
-                })}
-              </div>
+              {open ? (
+                <div
+                  className={`mt-3 flex flex-wrap gap-1.5 ${materialOn ? "" : "pointer-events-none opacity-40"}`}
+                >
+                  {shown.map((c) => {
+                    const on = state.colours[m.id]?.[c.id] ?? false;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => mutate((d) => (d.colours[m.id]![c.id] = !on))}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                          on ? "border-accent text-text" : "border-line text-faint hover:text-muted"
+                        }`}
+                      >
+                        <span
+                          className="size-3 rounded-full border border-line"
+                          style={{ background: swatchBackground(c) }}
+                        />
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           );
         })}
