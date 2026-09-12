@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { type Prisma, prisma } from "@print/db";
-import { estimateOrderCostPaise, type CostItem, toPublicCatalog } from "@print/shared";
+import {
+  estimateOrderCostPaise,
+  type CostItem,
+  type MaterialId,
+  toPublicCatalog,
+} from "@print/shared";
 import {
   AdminDashboard,
   type AdminStats,
@@ -44,8 +49,8 @@ export default async function AdminPage() {
     printSeconds: q.items.reduce((s, i) => s + i.unitPrintSeconds * i.quantity, 0),
     totalPaise: q.totalPaise,
     // Profit = everything charged (incl. the ₹150 setup fee, pure margin) minus
-    // our production cost. Recomputed from stored grams/seconds so every order
-    // reflects the current internal cost basis, not a snapshot.
+    // our production cost. Recomputed from stored grams/seconds and each line's
+    // material + colour, so every order reflects the current spool costs.
     profitPaise: q.totalPaise - estimateOrderCostPaise(orderCostItems(q)),
   }));
 
@@ -65,9 +70,12 @@ export default async function AdminPage() {
 
 type QuotationWithItems = Prisma.QuotationGetPayload<{ include: { items: true } }>;
 
-/** Quantity-multiplied physical quantities per line, for the cost estimate. */
+/** Quantity-multiplied physical quantities per line, for the cost estimate. The
+ *  colour picks the filament line (matte, glow, CF …) and so the spool cost. */
 function orderCostItems(q: QuotationWithItems): CostItem[] {
   return q.items.map((item) => ({
+    material: item.material as MaterialId,
+    colour: item.colour,
     totalGrams: Number(item.unitGrams) * item.quantity,
     totalPrintSeconds: item.unitPrintSeconds * item.quantity,
   }));
