@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import {
   type ColourId,
+  groupColours,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
   LAYER_HEIGHTS_UM,
@@ -378,37 +379,49 @@ function Segmented<T extends string | number>({
 }
 
 /** A wrapping grid of colour swatches; the selected swatch is ringed and its
- *  name shown beneath. Each swatch is a labelled toggle button for a11y. */
+ *  name shown beneath. Each swatch is a labelled toggle button for a11y. Tiers
+ *  that span several filament lines (matte, silk …) get a label per line. */
 function ColourSelect({
   value,
   options,
   onChange,
 }: {
   value: ColourId;
-  options: { id: ColourId; name: string; hex: string; stops?: readonly string[] }[];
+  options: { id: ColourId; name: string; hex: string; stops?: readonly string[]; group?: string }[];
   onChange: (id: ColourId) => void;
 }) {
   const selected = options.find((o) => o.id === value);
   return (
     <div>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Colour">
-        {options.map((o) => {
-          const active = o.id === value;
-          return (
-            <button
-              key={o.id}
-              type="button"
-              aria-pressed={active}
-              aria-label={o.name}
-              title={o.name}
-              onClick={() => onChange(o.id)}
-              className={`size-7 rounded-full border border-line transition-transform hover:scale-110 ${
-                active ? "ring-2 ring-accent ring-offset-2 ring-offset-bg" : ""
-              }`}
-              style={{ background: swatchBackground(o) }}
-            />
-          );
-        })}
+      <div className="space-y-2.5" role="group" aria-label="Colour">
+        {groupColours(options).map(({ group, colours }) => (
+          <div key={group ?? "all"}>
+            {group ? (
+              <span className="mb-1.5 block text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
+                {group}
+              </span>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {colours.map((o) => {
+                const active = o.id === value;
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={o.name}
+                    title={o.name}
+                    onClick={() => onChange(o.id)}
+                    className={`size-7 rounded-full border border-line transition-transform hover:scale-110 ${
+                      active ? "ring-2 ring-accent ring-offset-2 ring-offset-bg" : ""
+                    }`}
+                    style={{ background: swatchBackground(o) }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
       <span className="mt-2 block text-xs text-muted">{selected?.name ?? "—"}</span>
     </div>

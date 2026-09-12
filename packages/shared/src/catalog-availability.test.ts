@@ -5,6 +5,8 @@ import {
   MATERIAL_COLOURS,
   DEFAULT_ENABLED_COLOURS,
   DEFAULT_ENABLED_MATERIALS,
+  colourShortName,
+  groupColours,
   swatchBackground,
 } from "./colours";
 import {
@@ -43,6 +45,43 @@ describe("colour palette integrity", () => {
         expect(MASTER_COLOURS[id].materials).toEqual([premium]);
       }
     }
+  });
+
+  it("splits the multi-line tiers into named sections, in palette order", () => {
+    const sections = (m: keyof typeof MATERIAL_COLOURS) =>
+      groupColours(MATERIAL_COLOURS[m].map((id) => MASTER_COLOURS[id])).map((s) => [
+        s.group,
+        s.colours.length,
+      ]);
+    expect(sections("PLA_AESTHETIC")).toEqual([
+      ["Matte", 13],
+      ["Silk", 25],
+      ["Dual Silk", 5],
+      ["Tri Silk", 9],
+      ["Metallic", 6],
+      ["Stone", 1],
+      ["Starlight", 5],
+      ["Glow", 5],
+      ["Wood", 1],
+    ]);
+    expect(sections("PETG_PREMIUM")).toEqual([
+      ["Translucent", 14],
+      ["CF", 5],
+    ]);
+    // Single-line tiers stay one flat list.
+    for (const m of ["PLA", "PLA_CF", "PETG"] as const) expect(sections(m)).toEqual([[null, MATERIAL_COLOURS[m].length]]);
+  });
+
+  it("names every grouped colour with its group first, so the short name reads alone", () => {
+    for (const c of Object.values(MASTER_COLOURS)) {
+      if (!c.group) continue;
+      expect(c.name === c.group || c.name.startsWith(`${c.group} `), c.name).toBe(true);
+    }
+    expect(colourShortName(MASTER_COLOURS["matte-ruby-red"])).toBe("Ruby Red");
+    expect(colourShortName(MASTER_COLOURS["dual-red-gold"])).toBe("Red/Gold");
+    expect(colourShortName(MASTER_COLOURS["translucent-ice-blue-glitter"])).toBe("Ice Blue Glitter");
+    expect(colourShortName(MASTER_COLOURS["wood-natural"])).toBe("Wood");
+    expect(colourShortName(MASTER_COLOURS["pitch-black"])).toBe("Pitch Black");
   });
 
   it("defaults are within each palette", () => {
@@ -186,5 +225,8 @@ describe("toPublicCatalog / firstEnabledColour", () => {
     const aesthetic = pub.materials.find((m) => m.id === "PLA_AESTHETIC")!;
     expect(aesthetic.colours.find((c) => c.id === "tri-red-orange-gold")!.stops).toHaveLength(3);
     expect(aesthetic.colours.find((c) => c.id === "silk-copper")).not.toHaveProperty("stops");
+    expect(aesthetic.colours.find((c) => c.id === "silk-copper")!.group).toBe("Silk");
+    const pla = pub.materials.find((m) => m.id === "PLA")!;
+    expect(pla.colours.find((c) => c.id === "pitch-black")).not.toHaveProperty("group");
   });
 });
