@@ -124,6 +124,8 @@ export interface PublicColour {
   hex: string;
   /** Present only for dual/tri-colour filament — see `swatchBackground`. */
   stops?: readonly string[];
+  /** Sub-section within a multi-line tier ("Matte", "Silk" …) — see `groupColours`. */
+  group?: string;
   enabled: boolean;
 }
 export interface PublicMaterial {
@@ -141,12 +143,13 @@ export function toPublicCatalog(avail: Availability): { materials: PublicMateria
     name: materialName(m),
     enabled: isMaterialEnabled(avail, m),
     colours: MATERIAL_COLOURS[m].map((id) => {
-      const { name, hex, stops } = MASTER_COLOURS[id];
+      const { name, hex, stops, group } = MASTER_COLOURS[id];
       return {
         id,
         name,
         hex,
         ...(stops ? { stops } : {}),
+        ...(group ? { group } : {}),
         enabled: avail.colours[m]?.includes(id) ?? false,
       };
     }),

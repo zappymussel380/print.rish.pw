@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 import {
   CATALOG,
+  colourShortName,
   formatPaise,
+  groupColours,
   swatchBackground,
   type PublicMaterial,
   type RecentPrint,
@@ -474,26 +476,67 @@ function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }
               </div>
               {open ? (
                 <div
-                  className={`mt-3 flex flex-wrap gap-1.5 ${materialOn ? "" : "pointer-events-none opacity-40"}`}
+                  className={`mt-3 space-y-3 ${materialOn ? "" : "pointer-events-none opacity-40"}`}
                 >
-                  {shown.map((c) => {
-                    const on = state.colours[m.id]?.[c.id] ?? false;
+                  {/* Multi-line tiers (Aesthetic PLA, PETG Premium) split into their
+                      filament lines, each with its own All/None. */}
+                  {groupColours(shown).map(({ group, colours }) => {
+                    const ids = colours.map((c) => c.id);
+                    const groupOn = colours.filter((c) => state.colours[m.id]?.[c.id]).length;
                     return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() => mutate((d) => (d.colours[m.id]![c.id] = !on))}
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                          on ? "border-accent text-text" : "border-line text-faint hover:text-muted"
-                        }`}
-                      >
-                        <span
-                          className="size-3 rounded-full border border-line"
-                          style={{ background: swatchBackground(c) }}
-                        />
-                        {c.name}
-                      </button>
+                      <div key={group ?? "all"}>
+                        {group ? (
+                          <div className="mb-1.5 flex items-center justify-between gap-3">
+                            <span className="text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-muted">
+                              {group}
+                              <span className="ml-2 font-[450] normal-case tracking-normal text-faint">
+                                {groupOn}/{colours.length}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-3 text-xs">
+                              <button
+                                type="button"
+                                aria-label={`Enable all ${group}`}
+                                className="text-faint hover:text-text"
+                                onClick={() => setColours(m.id, ids, true)}
+                              >
+                                All
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Disable all ${group}`}
+                                className="text-faint hover:text-text"
+                                onClick={() => setColours(m.id, ids, false)}
+                              >
+                                None
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+                        <div className="flex flex-wrap gap-1.5">
+                          {colours.map((c) => {
+                            const on = state.colours[m.id]?.[c.id] ?? false;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                aria-pressed={on}
+                                title={c.name}
+                                onClick={() => mutate((d) => (d.colours[m.id]![c.id] = !on))}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                  on ? "border-accent text-text" : "border-line text-faint hover:text-muted"
+                                }`}
+                              >
+                                <span
+                                  className="size-3 rounded-full border border-line"
+                                  style={{ background: swatchBackground(c) }}
+                                />
+                                {colourShortName(c)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
