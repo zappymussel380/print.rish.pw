@@ -26,8 +26,9 @@ describe("colour palette integrity", () => {
   });
 
   it("carries the full Numakers range in each tier", () => {
-    // A regression anchor for the catalogue itself (vendor snapshot 2026-09-12).
-    expect(MATERIAL_COLOURS.PLA).toHaveLength(40);
+    // A regression anchor for the catalogue itself (vendor snapshot 2026-09-12),
+    // plus baby pink in PLA from another supplier.
+    expect(MATERIAL_COLOURS.PLA).toHaveLength(41);
     expect(MATERIAL_COLOURS.PLA_AESTHETIC).toHaveLength(70);
     expect(MATERIAL_COLOURS.PLA_CF).toHaveLength(4);
     expect(MATERIAL_COLOURS.PETG).toHaveLength(17);

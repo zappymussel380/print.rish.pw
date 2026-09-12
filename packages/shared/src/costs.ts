@@ -1,3 +1,5 @@
+import type { MaterialId } from "./quote-types";
+
 /**
  * Internal cost basis for profit reporting.
  *
@@ -8,9 +10,35 @@
  * changing what a spool actually costs us must never alter customer-facing copy,
  * quotes, or the PDF. All money is integer paise (₹1 = 100 paise).
  */
+
+/** Filament product lines we buy, each with its own spool price. A material
+ *  tier spans several (Aesthetic PLA is matte, silk, glow, wood …), so cost is
+ *  resolved per colour — see `filamentLine`. */
+export type FilamentLine =
+  | "plaPlus"
+  | "pla"
+  | "matte"
+  | "silk"
+  | "silkClearance"
+  | "dualTriSilk"
+  | "metallic"
+  | "stone"
+  | "starlight"
+  | "glow"
+  | "wood"
+  | "plaCf"
+  | "petgHs"
+  | "translucent"
+  | "translucentGlitter"
+  | "petgCf";
+
 export interface InternalCostBasis {
-  /** What a kilogram of filament costs us. */
-  filamentPerKgPaise: number;
+  /** Supplier list price per 1 kg spool, in whole rupees, before GST. */
+  spoolListPriceInr: Record<FilamentLine, number>;
+  /** GST charged on top of the list price. */
+  gstRate: number;
+  /** Shipping paid per 1 kg spool. */
+  spoolShippingPaise: number;
   /** Average printer power draw while printing, in kWh per hour of print time. */
   electricityKwhPerHour: number;
   /** What we pay per kWh of electricity. */
@@ -19,16 +47,103 @@ export interface InternalCostBasis {
   maintenancePerHourPaise: number;
 }
 
-/** ₹770/kg filament, 200 W draw at ₹11/unit, ₹5/hour maintenance. */
+/** india.numakers.com list prices, 1 kg / 1.75 mm, as of 2026-09-12 (snapshot in
+ *  docs/numakers/). Filament costs list + 18% GST + ₹90 shipping per spool; 200 W
+ *  draw at ₹11/unit; ₹5/hour maintenance. */
 export const INTERNAL_COST: InternalCostBasis = {
-  filamentPerKgPaise: 770_00,
+  spoolListPriceInr: {
+    plaPlus: 600,
+    pla: 565,
+    matte: 649,
+    silk: 749,
+    silkClearance: 699,
+    dualTriSilk: 749,
+    metallic: 849,
+    stone: 649,
+    starlight: 849,
+    glow: 975,
+    wood: 1099,
+    plaCf: 1499,
+    petgHs: 599,
+    translucent: 599,
+    translucentGlitter: 699,
+    petgCf: 1149,
+  },
+  gstRate: 0.18,
+  spoolShippingPaise: 90_00,
   electricityKwhPerHour: 0.2,
   electricityPerKwhPaise: 11_00,
   maintenancePerHourPaise: 5_00,
 };
 
+/** What one spool of a line lands at: list price + GST + shipping. */
+export function spoolCostPerKgPaise(
+  listPriceInr: number,
+  basis: InternalCostBasis = INTERNAL_COST,
+): number {
+  return Math.round(listPriceInr * 100 * (1 + basis.gstRate)) + basis.spoolShippingPaise;
+}
+
+// Colours that exist only in a cheaper line than the rest of their tier.
+const PLA_LINE_ONLY = new Set(["ivory"]);
+const SILK_CLEARANCE_ONLY = new Set([
+  "silk-gold",
+  "silk-enchanted-gold",
+  "silk-bronze",
+  "silk-molten-sol",
+  "silk-forest-green",
+  "silk-obsidian-night",
+]);
+const AESTHETIC_PREFIX: [string, FilamentLine][] = [
+  ["matte-", "matte"],
+  ["dual-", "dualTriSilk"],
+  ["tri-", "dualTriSilk"],
+  ["metallic-", "metallic"],
+  ["stone-", "stone"],
+  ["starlight-", "starlight"],
+  ["glow-", "glow"],
+  ["wood-", "wood"],
+];
+
+/** The product line a quoted colour is bought as. Colour ids carry their line
+ *  as a prefix within the premium tiers; basic PLA is bought as PLA+ (what the
+ *  tier slices with), including baby pink from another supplier, which the
+ *  operator costs on the same basis. Unknown or legacy ids fall back to the
+ *  tier's own line. */
+export function filamentLine(material: MaterialId, colour: string): FilamentLine {
+  switch (material) {
+    case "PLA":
+      return PLA_LINE_ONLY.has(colour) ? "pla" : "plaPlus";
+    case "PLA_AESTHETIC": {
+      if (colour.startsWith("silk-")) {
+        return SILK_CLEARANCE_ONLY.has(colour) ? "silkClearance" : "silk";
+      }
+      const hit = AESTHETIC_PREFIX.find(([prefix]) => colour.startsWith(prefix));
+      return hit ? hit[1] : "silk";
+    }
+    case "PLA_CF":
+      return "plaCf";
+    case "PETG":
+      return "petgHs";
+    case "PETG_PREMIUM":
+      if (colour.startsWith("petg-cf-")) return "petgCf";
+      return colour.endsWith("-glitter") ? "translucentGlitter" : "translucent";
+  }
+}
+
+/** What a kilogram of this material+colour actually costs us. */
+export function filamentCostPerKgPaise(
+  material: MaterialId,
+  colour: string,
+  basis: InternalCostBasis = INTERNAL_COST,
+): number {
+  return spoolCostPerKgPaise(basis.spoolListPriceInr[filamentLine(material, colour)], basis);
+}
+
 /** Quantity-multiplied physical quantities for one quotation line. */
 export interface CostItem {
+  material: MaterialId;
+  colour: string;
   totalGrams: number;
   totalPrintSeconds: number;
 }
@@ -46,7 +161,9 @@ export function estimateItemCostPaise(
   basis: InternalCostBasis = INTERNAL_COST,
 ): CostBreakdown {
   const hours = item.totalPrintSeconds / 3600;
-  const filamentPaise = Math.round((item.totalGrams / 1000) * basis.filamentPerKgPaise);
+  const filamentPaise = Math.round(
+    (item.totalGrams / 1000) * filamentCostPerKgPaise(item.material, item.colour, basis),
+  );
   const electricityPaise = Math.round(hours * basis.electricityKwhPerHour * basis.electricityPerKwhPaise);
   const maintenancePaise = Math.round(hours * basis.maintenancePerHourPaise);
   return {

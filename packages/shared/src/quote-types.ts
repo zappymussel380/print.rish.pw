@@ -51,6 +51,7 @@ export const COLOUR_IDS = [
   "water-blue",
   "light-beige",
   "ivory",
+  "baby-pink",
   // Aesthetic PLA — Matte
   "matte-ruby-red",
   "matte-sakura-pink",

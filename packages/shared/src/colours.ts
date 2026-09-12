@@ -2,8 +2,8 @@ import { MATERIAL_IDS, type ColourId, type MaterialId } from "./quote-types";
 
 /**
  * Colour palette reference data — the supplier's (Numakers) orderable colours,
- * their display names, an approximate swatch, and which materials each colour is
- * stocked in. This is the *possible* universe; the *enabled* subset a customer
+ * plus a few bought elsewhere, their display names, an approximate swatch, and
+ * which materials each colour is stocked in. This is the *possible* universe; the *enabled* subset a customer
  * may pick is runtime, admin-controlled state (see `catalog-availability.ts`).
  *
  * `Record<ColourId, ColourDef>` forces every id in `COLOUR_IDS` to appear here,
@@ -67,6 +67,8 @@ export const MASTER_COLOURS: Record<ColourId, ColourDef> = {
   "water-blue": { name: "Water Blue", hex: "#3FA9F5", materials: PLA_ONLY },
   "light-beige": { name: "Light Beige", hex: "#E7D8BC", materials: PLA_ONLY },
   ivory: { name: "Ivory", hex: "#EDE3C8", materials: PLA_ONLY },
+  // Not a Numakers colour — bought from another supplier.
+  "baby-pink": { name: "Baby Pink", hex: "#F4C2C2", materials: PLA_ONLY },
   // ── Aesthetic PLA — Matte ──
   "matte-ruby-red": { name: "Matte Ruby Red", hex: "#C10C26", materials: AESTHETIC },
   "matte-sakura-pink": { name: "Matte Sakura Pink", hex: "#FFB7C5", materials: AESTHETIC },
