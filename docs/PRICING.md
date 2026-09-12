@@ -49,11 +49,22 @@ as the `CATALOG` constant. Current values:
 | --- | --- |
 | Setup fee | ₹150 / order |
 | PLA sell | ₹2.00 / g (cost ₹600/kg, density 1.26) |
-| PETG sell | ₹2.50 / g (cost ₹800/kg, density 1.27) |
+| Aesthetic PLA sell | ₹3.00 / g (cost ₹750/kg, density 1.32) — matte, silk, dual/tri-colour silk, metallic, stone, starlight, glow, wood |
+| PLA-CF sell | ₹3.50 / g (cost ₹1,499/kg, density 1.22) |
+| PETG sell | ₹2.50 / g (cost ₹800/kg, density 1.28) |
+| PETG Premium sell | ₹3.50 / g (cost ₹1,149/kg, density 1.25) — translucent/glitter and carbon-fibre PETG |
 | Electricity | ₹10 / kWh × 0.09 kWh per print-hour |
 | Maintenance | ₹0.20 / g |
 | Lead time | 8 print-hours/day + 2 buffer days |
 | Bed | 256 × 256 × 256 mm (Bambu Lab A1) |
+
+Colour never affects price; the material tier does. The three premium tiers
+ship **disabled** (`DEFAULT_ENABLED_MATERIALS` in `colours.ts`) — the operator
+switches each on, with its colours, from the admin catalog editor as the
+filament is stocked. Each tier slices with its own Numakers profile, so grams
+(and therefore price) follow that filament's density × flow ratio — see
+[ORCA-PROFILES.md](ORCA-PROFILES.md) for the measured figures and the two tiers
+that approximate some of their lines.
 
 ## Changing prices
 
@@ -63,7 +74,7 @@ its full catalog + breakdown in `pricingSnapshot` at submission time, so a price
 change never rewrites history.
 
 Unit tests in `packages/shared/src/pricing.test.ts` assert rounding, quantity
-multiplication, both materials, and that the breakdown components sum to the
+multiplication, every material tier, and that the breakdown components sum to the
 total — run `pnpm --filter @print/shared test` after any change.
 
 ## Future: DB-backed catalog

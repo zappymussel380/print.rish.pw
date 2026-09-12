@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import type { RecentPrint } from "@print/shared";
+import { materialName, type RecentPrint } from "@print/shared";
 
 /** The showcase photos, as a responsive grid, each opening full size in place.
  *
@@ -47,7 +47,7 @@ export function RecentPrintsGrid({ prints }: { prints: readonly RecentPrint[] })
             <div className="flex flex-wrap items-center justify-between gap-2 p-4">
               <p className="text-sm font-[650]">{print.caption}</p>
               <span className="chip">
-                {print.material}
+                {materialName(print.material)}
                 {print.colour ? ` · ${print.colour}` : ""}
               </span>
             </div>
@@ -361,7 +361,7 @@ function Lightbox({
             <div className="min-w-0 text-white">
               <p className="text-sm font-[650]">{print.caption}</p>
               <p className="mt-0.5 text-xs text-white/70">
-                {print.material}
+                {materialName(print.material)}
                 {print.colour ? ` · ${print.colour}` : ""}
                 {prints.length > 1 ? ` · ${(openAt ?? 0) + 1} of ${prints.length}` : ""}
                 {zoomed ? ` · ${view.zoom.toFixed(1)}×` : ""}

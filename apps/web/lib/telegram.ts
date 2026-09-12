@@ -1,4 +1,4 @@
-import { formatDuration, formatGrams } from "@print/shared";
+import { colourName, formatDuration, formatGrams, materialName } from "@print/shared";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
@@ -261,7 +261,7 @@ export function buildNewQuotationTelegramMessage(input: NewQuotationTelegramInpu
     const downloadUrl = absoluteUrl(`/api/models/${line.modelId}/file`, origin);
     parts.push(
       `${index + 1}. ${singleLine(line.fileName, 140)}`,
-      `   ${line.material} ${line.colour}, ${(line.layerHeightUm / 1000).toFixed(2)}mm, ${line.infillPct}% infill, supports ${line.supports}, qty ${line.quantity}`,
+      `   ${materialName(line.material)} ${colourName(line.colour)}, ${(line.layerHeightUm / 1000).toFixed(2)}mm, ${line.infillPct}% infill, supports ${line.supports}, qty ${line.quantity}`,
       `   ${formatGrams(line.totalGrams)}, ${formatDuration(line.totalPrintSeconds)}, ${money(line.subtotalPaise)}`,
       `   ${downloadUrl}`,
     );

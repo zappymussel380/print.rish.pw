@@ -18,14 +18,58 @@ would be reused under the new slicer.
 
 ## The committed, flattened profiles
 
-`apps/worker/profiles/` holds six standalone JSON profiles:
+`apps/worker/profiles/` holds nine standalone JSON profiles:
 
 | File | Source (Bambu A1) |
 | --- | --- |
 | `machine.bbl-a1-04.json` | Bambu Lab A1 0.4 nozzle |
 | `process.0.12.json` / `.0.16.json` / `.0.20.json` | 0.12 Fine / 0.16 Optimal / 0.20 Standard |
-| `filament.pla.json` | Bambu PLA Basic (density 1.26) |
-| `filament.petg.json` | Generic PETG (density 1.27) |
+| `filament.pla.json` | Numakers PLA+ (density 1.26) |
+| `filament.pla-aesthetic.json` | Numakers PLA Silk (density 1.32) |
+| `filament.pla-cf.json` | Numakers PLA-CF (density 1.22) |
+| `filament.petg.json` | Numakers PETG HS (density 1.28) |
+| `filament.petg-premium.json` | Numakers PETG-CF (density 1.25) |
+
+Each material tier maps to one filament profile (`filamentProfile` in
+`apps/worker/src/config.ts`).
+
+**Grams — and therefore price — scale with `filament_density ×
+filament_flow_ratio`**, not density alone. Measured on the 20 mm calibration
+cube at 0.20 mm / 15% (2026-09-12), and reproduced exactly by that product:
+
+| Profile | Density | Flow ratio | Grams |
+| --- | --- | --- | --- |
+| Bambu PLA Basic (previous `filament.pla.json`) | 1.26 | 0.980 | 3.67 |
+| Numakers PLA+ (`filament.pla.json`) | 1.26 | 1.009 | 3.78 |
+| Numakers PLA Silk (`filament.pla-aesthetic.json`) | 1.32 | 0.950 | 3.73 |
+| Numakers PLA-CF (`filament.pla-cf.json`) | 1.22 | 0.950 | 3.45 |
+| Numakers PETG HS (`filament.petg.json`) | 1.28 | 0.980 | 3.73 |
+| Numakers PETG-CF (`filament.petg-premium.json`) | 1.25 | 0.960 | 3.57 |
+
+Two tiers span several filament lines and slice them all with one preset, so
+some lines in them are quoted slightly light:
+
+- **Aesthetic PLA** uses the Silk preset for matte, metallic, starlight, glow,
+  stone and wood too. Numakers' own Matte preset (density 1.32, flow 1.009)
+  weighs ~6% more than Silk, so matte prints are quoted ~6% under their true
+  filament use. There is no A1 preset for metallic/starlight/glow/stone, nor for
+  wood on the A1.
+- **PETG Premium** uses the PETG-CF preset for translucent PETG too, ~4% lighter
+  than the PETG HS preset that plain translucent would slice with.
+
+Splitting a line into its own tier (and profile) removes its error.
+
+### Filament profiles: Numakers presets over a Bambu base
+
+The filament profiles are the supplier's own presets from
+<https://wiki.numakers.com/printing-tips/printer-profiles>, committed verbatim in
+`scripts/profile-sources/numakers/`. They are exported flattened but not
+uniformly (PETG-CF carries 73 keys where the rest carry ~108), and any key the CLI
+does not receive falls back to Orca's built-in default. So
+`scripts/overlay-numakers-profiles.py` lays each preset over the flattened Bambu
+base for its family (`scripts/profile-sources/bambu-pla-basic.json` /
+`generic-petg.json`): every key the base has is present, and every value
+Numakers set wins. Re-run it after refreshing a vendor preset.
 
 **Why flattened?** The stock profiles use `inherits:` chains. The OrcaSlicer CLI
 does **not** resolve inheritance when given a profile directly — an un-flattened
@@ -36,8 +80,10 @@ flattened (its full inheritance chain merged) once and committed.
 
 `scripts/flatten-orca-profiles.py` walks the `inherits` chain from the AppImage's
 `resources/profiles/BBL/` and writes flattened JSONs, validating that
-`filament_density > 0`. Re-run it against the new AppImage, then run the smoke
-check below before committing.
+`filament_density > 0`. Filament presets land in `scripts/profile-sources/` as
+overlay bases, never in `apps/worker/profiles/`, so re-flattening cannot clobber
+the Numakers profiles. Re-run it against the new AppImage, then re-run
+`overlay-numakers-profiles.py`, then the smoke check below before committing.
 
 ## How the worker slices
 
@@ -78,7 +124,7 @@ Thumbnails are written beside the model file under `uploads/thumbs/`.
 ## Smoke / upgrade gate
 
 After any Orca or profile change, slice the bundled calibration cube
-(`apps/worker/test-fixtures/calibration-cube.stl`) for both materials × three
+(`apps/worker/test-fixtures/calibration-cube.stl`) for every material × three
 layer heights and confirm the reported grams land in a sane band. A 20 mm cube at
 PLA/0.20/15% is ~5 g. If weights come back empty or zero, the inheritance
 flattening is stale — re-run the flatten script.

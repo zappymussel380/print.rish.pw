@@ -1,6 +1,6 @@
 {
   "type": "filament",
-  "name": "Numakers PETG HS @Bambu Lab A1 0.4 nozzle",
+  "name": "Numakers PETG-CF @BBL A1",
   "from": "system",
   "instantiation": "true",
   "activate_air_filtration": [
@@ -13,7 +13,7 @@
     "0"
   ],
   "close_fan_the_first_x_layers": [
-    "3"
+    "1"
   ],
   "close_additional_fan_first_x_layers": [
     "3"
@@ -22,10 +22,10 @@
     "70"
   ],
   "cool_plate_temp": [
-    "0"
+    "60"
   ],
   "cool_plate_temp_initial_layer": [
-    "0"
+    "60"
   ],
   "counter_coef_1": [
     "0"
@@ -58,19 +58,19 @@
     "70"
   ],
   "fan_cooling_layer_time": [
-    "15"
-  ],
-  "fan_max_speed": [
-    "50"
-  ],
-  "fan_min_speed": [
     "30"
   ],
+  "fan_max_speed": [
+    "40"
+  ],
+  "fan_min_speed": [
+    "5"
+  ],
   "filament_cost": [
-    "18.99"
+    "19.99"
   ],
   "filament_density": [
-    "1.28"
+    "1.25"
   ],
   "filament_deretraction_speed": [
     "nil"
@@ -79,7 +79,7 @@
     "1.75"
   ],
   "filament_flow_ratio": [
-    "0.98"
+    "0.96"
   ],
   "filament_flush_temp": [
     "0"
@@ -97,7 +97,7 @@
     "nil"
   ],
   "filament_max_volumetric_speed": [
-    "19"
+    "11.5"
   ],
   "filament_ramming_volumetric_speed": [
     "-1"
@@ -148,13 +148,13 @@
     "nil"
   ],
   "filament_settings_id": [
-    "Numakers PETG HS @Bambu Lab A1 0.4 nozzle"
+    "Numakers PETG-CF"
   ],
   "filament_soluble": [
     "0"
   ],
   "filament_type": [
-    "PETG"
+    "PETG-CF"
   ],
   "filament_vendor": [
     "Numakers"
@@ -166,7 +166,7 @@
     "nil"
   ],
   "filament_prime_volume": [
-    "30"
+    "45"
   ],
   "filament_z_hop": [
     "nil"
@@ -226,7 +226,7 @@
     "0.22"
   ],
   "impact_strength_z": [
-    "10.6"
+    "10"
   ],
   "long_retractions_when_ec": [
     "0"
@@ -235,10 +235,10 @@
     "230"
   ],
   "nozzle_temperature_range_high": [
-    "270"
+    "260"
   ],
   "nozzle_temperature": [
-    "250"
+    "245"
   ],
   "nozzle_temperature_initial_layer": [
     "250"
@@ -253,22 +253,22 @@
     "1"
   ],
   "required_nozzle_HRC": [
-    "3"
+    "40"
   ],
   "retraction_distances_when_ec": [
     "0"
   ],
   "supertack_plate_temp": [
-    "70"
+    "60"
   ],
   "supertack_plate_temp_initial_layer": [
-    "70"
+    "60"
   ],
   "slow_down_for_layer_cooling": [
     "1"
   ],
   "slow_down_layer_time": [
-    "7"
+    "6"
   ],
   "slow_down_min_speed": [
     "10"
@@ -292,7 +292,7 @@
     "; filament start gcode\n{if (bed_temperature[current_extruder] >80)||(bed_temperature_initial_layer[current_extruder] >80)}M106 P3 S255\n{elsif (bed_temperature[current_extruder] >60)||(bed_temperature_initial_layer[current_extruder] >60)}M106 P3 S180\n{endif}\n\n{if activate_air_filtration[current_extruder] && support_air_filtration}\nM106 P3 S{during_print_exhaust_fan_speed_num[current_extruder]} \n{endif}"
   ],
   "filament_end_gcode": [
-    "; filament end gcode \n\n"
+    "; filament end gcode \nM106 P3 S0\n"
   ],
   "filament_adaptive_volumetric_speed": [
     "0"
@@ -303,7 +303,7 @@
   "filament_adhesiveness_category": [
     "300"
   ],
-  "filament_id": "P86eabb8",
+  "filament_id": "PETGCFNMKFLT",
   "compatible_printers_condition": "",
   "compatible_prints": [],
   "compatible_prints_condition": "",
@@ -316,23 +316,9 @@
   "enable_pressure_advance": [
     "0"
   ],
-  "filament_change_length": [
-    "12"
-  ],
-  "first_x_layer_fan_speed": [
-    "0"
-  ],
-  "no_slow_down_for_cooling_on_outwalls": [
-    "0"
-  ],
-  "overhang_threshold_participating_cooling": [
-    "95%"
-  ],
-  "pre_start_fan_time": [
-    "2"
-  ],
+  "is_custom_defined": "0",
   "pressure_advance": [
     "0.02"
   ],
-  "version": "2.3.0.4"
+  "version": "1.9.0.12"
 }

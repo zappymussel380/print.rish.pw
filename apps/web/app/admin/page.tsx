@@ -91,7 +91,8 @@ function computeStats(quotations: QuotationWithItems[]): AdminStats {
     for (const item of q.items) {
       const grams = Number(item.unitGrams) * item.quantity;
       printSeconds += item.unitPrintSeconds * item.quantity;
-      if (item.material === "PETG") petgGrams += grams;
+      // Split by family: the premium tiers are still PLA or PETG on the spool.
+      if (item.material.startsWith("PETG")) petgGrams += grams;
       else plaGrams += grams;
     }
   }

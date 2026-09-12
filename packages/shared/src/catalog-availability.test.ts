@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { COLOUR_IDS, MATERIAL_IDS } from "./quote-types";
-import { MASTER_COLOURS, MATERIAL_COLOURS, DEFAULT_ENABLED_COLOURS } from "./colours";
+import {
+  MASTER_COLOURS,
+  MATERIAL_COLOURS,
+  DEFAULT_ENABLED_COLOURS,
+  DEFAULT_ENABLED_MATERIALS,
+  swatchBackground,
+} from "./colours";
 import {
   assertConfigAvailable,
   defaultAvailability,
@@ -19,13 +25,44 @@ describe("colour palette integrity", () => {
     }
   });
 
-  it("PETG palette is a subset of PLA's, and defaults are within each palette", () => {
+  it("carries the full Numakers range in each tier", () => {
+    // A regression anchor for the catalogue itself (vendor snapshot 2026-09-12).
+    expect(MATERIAL_COLOURS.PLA).toHaveLength(40);
+    expect(MATERIAL_COLOURS.PLA_AESTHETIC).toHaveLength(70);
+    expect(MATERIAL_COLOURS.PLA_CF).toHaveLength(4);
+    expect(MATERIAL_COLOURS.PETG).toHaveLength(17);
+    expect(MATERIAL_COLOURS.PETG_PREMIUM).toHaveLength(19);
+  });
+
+  it("PETG basics are a subset of PLA's; premium tiers share no id with any other tier", () => {
     const pla = new Set(MATERIAL_COLOURS.PLA);
     for (const id of MATERIAL_COLOURS.PETG) expect(pla.has(id)).toBe(true);
+    for (const premium of ["PLA_AESTHETIC", "PLA_CF", "PETG_PREMIUM"] as const) {
+      for (const id of MATERIAL_COLOURS[premium]) {
+        expect(MASTER_COLOURS[id].materials).toEqual([premium]);
+      }
+    }
+  });
+
+  it("defaults are within each palette", () => {
     for (const m of MATERIAL_IDS) {
       const universe = new Set(MATERIAL_COLOURS[m]);
       for (const id of DEFAULT_ENABLED_COLOURS[m]) expect(universe.has(id)).toBe(true);
     }
+  });
+
+  it("multi-colour stops are real hexes that start at the swatch colour", () => {
+    const multi = Object.values(MASTER_COLOURS).filter((c) => c.stops);
+    expect(multi).toHaveLength(14);
+    for (const c of multi) {
+      expect(c.stops!.length).toBeGreaterThanOrEqual(2);
+      for (const s of c.stops!) expect(s).toMatch(/^#[0-9A-F]{6}$/);
+      expect(c.stops![0]).toBe(c.hex);
+    }
+    expect(swatchBackground(MASTER_COLOURS["dual-red-gold"])).toBe(
+      "linear-gradient(135deg, #A4403E, #D4AF37)",
+    );
+    expect(swatchBackground(MASTER_COLOURS["silk-copper"])).toBe("#CA7031");
   });
 
   it("legacy black/white are accepted ids but offered in no material", () => {
@@ -41,6 +78,43 @@ describe("normalizeAvailability", () => {
     expect(normalizeAvailability("nonsense")).toEqual(def);
     expect(def.materials.PLA).toBe(true);
     expect(def.colours.PLA).toEqual(["pitch-black", "pure-white"]);
+  });
+
+  it("ships the premium tiers switched off with no colours", () => {
+    const def = defaultAvailability();
+    for (const m of ["PLA_AESTHETIC", "PLA_CF", "PETG_PREMIUM"] as const) {
+      expect(DEFAULT_ENABLED_MATERIALS[m]).toBe(false);
+      expect(def.materials[m]).toBe(false);
+      expect(def.colours[m]).toEqual([]);
+    }
+  });
+
+  it("leaves new tiers off, and the operator's picks intact, for a blob saved before they existed", () => {
+    // The exact shape production has stored since the catalog editor shipped.
+    const norm = normalizeAvailability({
+      materials: { PLA: true, PETG: true },
+      colours: { PLA: ["royal-blue", "magenta"], PETG: ["pitch-black"] },
+    });
+    expect(norm.materials).toEqual({
+      PLA: true,
+      PLA_AESTHETIC: false,
+      PLA_CF: false,
+      PETG: true,
+      PETG_PREMIUM: false,
+    });
+    expect(norm.colours.PLA).toEqual(["royal-blue", "magenta"]);
+    expect(norm.colours.PETG).toEqual(["pitch-black"]);
+    expect(norm.colours.PLA_AESTHETIC).toEqual([]);
+  });
+
+  it("keeps a premium colour only in its own tier", () => {
+    const norm = normalizeAvailability({
+      materials: { PLA_AESTHETIC: true },
+      colours: { PLA_AESTHETIC: ["silk-copper", "pitch-black"], PLA: ["silk-copper"] },
+    });
+    expect(norm.materials.PLA_AESTHETIC).toBe(true);
+    expect(norm.colours.PLA_AESTHETIC).toEqual(["silk-copper"]);
+    expect(norm.colours.PLA).toEqual([]);
   });
 
   it("keeps only real colours for a material and dedupes", () => {
@@ -97,5 +171,19 @@ describe("toPublicCatalog / firstEnabledColour", () => {
     expect(pla.colours.find((c) => c.id === "magenta")!.enabled).toBe(false);
     expect(pub.materials.find((m) => m.id === "PETG")!.enabled).toBe(false);
     expect(firstEnabledColour(avail, "PLA")).toBe("royal-blue");
+  });
+
+  it("labels materials for humans and sends gradient stops only where they exist", () => {
+    const pub = toPublicCatalog(defaultAvailability());
+    expect(pub.materials.map((m) => m.name)).toEqual([
+      "PLA",
+      "Aesthetic PLA",
+      "PLA-CF",
+      "PETG",
+      "PETG Premium",
+    ]);
+    const aesthetic = pub.materials.find((m) => m.id === "PLA_AESTHETIC")!;
+    expect(aesthetic.colours.find((c) => c.id === "tri-red-orange-gold")!.stops).toHaveLength(3);
+    expect(aesthetic.colours.find((c) => c.id === "silk-copper")).not.toHaveProperty("stops");
   });
 });

@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { MATERIAL_IDS, type ColourId, type MaterialId } from "./quote-types";
-import { MASTER_COLOURS, MATERIAL_COLOURS, DEFAULT_ENABLED_COLOURS } from "./colours";
+import { materialName } from "./catalog";
+import {
+  MASTER_COLOURS,
+  MATERIAL_COLOURS,
+  DEFAULT_ENABLED_COLOURS,
+  DEFAULT_ENABLED_MATERIALS,
+} from "./colours";
 
 /**
  * Runtime, admin-controlled availability of materials and colours, overlaid on
@@ -31,13 +37,14 @@ export const availabilitySchema = z.object({
 });
 export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 
-/** The default when nothing is stored: every material on, colours limited to the
- *  historically in-stock set. */
+/** The default when nothing is stored (or a stored blob predates a material):
+ *  the basic materials on, premium tiers off, colours limited to the historically
+ *  in-stock set. */
 export function defaultAvailability(): Availability {
   const materials = {} as Record<MaterialId, boolean>;
   const colours = {} as Record<MaterialId, ColourId[]>;
   for (const m of MATERIAL_IDS) {
-    materials[m] = true;
+    materials[m] = DEFAULT_ENABLED_MATERIALS[m];
     colours[m] = [...DEFAULT_ENABLED_COLOURS[m]];
   }
   return { materials, colours };
@@ -98,14 +105,14 @@ export function assertConfigAvailable(
     return {
       ok: false,
       code: "MATERIAL_UNAVAILABLE",
-      message: `Material ${config.material} is not currently available.`,
+      message: `${materialName(config.material)} is not currently available.`,
     };
   }
   if (config.colour !== undefined && !isColourEnabled(avail, config.material, config.colour)) {
     return {
       ok: false,
       code: "COLOUR_UNAVAILABLE",
-      message: `The selected colour is not available in ${config.material}.`,
+      message: `The selected colour is not available in ${materialName(config.material)}.`,
     };
   }
   return { ok: true };
@@ -115,6 +122,8 @@ export interface PublicColour {
   id: ColourId;
   name: string;
   hex: string;
+  /** Present only for dual/tri-colour filament — see `swatchBackground`. */
+  stops?: readonly string[];
   enabled: boolean;
 }
 export interface PublicMaterial {
@@ -129,14 +138,18 @@ export interface PublicMaterial {
 export function toPublicCatalog(avail: Availability): { materials: PublicMaterial[] } {
   const materials = MATERIAL_IDS.map((m) => ({
     id: m,
-    name: m,
+    name: materialName(m),
     enabled: isMaterialEnabled(avail, m),
-    colours: MATERIAL_COLOURS[m].map((id) => ({
-      id,
-      name: MASTER_COLOURS[id].name,
-      hex: MASTER_COLOURS[id].hex,
-      enabled: avail.colours[m]?.includes(id) ?? false,
-    })),
+    colours: MATERIAL_COLOURS[m].map((id) => {
+      const { name, hex, stops } = MASTER_COLOURS[id];
+      return {
+        id,
+        name,
+        hex,
+        ...(stops ? { stops } : {}),
+        enabled: avail.colours[m]?.includes(id) ?? false,
+      };
+    }),
   }));
   return { materials };
 }

@@ -1,0 +1,1209 @@
+{
+ "source": "https://india.numakers.com/products.json",
+ "capturedAt": "2026-09-12",
+ "lines": [
+  {
+   "handle": "pla",
+   "title": "PLA",
+   "tier": "PLA",
+   "colours": [
+    {
+     "vendorName": "Pitch Black",
+     "id": "pitch-black",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Nuclear Red",
+     "id": "nuclear-red",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Outrageous Orange",
+     "id": "outrageous-orange",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Fluorescent Orange",
+     "id": "fluorescent-orange",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Bahama Yellow",
+     "id": "bahama-yellow",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lemon Yellow",
+     "id": "lemon-yellow",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Fluorescent Yellow",
+     "id": "fluorescent-yellow",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Apricot",
+     "id": "apricot",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Grass Green",
+     "id": "grass-green",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Fluorescent Green",
+     "id": "fluorescent-green",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ryobix Green",
+     "id": "ryobix-green",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Forest Green",
+     "id": "forest-green",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Army Green",
+     "id": "army-green",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Rust Copper",
+     "id": "rust-copper",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Beige Brown",
+     "id": "beige-brown",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Chocolate Brown",
+     "id": "chocolate-brown",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Magenta",
+     "id": "magenta",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Atomic Pink",
+     "id": "atomic-pink",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ivory",
+     "id": "ivory",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Pure White",
+     "id": "pure-white",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Light Gray",
+     "id": "light-gray",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Dark Gray",
+     "id": "dark-gray",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Simply Silver",
+     "id": "simply-silver",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Midnight Gray",
+     "id": "midnight-gray",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lagoon Blue",
+     "id": "lagoon-blue",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Light Blue",
+     "id": "light-blue",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Royal Blue",
+     "id": "royal-blue",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lavender Violet",
+     "id": "lavender-violet",
+     "priceInr": 565.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Thanos Purple",
+     "id": "thanos-purple",
+     "priceInr": 565.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Transparent",
+     "id": "transparent",
+     "priceInr": 565.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-filament",
+   "title": "PLA+ Filament",
+   "tier": "PLA",
+   "colours": [
+    {
+     "vendorName": "Pitch Black",
+     "id": "pitch-black",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Pure White",
+     "id": "pure-white",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lemon Yellow",
+     "id": "lemon-yellow",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Mauve Purple",
+     "id": "mauve-purple",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Nuclear Red",
+     "id": "nuclear-red",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Imperial Red",
+     "id": "imperial-red",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Outrageous Orange",
+     "id": "outrageous-orange",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Atomic Pink",
+     "id": "atomic-pink",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Royal Blue",
+     "id": "royal-blue",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Light Gray",
+     "id": "light-gray",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Light Blue",
+     "id": "light-blue",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Grass Green",
+     "id": "grass-green",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Beige Brown",
+     "id": "beige-brown",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Teal Blue",
+     "id": "teal-blue",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Army Green",
+     "id": "army-green",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Dark Gray",
+     "id": "dark-gray",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ivory White",
+     "id": "ivory-white",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Rust Copper",
+     "id": "rust-copper",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Apricot",
+     "id": "apricot",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lagoon Blue",
+     "id": "lagoon-blue",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Forest Green",
+     "id": "forest-green",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Fluorescent Orange",
+     "id": "fluorescent-orange",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Fluorescent Green",
+     "id": "fluorescent-green",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Transparent",
+     "id": "transparent",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Bahama Yellow",
+     "id": "bahama-yellow",
+     "priceInr": 600.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Chocolate Brown",
+     "id": "chocolate-brown",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Fluorescent Yellow",
+     "id": "fluorescent-yellow",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lavender Violet",
+     "id": "lavender-violet",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Magenta",
+     "id": "magenta",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Military Khaki",
+     "id": "military-khaki",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ryobix Green",
+     "id": "ryobix-green",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Simply Silver",
+     "id": "simply-silver",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Midnight Gray",
+     "id": "midnight-gray",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Thanos Purple",
+     "id": "thanos-purple",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Cool White",
+     "id": "cool-white",
+     "priceInr": 600.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Bone White",
+     "id": "bone-white",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Terracotta Orange",
+     "id": "terracota-orange",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Water Blue",
+     "id": "water-blue",
+     "priceInr": 600.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Light Beige",
+     "id": "light-beige",
+     "priceInr": 600.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-matte",
+   "title": "PLA Matte",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Ruby Red",
+     "id": "matte-ruby-red",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Sakura Pink",
+     "id": "matte-sakura-pink",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Skin",
+     "id": "matte-skin",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Sunshine Yellow",
+     "id": "matte-sunshine-yellow",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Mint Green",
+     "id": "matte-mint-green",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ice Blue",
+     "id": "matte-ice-blue",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Olive Green",
+     "id": "matte-olive-green",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Navy Blue",
+     "id": "matte-navy-blue",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Moon Gray",
+     "id": "matte-moon-gray",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lilac Purple",
+     "id": "matte-lilac-purple",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Beige",
+     "id": "matte-beige",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "White",
+     "id": "matte-white",
+     "priceInr": 649.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Black",
+     "id": "matte-black",
+     "priceInr": 649.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "silk-pla",
+   "title": "PLA Silk (New)",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Silk Copper",
+     "id": "silk-copper",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Orange",
+     "id": "silk-orange",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Red",
+     "id": "silk-red",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Yellow",
+     "id": "silk-yellow",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Molten Gold",
+     "id": "silk-molten-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Antique Gold",
+     "id": "silk-antique-gold",
+     "priceInr": 749.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Silk Mint Green",
+     "id": "silk-mint-green",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Christmas Green",
+     "id": "silk-christmas-green",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Blue",
+     "id": "silk-blue",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Lagoon",
+     "id": "silk-lagoon",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Deep Blue",
+     "id": "silk-deep-blue",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Lilac",
+     "id": "silk-lilac",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Purple",
+     "id": "silk-purple",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Pale Lavender",
+     "id": "silk-pale-lavender",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Petal Pink",
+     "id": "silk-petal-pink",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Pink",
+     "id": "silk-pink",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk White",
+     "id": "silk-white",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silk Silver",
+     "id": "silk-silver",
+     "priceInr": 749.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Silk Black",
+     "id": "silk-black",
+     "priceInr": 749.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-silk",
+   "title": "PLA Silk",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Gold",
+     "id": "silk-gold",
+     "priceInr": 699.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Enchanted Gold",
+     "id": "silk-enchanted-gold",
+     "priceInr": 699.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Silver",
+     "id": "silk-silver",
+     "priceInr": 699.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Copper",
+     "id": "silk-copper",
+     "priceInr": 699.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Bronze",
+     "id": "silk-bronze",
+     "priceInr": 699.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Molten Sol",
+     "id": "silk-molten-sol",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Forest Green",
+     "id": "silk-forest-green",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Blue",
+     "id": "silk-blue",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Purple",
+     "id": "silk-purple",
+     "priceInr": 699.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Obsidian Night",
+     "id": "silk-obsidian-night",
+     "priceInr": 699.0,
+     "inStock": false
+    }
+   ]
+  },
+  {
+   "handle": "tri-color-silk-pla",
+   "title": "Dual/Tri-Color Silk PLA",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Copper-Silver-Gold",
+     "id": "tri-copper-silver-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Blue-Green-Gold",
+     "id": "tri-blue-green-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Black-Purple-Gold",
+     "id": "tri-black-purple-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Black-Purple-Orange",
+     "id": "tri-black-purple-orange",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Silver-Purple-Blue",
+     "id": "tri-silver-purple-blue",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Green-Magenta-Blue",
+     "id": "tri-green-magenta-blue",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Red-Yellow-Blue",
+     "id": "tri-red-yellow-blue",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Red-Orange-Gold",
+     "id": "tri-red-orange-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Red-Blue-White",
+     "id": "tri-red-blue-white",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Black-Gold",
+     "id": "dual-black-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Blue-Magenta",
+     "id": "dual-blue-magenta",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Purple-Black",
+     "id": "dual-purple-black",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Red-Black",
+     "id": "dual-red-black",
+     "priceInr": 749.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Red-Gold",
+     "id": "dual-red-gold",
+     "priceInr": 749.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-metallic",
+   "title": "PLA Metallic",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Titanium Blue",
+     "id": "metallic-titanium-blue",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ferrous Green",
+     "id": "metallic-ferrous-green",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Sunset Bronze",
+     "id": "metallic-sunset-bronze",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Tungsten Brown",
+     "id": "metallic-tungsten-brown",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Burnished Copper",
+     "id": "metallic-burnished-copper",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Burnt Copper",
+     "id": "metallic-burnt-copper",
+     "priceInr": 849.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-stone",
+   "title": "PLA Stone",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "White",
+     "id": "stone-white",
+     "priceInr": 649.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-starlight",
+   "title": "PLA Starlight",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Nebula",
+     "id": "starlight-nebula",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Comet",
+     "id": "starlight-comet",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Titan",
+     "id": "starlight-titan",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Midnight",
+     "id": "starlight-midnight",
+     "priceInr": 849.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Neptune",
+     "id": "starlight-neptune",
+     "priceInr": 849.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-glow-in-the-dark",
+   "title": "PLA Glow in the Dark",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Green",
+     "id": "glow-green",
+     "priceInr": 975.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Orange",
+     "id": "glow-orange",
+     "priceInr": 975.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Pink",
+     "id": "glow-pink",
+     "priceInr": 975.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Blue",
+     "id": "glow-blue",
+     "priceInr": 975.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Aqua Blue",
+     "id": "glow-aqua-blue",
+     "priceInr": 975.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-wood",
+   "title": "PLA Wood",
+   "tier": "PLA_AESTHETIC",
+   "colours": [
+    {
+     "vendorName": "Natural",
+     "id": "wood-natural",
+     "priceInr": 1099.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "pla-cf",
+   "title": "PLA-CF",
+   "tier": "PLA_CF",
+   "colours": [
+    {
+     "vendorName": "Black",
+     "id": "cf-black",
+     "priceInr": 1499.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Wine Red",
+     "id": "cf-wine-red",
+     "priceInr": 1499.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lemongrass Green",
+     "id": "cf-lemongrass-green",
+     "priceInr": 1499.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Denim Blue",
+     "id": "cf-denim-blue",
+     "priceInr": 1499.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "petg-hs-filament",
+   "title": "PETG-HS Filament",
+   "tier": "PETG",
+   "colours": [
+    {
+     "vendorName": "Pitch Black",
+     "id": "pitch-black",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Pure White",
+     "id": "pure-white",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Lemon Yellow",
+     "id": "lemon-yellow",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Mauve Purple",
+     "id": "mauve-purple",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Nuclear Red",
+     "id": "nuclear-red",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Outrageous Orange",
+     "id": "outrageous-orange",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Royal Blue",
+     "id": "royal-blue",
+     "priceInr": 599.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Light Gray",
+     "id": "light-gray",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Grass Green",
+     "id": "grass-green",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Transparent",
+     "id": "transparent",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Atomic Pink",
+     "id": "atomic-pink",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Forest Green",
+     "id": "forest-green",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Light Blue",
+     "id": "light-blue",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Midnight Gray",
+     "id": "midnight-gray",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Simply Silver",
+     "id": "simply-silver",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Thanos Purple",
+     "id": "thanos-purple",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Army Green",
+     "id": "army-green",
+     "priceInr": 599.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "petg-translucent",
+   "title": "PETG Translucent",
+   "tier": "PETG_PREMIUM",
+   "colours": [
+    {
+     "vendorName": "Blue",
+     "id": "translucent-blue",
+     "priceInr": 599.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Ice Blue",
+     "id": "translucent-ice-blue",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Ice Blue Glitter",
+     "id": "translucent-ice-blue-glitter",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Arctic",
+     "id": "translucent-arctic",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Arctic Glitter",
+     "id": "translucent-arctic-glitter",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Pink",
+     "id": "translucent-pink",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Pink Glitter",
+     "id": "translucent-pink-glitter",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Hot Pink",
+     "id": "translucent-hot-pink",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Red",
+     "id": "translucent-red",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Orange",
+     "id": "translucent-orange",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Orange Glitter",
+     "id": "translucent-orange-glitter",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Green",
+     "id": "translucent-green",
+     "priceInr": 599.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Green Glitter",
+     "id": "translucent-green-glitter",
+     "priceInr": 699.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Yellow",
+     "id": "translucent-yellow",
+     "priceInr": 599.0,
+     "inStock": true
+    }
+   ]
+  },
+  {
+   "handle": "petg-cf",
+   "title": "PETG CF",
+   "tier": "PETG_PREMIUM",
+   "colours": [
+    {
+     "vendorName": "Black",
+     "id": "petg-cf-black",
+     "priceInr": 1149.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Volcanic Rock Gray",
+     "id": "petg-cf-volcanic-rock-gray",
+     "priceInr": 1149.0,
+     "inStock": false
+    },
+    {
+     "vendorName": "Tactical Green",
+     "id": "petg-cf-tactical-green",
+     "priceInr": 1149.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Denim Blue",
+     "id": "petg-cf-denim-blue",
+     "priceInr": 1149.0,
+     "inStock": true
+    },
+    {
+     "vendorName": "Purple",
+     "id": "petg-cf-purple",
+     "priceInr": 1149.0,
+     "inStock": true
+    }
+   ]
+  }
+ ]
+}

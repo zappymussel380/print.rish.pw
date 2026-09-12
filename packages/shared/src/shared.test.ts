@@ -213,7 +213,16 @@ describe("summariseItems", () => {
         { material: "PLA", colour: "black", quantity: 1 },
         { material: "PETG", colour: "white", quantity: 3 },
       ]),
-    ).toBe("2× PLA (black), 3× PETG (white)");
+    ).toBe("2× PLA (Black), 3× PETG (White)");
+  });
+
+  it("names premium tiers and their colours for humans", () => {
+    expect(
+      summariseItems([
+        { material: "PLA_AESTHETIC", colour: "silk-copper", quantity: 2 },
+        { material: "PETG_PREMIUM", colour: "translucent-ice-blue-glitter", quantity: 1 },
+      ]),
+    ).toBe("2× Aesthetic PLA (Silk Copper), 1× PETG Premium (Translucent Ice Blue Glitter)");
   });
 });
 

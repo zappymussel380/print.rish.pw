@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import {
   CATALOG,
+  colourName,
   formatDuration,
   formatGrams,
   formatPaise,
+  materialName,
   settingsKey,
 } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
@@ -270,7 +272,8 @@ export function CheckoutForm() {
                       {fileName}
                     </p>
                     <p className="text-xs text-faint">
-                      {config.material} · {config.colour} · {formatGrams(grams)}
+                      {materialName(config.material)} · {colourName(config.colour)} ·{" "}
+                      {formatGrams(grams)}
                     </p>
                   </div>
                 </li>

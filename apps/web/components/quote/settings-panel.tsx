@@ -9,12 +9,22 @@ import {
   INFILL_MIN_PCT,
   LAYER_HEIGHTS_UM,
   type MaterialId,
+  materialName,
   MAX_QUANTITY,
   type ModelConfig,
   SUPPORT_MODES,
+  swatchBackground,
 } from "@print/shared";
 import { useQuoteStore } from "@/lib/quote-store";
 import { useCatalog } from "@/lib/use-catalog";
+
+/** Past this many enabled materials a segmented control no longer fits a phone. */
+const MAX_SEGMENTED_MATERIALS = 3;
+
+const MATERIAL_INFO =
+  "PLA is stiff and easy to print — ideal for prototypes, models and display pieces. PETG is tougher and more heat- and moisture-resistant — better for functional or outdoor parts.";
+const PREMIUM_INFO =
+  " Aesthetic PLA covers silk, matte, metallic, starlight, glow and wood finishes; the carbon-fibre and premium PETG tiers suit stiff functional parts and translucent pieces. Each is charged at its own per-gram rate.";
 
 const SUPPORT_LABEL: Record<(typeof SUPPORT_MODES)[number], string> = {
   auto: "Auto",
@@ -41,6 +51,18 @@ export function SettingsPanel({
   const enabledMaterials = catalog.materials.filter((m) => m.enabled);
   const currentMaterial = catalog.materials.find((m) => m.id === config.material);
   const enabledColours = (currentMaterial?.colours ?? []).filter((c) => c.enabled);
+  const premiumEnabled = enabledMaterials.some((m) => m.id !== "PLA" && m.id !== "PETG");
+
+  const chooseMaterial = (v: MaterialId) => {
+    const next = catalog.materials.find((m) => m.id === v);
+    const nextColours = (next?.colours ?? []).filter((c) => c.enabled);
+    const firstColour = nextColours[0]?.id;
+    const keepColour = nextColours.some((c) => c.id === config.colour);
+    set({
+      material: v,
+      ...(keepColour || firstColour === undefined ? {} : { colour: firstColour }),
+    });
+  };
 
   // Keep the selection valid as availability loads or the operator changes it:
   // fall back to the first enabled material, and reset the colour when it isn't
@@ -63,23 +85,28 @@ export function SettingsPanel({
     <div className="grid gap-4 sm:grid-cols-2">
       <Field
         label="Material"
-        info="PLA is stiff and easy to print — ideal for prototypes, models and display pieces. PETG is tougher and more heat- and moisture-resistant — better for functional or outdoor parts."
+        info={premiumEnabled ? MATERIAL_INFO + PREMIUM_INFO : MATERIAL_INFO}
         notice={sourceNotice("material", config, sourceConfig)}
       >
-        <Segmented
-          value={config.material}
-          options={enabledMaterials.map((m) => ({ value: m.id as MaterialId, label: m.id }))}
-          onChange={(v) => {
-            const next = catalog.materials.find((m) => m.id === v);
-            const nextColours = (next?.colours ?? []).filter((c) => c.enabled);
-            const firstColour = nextColours[0]?.id;
-            const keepColour = nextColours.some((c) => c.id === config.colour);
-            set({
-              material: v,
-              ...(keepColour || firstColour === undefined ? {} : { colour: firstColour }),
-            });
-          }}
-        />
+        {enabledMaterials.length > MAX_SEGMENTED_MATERIALS ? (
+          <select
+            value={config.material}
+            onChange={(e) => chooseMaterial(e.target.value as MaterialId)}
+            className="input-base w-full text-sm"
+          >
+            {enabledMaterials.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Segmented
+            value={config.material}
+            options={enabledMaterials.map((m) => ({ value: m.id as MaterialId, label: m.name }))}
+            onChange={chooseMaterial}
+          />
+        )}
       </Field>
 
       <Field
@@ -202,6 +229,7 @@ function sourceValueLabel(
 ): string {
   if (key === "layerHeightUm" && typeof value === "number") return `${(value / 1000).toFixed(2)}mm`;
   if (key === "infillPct" && typeof value === "number") return `${value}%`;
+  if (key === "material" && typeof value === "string") return materialName(value);
   if (key === "supports" && typeof value === "string") {
     return value in SUPPORT_LABEL ? SUPPORT_LABEL[value as keyof typeof SUPPORT_LABEL] : value;
   }
@@ -357,7 +385,7 @@ function ColourSelect({
   onChange,
 }: {
   value: ColourId;
-  options: { id: ColourId; name: string; hex: string }[];
+  options: { id: ColourId; name: string; hex: string; stops?: readonly string[] }[];
   onChange: (id: ColourId) => void;
 }) {
   const selected = options.find((o) => o.id === value);
@@ -377,7 +405,7 @@ function ColourSelect({
               className={`size-7 rounded-full border border-line transition-transform hover:scale-110 ${
                 active ? "ring-2 ring-accent ring-offset-2 ring-offset-bg" : ""
               }`}
-              style={{ background: o.hex }}
+              style={{ background: swatchBackground(o) }}
             />
           );
         })}
