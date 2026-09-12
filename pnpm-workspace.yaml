@@ -27,6 +27,11 @@ overrides:
   # the override exists to keep `pnpm audit --audit-level low` clean rather than
   # to close a reachable hole. Stays inside major 3.
   "mysql2@<3.22.0": "^3.22.0"
+  # CLI/dev-only: reached via prisma > @prisma/dev > @prisma/streams-local > ajv
+  # (Prisma's local dev database), never by the runtime client. GHSA-f65p-4m7j-42xc,
+  # GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp and GHSA-5jgf-p345-68v8 (SSRF / host
+  # confusion in URI normalization) are all fixed in 3.1.6. Stays inside major 3.
+  "fast-uri@>=3.0.0 <3.1.6": "^3.1.6"
   # Dev-only: eslint and vitest toolchains. Three majors are live at once.
   "brace-expansion@<1.1.18": "^1.1.18"
   "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4"
