@@ -17,16 +17,24 @@ const POLL_MS = 1500;
  */
 export function useSliceSync(model: QuoteModel): void {
   const setSlice = useQuoteStore((s) => s.setSlice);
+  const dropSlice = useQuoteStore((s) => s.dropSlice);
   const timers = useRef<{ debounce?: ReturnType<typeof setTimeout>; abort?: AbortController }>({});
 
   const ready = model.status === "ready" && !!model.server;
   const key = ready ? settingsKey(model.config) : "";
   const modelId = model.server?.id ?? "";
+  // Depend on the slice-relevant fields only. Depending on the whole config
+  // object re-ran this effect on every colour/quantity change, and the cleanup
+  // aborted the in-flight poll — stranding the quote on "Waiting for a slicer"
+  // while the worker finished the slice unobserved.
+  const { material, layerHeightUm, infillPct, supports } = model.config;
 
   useEffect(() => {
     if (!ready) return;
     const activeTimers = timers.current;
     const cacheKey = sliceCacheKey(modelId, key);
+    const settings = { material, layerHeightUm, infillPct, supports };
+    let settled = false;
 
     // Already have (or are already fetching) this combination — do nothing.
     const current = useQuoteStore.getState().slices[cacheKey];
@@ -42,7 +50,7 @@ export function useSliceSync(model: QuoteModel): void {
         progress: { percent: 0, stage: "queued", message: "Waiting for a slicer" },
       });
       try {
-        let dto = await requestSlice(modelId, model.config, abort.signal);
+        let dto = await requestSlice(modelId, settings, abort.signal);
         while (dto.status !== "done" && dto.status !== "failed") {
           if (!dto.sliceId) break;
           setSlice(cacheKey, {
@@ -53,6 +61,7 @@ export function useSliceSync(model: QuoteModel): void {
           await sleep(POLL_MS, abort.signal);
           dto = await pollSlice(dto.sliceId, abort.signal);
         }
+        settled = true;
         if (dto.status === "done" && dto.result) {
           setSlice(cacheKey, {
             status: "done",
@@ -69,6 +78,7 @@ export function useSliceSync(model: QuoteModel): void {
         }
       } catch (err) {
         if (abort.signal.aborted) return;
+        settled = true;
         setSlice(cacheKey, {
           status: "failed",
           progress: { percent: 0, stage: "failed", message: "Connection lost" },
@@ -81,8 +91,12 @@ export function useSliceSync(model: QuoteModel): void {
     return () => {
       clearTimeout(activeTimers.debounce);
       abort.abort();
+      // A run torn down mid-flight would otherwise leave a "queued" entry that
+      // the early return above treats as in progress forever. Drop it, so coming
+      // back to these settings asks again — the server hands back the same slice.
+      if (!settled) dropSlice(cacheKey);
     };
-  }, [ready, modelId, key, model.config, setSlice]);
+  }, [ready, modelId, key, material, layerHeightUm, infillPct, supports, setSlice, dropSlice]);
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

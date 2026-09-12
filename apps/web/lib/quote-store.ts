@@ -79,6 +79,7 @@ interface QuoteState {
   clear: () => void;
 
   setSlice: (cacheKey: string, state: SliceState) => void;
+  dropSlice: (cacheKey: string) => void;
   setShipping: (shipping: SavedShipping | null) => void;
 }
 
@@ -224,6 +225,13 @@ export const useQuoteStore = create<QuoteState>((set) => ({
 
   setSlice: (cacheKey, state) =>
     set((s) => ({ slices: { ...s.slices, [cacheKey]: state } })),
+
+  dropSlice: (cacheKey) =>
+    set((s) => {
+      const slices = { ...s.slices };
+      delete slices[cacheKey];
+      return { slices };
+    }),
 
   setShipping: (shipping) => set({ shipping }),
 }));
