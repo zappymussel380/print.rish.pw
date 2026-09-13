@@ -31,6 +31,15 @@ RUN pnpm --filter @print/db generate \
     && pnpm --filter @print/web build \
     && pnpm --filter @print/db deploy --legacy /opt/migrate
 
+# ---------- tools: one-off helpers for the self-host installer ----------
+# Hashes the admin password with the lockfile's own bcryptjs — the library the
+# login route verifies with (Next bundles it, so the runner has no copy to
+# import). Built on demand by install.sh and removed after use; never deployed.
+FROM deps AS tools
+COPY apps/web/scripts/hash-password.mjs apps/web/scripts/hash-password.mjs
+USER node
+ENTRYPOINT ["node", "apps/web/scripts/hash-password.mjs"]
+
 # ---------- runtime base: no build/package-manager tooling ----------
 FROM base AS runtime-base
 # npm/Corepack/pnpm are build-time tools only. Removing them from the runtime
@@ -56,6 +65,7 @@ RUN apt-get update \
 # also where the entrypoint runs `prisma migrate deploy` from — no separate copy.
 COPY --from=build /opt/migrate /opt/migrate
 COPY apps/web/scripts/provision-database.mjs /app/provision-database.mjs
+COPY apps/web/scripts/seed-settings.mjs /app/seed-settings.mjs
 USER nextjs
 ENTRYPOINT ["/usr/local/bin/web-entrypoint.sh"]
 

@@ -1,0 +1,38 @@
+# Self-host overrides shared by every install.sh mode. Loaded through
+# COMPOSE_FILE in the .env that install.sh writes — never by print.rish.pw's own
+# deployment. Paths resolve from the repository root (the project directory).
+services:
+  # The main file's CPU limits suit the production host. Docker refuses to start
+  # a container whose limit exceeds the machine's cores, so install.sh sizes
+  # these to the server it runs on.
+  web:
+    deploy:
+      resources:
+        limits:
+          cpus: "${SELFHOST_WEB_CPUS:-2}"
+  worker:
+    deploy:
+      resources:
+        limits:
+          cpus: "${SELFHOST_WORKER_CPUS:-4}"
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "${SELFHOST_DB_CPUS:-2}"
+
+  # One-off helper image (admin password hashing). Built on demand by
+  # install.sh, run with no network, and removed again straight after.
+  tools:
+    profiles: ["tools"]
+    image: print-tools
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      target: tools
+    network_mode: none
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

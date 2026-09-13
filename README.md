@@ -9,6 +9,19 @@ Includes marketing pages and a password-protected admin dashboard.
 > Part of the [rish.pw](https://rish.pw) repository. **Only the code is MIT
 > licensed** — site content, photos and generated PDFs are not licensed for reuse.
 
+## Run your own print shop
+
+One command sets up your own copy on an x86_64 Linux server — your name, rates,
+materials and contact details — with automatic HTTPS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/install.sh | sudo bash
+```
+
+Update later with `sudo /opt/print-shop/update.sh`. See
+[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md) for requirements, the HTTPS
+options, updates and rollback.
+
 ## What's inside
 
 | Area | Tech |
@@ -56,6 +69,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full walkthrough and
 
 - [Architecture](docs/ARCHITECTURE.md) — how the pieces fit together
 - [Install](docs/INSTALL.md) — local development
+- [Self-hosting](docs/SELF-HOSTING.md) — one-command install, updates, rollback
 - [Deployment](docs/DEPLOYMENT.md) — production, proxy topology, the VPS edge
 - [Environment](docs/ENV.md) — every variable
 - [Database](docs/DATABASE.md) — schema and migrations
