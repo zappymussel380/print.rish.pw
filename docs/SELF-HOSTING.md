@@ -84,6 +84,35 @@ Happy with it? Run `sudo /opt/print-shop/install.sh`, pick **2) Change the web
 address**, and choose one of the options below. Your settings, rates and
 quotations come along.
 
+## Your own printer or profiles (advanced mode)
+
+Is your printer missing from OrcaSlicer's list (a Voron, a modded Ender, a
+self-build), or do you slice with profiles you've tuned yourself? At the
+printer question, choose **2) Advanced**. You then:
+1. pick a starting point: a generic Klipper, Marlin, RepRapFirmware or
+   Repetier printer, or any printer from OrcaSlicer's list
+2. give the printer name customers see, e.g. *Voron 2.4 300*
+
+The admin dashboard then has a **Slicer profiles** section. There you upload
+the presets you use in OrcaSlicer:
+- **A whole printer:** in OrcaSlicer, *File → Export → Export Preset Bundle →
+  Printer bundle* gives an `.orca_printer` file. Upload it on the **Printer**
+  row. Its process presets at 0.12, 0.16 and 0.20 mm are used for those layer
+  heights; anything else in it is listed as skipped.
+- **Single presets:** export a printer, process or filament preset as `.json`
+  (or a filament bundle, `.orca_filament`) and upload it on the row it's for:
+  a layer height, or a material.
+
+Every upload is **test-sliced** on a 20 mm cube with the rest of your live
+presets before it replaces anything. If OrcaSlicer rejects it, you see its
+error and quotes keep using what was live. A row you haven't uploaded to uses
+the starting point's preset, and **Use installed** puts a row back on it.
+
+Presets that build on one of OrcaSlicer's own ("inherits") are resolved
+against the presets this OrcaSlicer ships. Presets that build on another of
+your own need to come in the same bundle. For safety, post-processing scripts
+and printer-upload settings in a preset are dropped.
+
 ## HTTPS options
 
 **1. Public server (recommended).** Your server has a public IP and ports 80
@@ -188,7 +217,10 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_DIR`, `PS_BRANCH`, `PS_REPO` | Install folder (`/opt/print-shop`), branch (`main`), repository |
 | `PS_BRAND`, `PS_TAGLINE`, `PS_CITY` | Shop name, tagline, city |
 | `PS_QUOTE_PREFIX` | Quotation-number initials, 2–5 letters (default: the shop name's initials) |
-| `PS_PRINTER` | Printer: the exact OrcaSlicer preset, e.g. `Prusa MK4 0.4 nozzle` (list: `docker/selfhost/printers.tsv`, 3rd column) |
+| `PS_PRINTER_SETUP` | `1` a printer from OrcaSlicer's list (default), `2` advanced mode |
+| `PS_PRINTER` | Printer: the exact OrcaSlicer preset, e.g. `Prusa MK4 0.4 nozzle` (list: `docker/selfhost/printers.tsv`, 3rd column). In advanced mode this is the starting point, e.g. `MyKlipper 0.4 nozzle` |
+| `PS_PRINTER_BASE` | Advanced mode starting point when `PS_PRINTER` is unset: `1` Klipper, `2` Marlin, `3` RepRapFirmware, `4` Repetier |
+| `PS_PRINTER_NAME` | Advanced mode: the printer name customers see |
 | `PS_CONFIRM_MULTI_MATERIAL` | `y` if the printer has an AMS/MMU for automatic multicolour |
 | `PS_DOMAIN` | Domain name (not needed for local test mode) |
 | `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed) |
@@ -265,3 +297,10 @@ Everything is flattened (the CLI doesn't resolve `inherits`) and written to
 `.selfhost/profiles` with a `printer.json` describing the printer, which both
 the worker and the website read. The Bambu Lab A1 keeps the hand-tuned
 Numakers profiles print.rish.pw uses.
+
+In advanced mode, presets the owner uploads are stored in the database
+(`SlicerProfileUpload`). The worker resolves each upload's `inherits` against
+the image's OrcaSlicer presets and cleans it the same way. It then writes the
+installed set with the live uploads swapped in to a per-revision directory
+under the slicer work root. The revision is part of every slice cache key, so
+changed presets never reuse old slices.
