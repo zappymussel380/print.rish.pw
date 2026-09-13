@@ -6,11 +6,12 @@ import {
   setQuotationAccessCookie,
 } from "@/lib/quotation-access";
 import { RATE_LIMITS } from "@/lib/security";
+import { QUOTATION_NUMBER_RE } from "@print/shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NUMBER_RE = /^RSP-\d{4}-\d{4,}$/;
+const NUMBER_RE = QUOTATION_NUMBER_RE;
 const DUMMY_VERIFIER = `sha256:${"0".repeat(64)}`;
 const DUMMY_EXPIRY = new Date("2000-01-01T00:00:00.000Z");
 

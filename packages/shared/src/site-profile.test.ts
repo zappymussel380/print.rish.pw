@@ -19,6 +19,7 @@ describe("normalizeSiteProfile", () => {
       contact: { whatsappNumber: "", email: "", phone: "", address: "" },
       footerNote: "A rish.pw project",
       materialsPage: ["PLA", "PETG"],
+      quotationPrefix: "RSP",
     });
     // A copy, not the shared default.
     p.materialsPage.push("ABS");
@@ -54,6 +55,14 @@ describe("normalizeSiteProfile", () => {
     expect(p.contact.email).toBe("");
     expect(p.contact.whatsappNumber).toBe("");
     expect(p.materialsPage).toEqual(["PLA", "PETG"]);
+  });
+
+  it("upper-cases quotation initials and rejects anything that isn't 2–5 letters", () => {
+    expect(normalizeSiteProfile({ quotationPrefix: " ap " }).quotationPrefix).toBe("AP");
+    for (const bad of ["A", "ABCDEF", "A1", "A-P", 42]) {
+      expect(normalizeSiteProfile({ quotationPrefix: bad }).quotationPrefix).toBe("RSP");
+    }
+    expect(findSiteProfileIssues({ quotationPrefix: "A1" })).toEqual(["quotationPrefix"]);
   });
 
   it("lets a shop clear optional fields", () => {

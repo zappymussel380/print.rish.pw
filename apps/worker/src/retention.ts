@@ -16,7 +16,8 @@ async function rm(path: string | null | undefined): Promise<void> {
 
 const UUID_FILE_RE = new RegExp(`^${UUID_PATTERN}\\.(?:stl|3mf|obj|amf|step)$`, "i");
 const UUID_THUMB_RE = new RegExp(`^${UUID_PATTERN}\\.png$`, "i");
-const PDF_RE = /^RSP-\d{4}-\d{4,}\.pdf$/;
+// Any shop initials: numbers issued under an earlier prefix stay collectable.
+const PDF_RE = /^[A-Z]{2,5}-\d{4}-\d{4,}\.pdf$/;
 const ORPHAN_GRACE_MS = 2 * 60 * 60 * 1000;
 const FORMATS = new Set(["stl", "3mf", "obj", "amf"]);
 

@@ -11,7 +11,7 @@
 // Values reach psql as variables, never interpolated into SQL text.
 import { spawnSync } from "node:child_process";
 
-const ALLOWED = new Set(["siteProfile", "pricing", "catalogAvailability"]);
+const ALLOWED = new Set(["siteProfile", "pricing", "catalogAvailability", "faq"]);
 const MAX_INPUT_BYTES = 256 * 1024;
 
 const ifMissing = process.argv.includes("--if-missing");

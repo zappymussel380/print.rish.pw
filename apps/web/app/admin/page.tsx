@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { type Prisma, prisma } from "@print/db";
 import {
-  estimateOrderCostPaise,
+  estimateOrderProfitPaise,
   materialFamily,
   type CostItem,
   type MaterialFamily,
@@ -19,6 +19,7 @@ import {
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
 import { getStoredSiteProfile } from "@/lib/site-profile";
+import { getFaqSettings, getGeneratedFaq } from "@/lib/faq";
 import { getRecentPrints } from "@/lib/recent-prints";
 import { isAdmin } from "@/lib/session";
 
@@ -57,16 +58,18 @@ export default async function AdminPage() {
     grams: q.items.reduce((s, i) => s + Number(i.unitGrams) * i.quantity, 0),
     printSeconds: q.items.reduce((s, i) => s + i.unitPrintSeconds * i.quantity, 0),
     totalPaise: q.totalPaise,
-    // Profit = everything charged (incl. the ₹150 setup fee, pure margin) minus
-    // our production cost. Recomputed from stored grams/seconds and each line's
+    // Profit = what the customer pays for printing (setup fee included, pure
+    // margin; prepaid shipping excluded, it is the courier's) minus our
+    // production cost. Recomputed from stored grams/seconds and each line's
     // material + colour, so every order reflects the current spool costs.
-    profitPaise: q.totalPaise - estimateOrderCostPaise(orderCostItems(q), costBasis),
+    profitPaise: estimateOrderProfitPaise(q, orderCostItems(q), costBasis),
   }));
 
   const stats = computeStats(quotations, costBasis);
   const catalog = toPublicCatalog(await getCatalogAvailability());
   const recentPrints = await getRecentPrints();
   const siteProfile = await getStoredSiteProfile().catch(() => null);
+  const [faqGenerated, faqSettings] = await Promise.all([getGeneratedFaq(), getFaqSettings()]);
 
   return (
     <AdminDashboard
@@ -76,6 +79,7 @@ export default async function AdminPage() {
       pricing={toPricingInput(pricing)}
       rates={pricing.catalog}
       siteProfile={siteProfile}
+      faq={{ generated: faqGenerated, settings: faqSettings }}
       recentPrints={recentPrints}
     />
   );
@@ -106,7 +110,7 @@ function computeStats(quotations: QuotationWithItems[], costBasis: InternalCostB
     statusCounts[q.status] = (statusCounts[q.status] ?? 0) + 1;
     if (q.status === "CANCELLED") continue;
     revenuePaise += q.totalPaise;
-    profitPaise += q.totalPaise - estimateOrderCostPaise(orderCostItems(q), costBasis);
+    profitPaise += estimateOrderProfitPaise(q, orderCostItems(q), costBasis);
     billableCount += 1;
     for (const item of q.items) {
       const grams = Number(item.unitGrams) * item.quantity;

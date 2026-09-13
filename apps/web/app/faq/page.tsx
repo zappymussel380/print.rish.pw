@@ -1,98 +1,27 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageIntro } from "@/components/shell/page-intro";
-import { getSiteProfile } from "@/lib/site-profile";
+import { getFaq } from "@/lib/faq";
 
 export const metadata: Metadata = {
   title: "FAQ",
   description: "Frequently asked questions: file formats, turnaround, maximum size, colours, shipping, layer lines and durability.",
 };
 
-type Faq = { q: string; a: string; more?: { href: string; label: string } };
-
-/** `city` is the shop's (admin → Site); empty drops the local-pickup detail. */
-const faqs = (city: string): Faq[] => [
-  {
-    q: "Which file formats can I upload?",
-    a: "STL, 3MF, OBJ and AMF — plus STEP/STP, which we convert for you automatically on upload. STL is the safest export from almost any CAD tool. If your software offers 3MF, prefer it — it preserves units and orientation more reliably.",
-  },
-  {
-    q: "Do you design models, or only print them?",
-    a: "Printing is the service — you bring the model and we slice and print it. We're happy to make small edits like a resize, a simple cut, or splitting a part so it fits the bed, but we don't take on custom modeling from scratch yet. If you need something designed, MakerWorld, Printables and Thingiverse have huge free libraries, and those communities are also where you'll find freelance designers.",
-    more: { href: "/find-models", label: "Where to find models" },
-  },
-  {
-    q: "How accurate is the instant quote?",
-    a: "Very — it isn't an estimate from geometry, your file is actually sliced by OrcaSlicer with the same Bambu Lab A1 profile the printer runs. The filament weight and print time in your quote come from the generated toolpath itself.",
-  },
-  {
-    q: "Can I gauge weight and cost before I have a file?",
-    a: "Once you upload there's no need to guess — the quote is exact, sliced from your actual model. Before that, model libraries like MakerWorld, Printables, Thingiverse and the Yeggi aggregator usually list a typical weight for popular prints, which is a fair ballpark for material and price. Your real figure can shift a little with the infill and supports you choose.",
-    more: { href: "/find-models", label: "Where to find models" },
-  },
-  {
-    q: "Why is pricing per gram?",
-    a: "Because material is what a print actually consumes, so per-gram billing stays fair and transparent — you pay for your model, not a flat guess. Small items are genuinely cheap: a keychain is only a few grams of filament plus the one-time setup fee. The live per-gram rate for each material is on the Pricing page.",
-  },
-  {
-    q: "What's the maximum printable size?",
-    a: "256 × 256 × 256 mm — the Bambu Lab A1's full build volume. Larger parts can often be split and joined; message us on WhatsApp and we'll advise.",
-  },
-  {
-    q: "Which colours are available?",
-    a: "Every colour in stock is in the colour picker on the quote page, for each material. For a reasonably large print — roughly 800 g or more — we can order in whatever colour you'd like and print the whole job in it. For smaller prints, other colours can sometimes still be arranged; ask on WhatsApp before ordering.",
-  },
-  {
-    q: "Can you do multicolour prints?",
-    a: "Basic multicolour, yes. We don't run an AMS, so colour changes are done by hand — swapping filament at set points during the print, or printing parts separately and assembling them. It works best when colours split cleanly by layer height or by component rather than blending within a single layer. Tell us on WhatsApp what you have in mind and we'll say what's practical.",
-  },
-  {
-    q: "How long until I get my prints?",
-    a: `Your quote shows an estimated completion date based on total print time plus a small buffer for preparation and quality checks. Most small orders are ready in 2–4 days.${city ? ` Local pickup in ${city} is same-day once printing finishes.` : ""}`,
-  },
-  {
-    q: "Do you ship?",
-    a: `Yes — anywhere in India via courier at actual shipping cost, agreed on WhatsApp after your quotation.${city ? ` Pickup in ${city} is free.` : ""}`,
-  },
-  {
-    q: "Will I see layer lines?",
-    a: "Yes — every FDM print has them; they're the nature of the process. At 0.12 mm layer height they're subtle and mostly disappear at arm's length. Choose 0.12 mm for display pieces and 0.20 mm for functional parts where speed and price matter more.",
-  },
-  {
-    q: "How durable are printed parts?",
-    a: "Very usable in daily life. PLA parts handle static indoor loads well; PETG takes impacts, heat up to ~80 °C and outdoor exposure. Strength also depends on print orientation and infill — if a part is load-bearing, say so in the notes and we'll orient and tune it accordingly.",
-  },
-  {
-    q: "What about supports — do they leave marks?",
-    a: "Overhanging geometry needs support material, which is included in your quoted weight. After removal there can be slight surface marks on supported faces. 'Auto' lets the slicer decide where supports are needed; choose 'Off' only if you know your model prints support-free.",
-  },
-  {
-    q: "What's infill, and should I change it?",
-    a: "Infill is the internal lattice inside a print — solid plastic on the outside, an open honeycomb within. More infill means a stronger, heavier and slightly pricier part; less means lighter and cheaper. The default is 15%, which is plenty for most décor and display pieces, and you can set anything from 10% to 60% in the quote tool. Raise it for parts that take real load. Wall count stays fixed at a sturdy two perimeters.",
-  },
-  {
-    q: "How do I pay?",
-    a: "There's no online payment here — submitting a quotation costs nothing and commits you to nothing. We confirm details on WhatsApp first; payment is UPI or bank transfer once you approve the final quote.",
-  },
-  {
-    q: "How long do you keep my files and details?",
-    a: "Uploads that never become a quotation request are deleted automatically within 48 hours. Model files attached to an order are removed 30 days after completion. Our live quotation record, PDF, contact details, delivery details and remaining local files have a retention period of at most 90 days after completion or cancellation, then the next daily cleanup removes them. We store and use those details only to process the order. We never analyze or sell them, or use them for marketing. Processing may share them with the operator's WhatsApp, Telegram and email accounts and the shipping provider; provider and backup copies follow their own retention schedules.",
-  },
-];
-
+/** Answered from this shop's own settings, plus any entries it added itself. */
 export default async function FaqPage() {
-  const { city } = await getSiteProfile();
+  const faqs = await getFaq();
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
       <PageIntro
         eyebrow="FAQ"
         title="Questions, answered"
-        lede="Everything customers usually ask before their first order. Anything missing? WhatsApp us — replies are quick during business hours."
+        lede="Everything customers usually ask before their first order. Anything missing? Get in touch — we're happy to help."
       />
 
       <div className="mx-auto mt-12 max-w-3xl space-y-3">
-        {faqs(city).map((item) => (
-          <details key={item.q} className="tile group p-0">
+        {faqs.map((item) => (
+          <details key={item.id} className="tile group p-0">
             <summary className="cursor-pointer list-none p-5 text-[0.95rem] font-[650] transition-colors hover:text-accent [&::-webkit-details-marker]:hidden">
               <span className="flex items-center justify-between gap-4">
                 {item.q}

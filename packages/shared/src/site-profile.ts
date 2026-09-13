@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MATERIAL_IDS, type MaterialId } from "./quote-types";
+import { DEFAULT_QUOTATION_PREFIX, QUOTATION_PREFIX_RE } from "./quotation-number";
 
 /**
  * The shop's identity and contact details — everything that differs between
@@ -27,6 +28,8 @@ export interface SiteProfile {
   footerNote: string;
   /** Materials explained on /materials, in display order. */
   materialsPage: MaterialId[];
+  /** Initials that start every quotation number (2–5 capital letters). */
+  quotationPrefix: string;
 }
 
 export const DEFAULT_SITE_PROFILE: SiteProfile = {
@@ -36,6 +39,7 @@ export const DEFAULT_SITE_PROFILE: SiteProfile = {
   contact: { whatsappNumber: "", email: "", phone: "", address: "" },
   footerNote: "A rish.pw project",
   materialsPage: ["PLA", "PETG"],
+  quotationPrefix: DEFAULT_QUOTATION_PREFIX,
 };
 
 export const SITE_PROFILE_LIMITS = {
@@ -65,6 +69,7 @@ export const siteProfileFieldSchemas = {
   address: text(L.address),
   footerNote: text(L.footerNote),
   materialsPage: z.array(z.enum(MATERIAL_IDS)).min(1).max(MATERIAL_IDS.length),
+  quotationPrefix: z.string().trim().toUpperCase().pipe(z.string().regex(QUOTATION_PREFIX_RE)),
 };
 
 /** Wire/storage shape: loose on purpose, hardened field by field below. */
@@ -82,6 +87,7 @@ export const siteProfileInputSchema = z.object({
     .optional(),
   footerNote: z.unknown().optional(),
   materialsPage: z.unknown().optional(),
+  quotationPrefix: z.unknown().optional(),
 });
 export type SiteProfileInput = z.infer<typeof siteProfileInputSchema>;
 
@@ -112,6 +118,7 @@ export function normalizeSiteProfile(raw: unknown): SiteProfile {
     },
     footerNote: pick(F.footerNote, input.footerNote, d.footerNote),
     materialsPage: [...new Set(materials)],
+    quotationPrefix: pick(F.quotationPrefix, input.quotationPrefix, d.quotationPrefix),
   };
 }
 
@@ -135,6 +142,7 @@ export function findSiteProfileIssues(raw: unknown): string[] {
   check("contact.address", F.address, input.contact?.address);
   check("footerNote", F.footerNote, input.footerNote);
   check("materialsPage", F.materialsPage, input.materialsPage);
+  check("quotationPrefix", F.quotationPrefix, input.quotationPrefix);
   return issues;
 }
 

@@ -1,12 +1,11 @@
 import { constants } from "node:fs";
 import { chmod, mkdir, open, rename, statfs, unlink, type FileHandle } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { UUID_RE } from "@print/shared";
+import { QUOTATION_NUMBER_RE, UUID_RE } from "@print/shared";
 import { env } from "./env";
 
 const MODEL_FORMATS = new Set(["stl", "3mf", "obj", "amf"]);
 const SHOWCASE_PHOTO_EXTS = new Set(["jpg", "png"]);
-const QUOTATION_NUMBER_RE = /^RSP-\d{4}-\d{4,}$/;
 
 /** Paths for customer files. Everything lives under UPLOAD_DIR / PDF_DIR —
  *  named Docker volumes in production, ./data in development — never under

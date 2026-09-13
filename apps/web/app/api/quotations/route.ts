@@ -255,6 +255,8 @@ async function postQuotation(request: NextRequest) {
     return response;
   }
 
+  // Read outside the transaction: the prefix is shop configuration, not order data.
+  const { quotationPrefix } = await getSiteProfile();
   let created: Quotation;
   try {
     created = await prisma.$transaction(async (tx) => {
@@ -272,7 +274,7 @@ async function postQuotation(request: NextRequest) {
       });
       if (claimed.count !== entries.length) throw new CheckoutConflictError();
 
-      const number = await nextQuotationNumber(tx);
+      const number = await nextQuotationNumber(tx, quotationPrefix);
       return tx.quotation.create({
         data: {
           number,

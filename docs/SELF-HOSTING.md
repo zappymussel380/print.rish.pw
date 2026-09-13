@@ -26,7 +26,8 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 It downloads the code to `/opt/print-shop` (you can pick another folder) and
 asks, in plain language:
 
-1. **Your shop:** name, a one-line tagline, and your city.
+1. **Your shop:** name, the initials your quotation numbers start with
+   (e.g. `AP-2026-0001`), a one-line tagline, and your city.
 2. **Web address and HTTPS:** your domain, and how visitors reach the server
    (see [HTTPS options](#https-options)).
 3. **Admin password:** for `https://your-domain/admin`.
@@ -158,6 +159,7 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | --- | --- |
 | `PS_DIR`, `PS_BRANCH`, `PS_REPO` | Install folder (`/opt/print-shop`), branch (`main`), repository |
 | `PS_BRAND`, `PS_TAGLINE`, `PS_CITY` | Shop name, tagline, city |
+| `PS_QUOTE_PREFIX` | Quotation-number initials, 2–5 letters (default: the shop name's initials) |
 | `PS_DOMAIN` | Domain name |
 | `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy |
 | `PS_ACME_EMAIL` | Let's Encrypt email (mode 1, optional) |

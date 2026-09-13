@@ -14,6 +14,8 @@ import {
 import {
   formatPaise,
   type Catalog,
+  type FaqEntry,
+  type FaqSettings,
   type MaterialFamily,
   type PricingInput,
   type PublicMaterial,
@@ -21,6 +23,7 @@ import {
   type SiteProfile,
 } from "@print/shared";
 import { CatalogEditor } from "./catalog-editor";
+import { FaqEditor } from "./faq-editor";
 import { RatesEditor } from "./rates-editor";
 import { SiteEditor } from "./site-editor";
 import { ShowcaseEditor } from "./showcase-editor";
@@ -73,6 +76,7 @@ export function AdminDashboard({
   pricing,
   rates,
   siteProfile,
+  faq,
   recentPrints,
 }: {
   quotations: QuotationRow[];
@@ -84,6 +88,7 @@ export function AdminDashboard({
   rates: Catalog;
   /** Null when the stored profile could not be read. */
   siteProfile: SiteProfile | null;
+  faq: { generated: FaqEntry[]; settings: FaqSettings };
   recentPrints: RecentPrint[];
 }) {
   const router = useRouter();
@@ -187,7 +192,7 @@ export function AdminDashboard({
       <p className="mt-3 text-xs text-faint">
         Lifetime · Revenue {formatPaise(stats.revenuePaise)} · Profit{" "}
         <span className="font-[600] text-muted">{formatPaise(stats.profitPaise)}</span>
-        <span className="text-faint"> (est.)</span>
+        <span className="text-faint"> (est., excluding shipping)</span>
       </p>
 
       {/* Catalog availability */}
@@ -198,6 +203,9 @@ export function AdminDashboard({
 
       {/* Shop name, contact details, materials page */}
       <SiteEditor profile={siteProfile} />
+
+      {/* FAQ: hide generated answers, add the shop's own */}
+      <FaqEditor generated={faq.generated} settings={faq.settings} />
 
       {/* Public "recent prints" showcase */}
       <ShowcaseEditor prints={recentPrints} />

@@ -114,7 +114,15 @@ describe("estimateOrderProfitPaise", () => {
     const items = [pla(48.27, 6120)];
     const cost = estimateOrderCostPaise(items);
     expect(cost).toBe(5076);
-    expect(estimateOrderProfitPaise(24653, items)).toBe(24653 - 5076);
+    expect(estimateOrderProfitPaise({ totalPaise: 24653, shippingPaise: 0 }, items)).toBe(24653 - 5076);
+  });
+
+  it("never counts pass-through courier shipping as profit", () => {
+    const items = [pla(48.27, 6120)];
+    // Same order with ₹80 prepaid shipping folded into the total.
+    expect(estimateOrderProfitPaise({ totalPaise: 24653 + 8000, shippingPaise: 8000 }, items)).toBe(
+      24653 - 5076,
+    );
   });
 
   it("uses the documented internal rates", () => {
