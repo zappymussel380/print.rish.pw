@@ -5,12 +5,25 @@ services:
   # The main file's CPU limits suit the production host. Docker refuses to start
   # a container whose limit exceeds the machine's cores, so install.sh sizes
   # these to the server it runs on.
+  #
+  # The shop's printer: install.sh generates its profile set (machine, process
+  # and filament profiles plus printer.json) into .selfhost/profiles from the
+  # OrcaSlicer presets in the worker image. The worker slices with it; web reads
+  # printer.json for the printer's name and build volume.
   web:
+    environment:
+      PRINTER_SPEC_FILE: /printer/printer.json
+    volumes:
+      - ./.selfhost/profiles:/printer:ro
     deploy:
       resources:
         limits:
           cpus: "${SELFHOST_WEB_CPUS:-2}"
   worker:
+    environment:
+      PROFILES_DIR: /printer
+    volumes:
+      - ./.selfhost/profiles:/printer:ro
     deploy:
       resources:
         limits:

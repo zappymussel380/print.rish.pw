@@ -1,5 +1,6 @@
 import type { SliceSettings } from "./quote-types";
 import type { ModelFormat } from "./filename";
+import { DEFAULT_PRINTER_ID } from "./printer";
 
 /** Bump whenever OrcaSlicer or a machine/process/filament profile changes in a
  * way that can affect toolpaths. Old rows remain harmless cache misses. */
@@ -21,6 +22,13 @@ export function settingsKey(s: SliceSettings): string {
  * geometry depending on its extension. Version + format therefore form part of
  * every DB/queue cache key, preventing cross-format polyglots from reusing a
  * cheaper slice result. */
-export function sliceArtifactKey(format: ModelFormat, s: SliceSettings): string {
-  return `${SLICE_PIPELINE_VERSION}:${format}:${settingsKey(s)}`;
+export function sliceArtifactKey(
+  format: ModelFormat,
+  s: SliceSettings,
+  printerId: string = DEFAULT_PRINTER_ID,
+): string {
+  // Another printer slices to different grams and times. The default printer's
+  // keys stay exactly as they always were, so its cached results stay valid.
+  const printer = printerId === DEFAULT_PRINTER_ID ? "" : `@${printerId}`;
+  return `${SLICE_PIPELINE_VERSION}:${format}:${settingsKey(s)}${printer}`;
 }

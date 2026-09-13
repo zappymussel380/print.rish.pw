@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { getPrinterSpec } from "@/lib/printer";
 import { PageIntro } from "@/components/shell/page-intro";
 import { MODEL_SOURCES } from "@/lib/model-sources";
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
     "Free libraries of ready-to-print 3D models — MakerWorld, Printables, Thingiverse, Yeggi, Thangs and Cults3D — plus which file formats we accept and what to check before ordering a print.",
 };
 
-const checks: { title: string; body: string }[] = [
+const checks = (printer: { name: string; bedMm: readonly number[] }): { title: string; body: string }[] => [
   {
     title: "Which file do I download?",
     body: "STL, 3MF, OBJ and AMF all upload directly, and so do STEP/STP files, which we convert for you. If a model offers 3MF, take it — it carries units and orientation reliably, and if the file holds several parts we arrange and price all of them.",
@@ -21,7 +22,7 @@ const checks: { title: string; body: string }[] = [
   },
   {
     title: "Check the size",
-    body: "Our Bambu Lab A1 prints up to 256 × 256 × 256 mm. Anything larger has to be split into parts. Upload it anyway — the quote page measures your file and tells you if it won't fit.",
+    body: `Our ${printer.name} prints up to ${printer.bedMm.join(" × ")} mm. Anything larger has to be split into parts. Upload it anyway — the quote page measures your file and tells you if it won't fit.`,
   },
 ];
 
@@ -68,7 +69,7 @@ export default function FindModelsPage() {
           Before you order a print
         </h2>
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          {checks.map((check) => (
+          {checks(getPrinterSpec()).map((check) => (
             <article key={check.title} className="tile p-5">
               <h3 className="text-[0.95rem] font-[650]">{check.title}</h3>
               <p className="mt-2 text-sm leading-6 text-muted">{check.body}</p>

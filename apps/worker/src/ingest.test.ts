@@ -42,7 +42,8 @@ vi.mock("@print/db", () => ({
   },
 }));
 
-vi.mock("./config.js", () => ({
+vi.mock("./config.js", async () => ({
+  printerSpec: (await import("@print/shared")).DEFAULT_PRINTER_SPEC,
   config: {
     get uploadDir() {
       return mocks.state.dir;

@@ -16,7 +16,7 @@ import {
   type SliceJobData,
   type SliceProgressStage,
 } from "@print/shared";
-import { config } from "./config.js";
+import { config, printerSpec } from "./config.js";
 import { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } from "./ingest.js";
 import { renderThumbnailIsolated } from "./parse-runner.js";
 import { runSlice, type SlicerIdentity } from "./orca.js";
@@ -142,9 +142,12 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
     throw new Error("Queue job resolved outside the model storage root");
   }
   if (
+    // The key names the printer too: a job keyed for another printer than the
+    // one these profiles describe must not be sliced (or cached) with them.
     sliceArtifactKey(
       model.format as "stl" | "3mf" | "obj" | "amf",
       parsedSettings.data,
+      printerSpec.id,
     ) !== queuedSettingsKey
   ) {
     throw new Error("Queue job cache identity does not match the model format/settings");

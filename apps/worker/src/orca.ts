@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { extractZipEntry, PREARRANGED_PLATE_STL_HEADER } from "@print/geometry";
 import type { SliceSettings } from "@print/shared";
-import { MACHINE_PROFILE, config, filamentProfile, processProfile } from "./config.js";
+import { MACHINE_PROFILE, config, filamentProfile, printerSpec, processProfile } from "./config.js";
 import { runStubSlice } from "./stub-slicer.js";
 
 export interface SliceOutcome {
@@ -77,8 +77,9 @@ async function writeJobProcess(workDir: string, settings: SliceSettings): Promis
   base.name = "job-process";
   base.sparse_infill_density = `${settings.infillPct}%`;
   // The flattened profiles do not carry a bed selection, and Orca defaults to
-  // Cool Plate. PETG is invalid on Cool Plate, so pin the actual A1 build plate.
-  base.curr_bed_type = "Textured PEI Plate";
+  // Cool Plate — invalid for PETG. Use the plate the printer spec picked for
+  // this material (one its filament profile has a bed temperature for).
+  base.curr_bed_type = printerSpec.plates[settings.material];
 
   if (settings.supports === "off") {
     base.enable_support = "0";

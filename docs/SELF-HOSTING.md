@@ -10,8 +10,9 @@ rates, your materials, your contact details — on a server of your own.
 - **8 GB RAM** (4 GB works for small models), **25 GB free disk**, 2+ CPU cores.
 - A **domain name** you control, e.g. `print.example.com`. The site only runs
   over HTTPS.
-- A **Bambu Lab A1** (0.4 mm nozzle) — every quote is sliced with its real
-  profiles. Other printers need profile changes in code.
+- A **single-nozzle printer with a 0.4 mm nozzle** that OrcaSlicer supports —
+  321 of them from 57 brands (Bambu Lab, Prusa, Creality, Voron, Elegoo, Qidi,
+  Anycubic, Sovol …). Every quote is sliced with that printer's own profiles.
 - The shop is India-focused: prices are in rupees, and live shipping quotes
   use Shiprocket (optional).
 
@@ -28,16 +29,18 @@ asks, in plain language:
 
 1. **Your shop:** name, the initials your quotation numbers start with
    (e.g. `AP-2026-0001`), a one-line tagline, and your city.
-2. **Web address and HTTPS:** your domain, and how visitors reach the server
+2. **Your printer:** pick the brand, then the model (with its build volume),
+   and say whether it has an AMS/MMU for automatic multicolour.
+3. **Web address and HTTPS:** your domain, and how visitors reach the server
    (see [HTTPS options](#https-options)).
-3. **Admin password:** for `https://your-domain/admin`.
-4. **Materials and rates:** which materials you print (PLA, Aesthetic PLA,
+4. **Admin password:** for `https://your-domain/admin`.
+5. **Materials and rates:** which materials you print (PLA, Aesthetic PLA,
    PLA-CF, PETG, PETG Premium, ABS, ASA), the price per gram of each, and your
    setup fee per order.
-5. **Materials page:** which materials `/materials` compares for customers.
-6. **Contact details:** WhatsApp (every quote hands off to it), email, phone,
+6. **Materials page:** which materials `/materials` compares for customers.
+7. **Contact details:** WhatsApp (every quote hands off to it), email, phone,
    address, and an optional Google Maps embed.
-7. **Optional extras:**
+8. **Optional extras:**
    - contact-form email (Resend)
    - live courier prices (Shiprocket)
    - Telegram alerts for new quotes
@@ -160,6 +163,8 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_DIR`, `PS_BRANCH`, `PS_REPO` | Install folder (`/opt/print-shop`), branch (`main`), repository |
 | `PS_BRAND`, `PS_TAGLINE`, `PS_CITY` | Shop name, tagline, city |
 | `PS_QUOTE_PREFIX` | Quotation-number initials, 2–5 letters (default: the shop name's initials) |
+| `PS_PRINTER` | Printer: the exact OrcaSlicer preset, e.g. `Prusa MK4 0.4 nozzle` (list: `docker/selfhost/printers.tsv`, 3rd column) |
+| `PS_CONFIRM_MULTI_MATERIAL` | `y` if the printer has an AMS/MMU for automatic multicolour |
 | `PS_DOMAIN` | Domain name |
 | `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy |
 | `PS_ACME_EMAIL` | Let's Encrypt email (mode 1, optional) |
@@ -215,3 +220,22 @@ shop gets on its next update, dependency bumps included (they build from
   and the one it just pulled. Keep it working.
 - **New settings** that shops should set belong in the admin dashboard (an
   `AppSetting`), not in `.env`.
+- **Bumping OrcaSlicer** changes which printers exist. Regenerate the list
+  the installer offers from the new worker image, and commit it:
+  `docker run --rm --entrypoint node <worker image> /app/worker/dist/profile-gen.js list > docker/selfhost/printers.tsv`.
+  Installed shops regenerate their printer's profiles on every update.
+
+## How printer profiles are made
+
+`apps/worker/src/profile-gen.ts` builds a shop's slicing profiles from the
+presets OrcaSlicer ships, inside the worker image:
+- the printer's machine preset
+- its 0.12 / 0.16 / 0.20 mm process presets (a missing height is derived from
+  the printer's closest one)
+- one filament preset per material tier: the printer vendor's own "Generic"
+  preset where it has one, otherwise OrcaSlicer's universal library
+
+Everything is flattened (the CLI doesn't resolve `inherits`) and written to
+`.selfhost/profiles` with a `printer.json` describing the printer, which both
+the worker and the website read. The Bambu Lab A1 keeps the hand-tuned
+Numakers profiles print.rish.pw uses.

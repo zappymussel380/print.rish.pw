@@ -32,7 +32,7 @@ import {
   type ParseChildModel,
   type UploadedModelDto,
 } from "@print/shared";
-import { config } from "./config.js";
+import { config, printerSpec } from "./config.js";
 import {
   ParseRunnerPublicError,
   removeParseWorkDir,
@@ -264,7 +264,7 @@ async function persistPreparedUpload(
         bboxMm: model.bboxMm,
         volumeCm3: Number(model.volumeCm3.toFixed(3)),
         triangleCount: model.triangleCount,
-        fitsBed: fitsBed(model.bboxMm),
+        fitsBed: fitsBed(model.bboxMm, printerSpec.bedMm),
         ...(model.partCount ? { partCount: model.partCount } : {}),
         ...(model.defaultConfig ? { defaultConfig: model.defaultConfig } : {}),
         ...(model.sourceConfig ? { sourceConfig: model.sourceConfig } : {}),

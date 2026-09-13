@@ -1,5 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MaterialId } from "@print/shared";
+import { DEFAULT_PRINTER_SPEC, parsePrinterSpec, type MaterialId, type PrinterProfileSpec } from "@print/shared";
 
 function str(name: string, fallback: string): string {
   const v = process.env[name];
@@ -116,4 +118,18 @@ export function filamentProfile(material: MaterialId): string {
   return FILAMENT_PROFILES[material];
 }
 
-export const MACHINE_PROFILE = "machine.bbl-a1-04.json";
+/** A generated set (profile-gen.ts) names its machine plainly; the committed A1
+ *  set keeps its historical name. */
+export const MACHINE_PROFILE = existsSync(join(config.profilesDir, "machine.json"))
+  ? "machine.json"
+  : "machine.bbl-a1-04.json";
+
+/** The printer this worker slices for: `printer.json` beside a generated set,
+ *  the Bambu Lab A1 otherwise (the committed profiles carry none). */
+export const printerSpec: PrinterProfileSpec = (() => {
+  try {
+    return parsePrinterSpec(JSON.parse(readFileSync(join(config.profilesDir, "printer.json"), "utf8")));
+  } catch {
+    return DEFAULT_PRINTER_SPEC;
+  }
+})();

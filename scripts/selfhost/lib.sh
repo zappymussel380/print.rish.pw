@@ -197,6 +197,8 @@ ENV_LAYOUT=(
   TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID SHIPROCKET_EMAIL SHIPROCKET_PASSWORD SHIPROCKET_PICKUP_PINCODE
   "# --- Sizing ---"
   MAX_UPLOAD_MB WORKER_CONCURRENCY SELFHOST_WEB_CPUS SELFHOST_WORKER_CPUS SELFHOST_DB_CPUS
+  "# --- Printer (profiles generated into .selfhost/profiles) ---"
+  PRINTER_MACHINE PRINTER_MULTI_MATERIAL
 )
 
 write_env() {
@@ -355,6 +357,28 @@ EOF
   esac
 }
 
+# ── Printer profiles ────────────────────────────────────────────────────────────
+A1_MACHINE="Bambu Lab A1 0.4 nozzle"
+
+# (Re)generate the printer's profile set into .selfhost/profiles with the worker
+# image's own OrcaSlicer presets — so an update that bumps OrcaSlicer also
+# refreshes them. Pure JSON work: nothing is sliced, nothing is fetched.
+generate_printer_profiles() {
+  local machine="${CFG[PRINTER_MACHINE]:-$A1_MACHINE}" out="$ROOT_DIR/.selfhost/profiles" tmp flags=()
+  [ "${CFG[PRINTER_MULTI_MATERIAL]:-0}" = "1" ] && flags+=(--multi-material)
+  tmp="$ROOT_DIR/.selfhost/profiles.new"
+  rm -rf "$tmp"; mkdir -p "$tmp"; chmod 755 "$ROOT_DIR/.selfhost" "$tmp"
+  if ! dc run --rm --no-deps -T -v "$tmp:/out" --entrypoint node worker \
+      /app/worker/dist/profile-gen.js generate "$machine" /out "${flags[@]}"; then
+    rm -rf "$tmp"
+    err "Could not build slicing profiles for: $machine"
+    return 1
+  fi
+  chmod -R a+rX "$tmp"
+  rm -rf "$out"; mv "$tmp" "$out"
+  ok "Slicing profiles ready for ${machine% 0.4 nozzle}"
+}
+
 compose_files_for_mode() {
   case "$1" in
     caddy)  echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.caddy.yml" ;;
@@ -375,6 +399,8 @@ apply_env_defaults() {
   _default MAX_UPLOAD_MB "300"
   _default WORKER_CONCURRENCY "1"
   _default SHIPROCKET_PICKUP_PINCODE ""
+  _default PRINTER_MACHINE "$A1_MACHINE"
+  _default PRINTER_MULTI_MATERIAL "0"
   _default SELFHOST_WEB_CPUS "$(( cpus < 2 ? cpus : 2 ))"
   _default SELFHOST_WORKER_CPUS "$(( cpus < 4 ? cpus : 4 ))"
   _default SELFHOST_DB_CPUS "$(( cpus < 2 ? cpus : 2 ))"

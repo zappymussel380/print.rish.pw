@@ -151,10 +151,12 @@ export function materialFamily(id: MaterialId): MaterialFamily {
   return MATERIAL_FAMILY[id];
 }
 
-/** True when the bounding box fits the default printer's bed in some axis
- * permutation (models can be rotated at print time). */
-export function fitsBed(bboxMm: BoundingBoxMm): boolean {
-  const bed = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
+/** True when the bounding box fits the bed (the shop's printer; the A1 by
+ * default) in some axis permutation — models can be rotated at print time. */
+export function fitsBed(
+  bboxMm: BoundingBoxMm,
+  bed: readonly [number, number, number] = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm,
+): boolean {
   const dims = [bboxMm.x, bboxMm.y, bboxMm.z].sort((a, b) => a - b);
   const bedSorted = [...bed].sort((a, b) => a - b);
   return dims.every((d, i) => d <= bedSorted[i]!);

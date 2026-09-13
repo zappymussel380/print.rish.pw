@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { fitsBed, modelConfigSchema, type ModelConfig } from "@print/shared";
+import { getPrinterSpec } from "@/lib/printer";
 import { guardMutation, readJsonBody } from "@/lib/api-util";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
@@ -39,7 +40,7 @@ function serializeModel(model: RestorableModelRow): UploadedModelDto {
     sizeBytes: model.sizeBytes,
     bboxMm,
     volumeCm3: model.volumeCm3 ?? 0,
-    fitsBed: fitsBed(bboxMm),
+    fitsBed: fitsBed(bboxMm, getPrinterSpec().bedMm),
     ...(model.partCount && model.partCount > 1 ? { partCount: model.partCount } : {}),
     defaultConfig: parseDefaultConfig(model.defaultConfig),
     sourceConfig: parseDefaultConfig(model.sourceConfig),

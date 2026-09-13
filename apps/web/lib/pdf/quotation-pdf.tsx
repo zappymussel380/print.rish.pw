@@ -19,6 +19,7 @@ import {
   type SupportMode,
 } from "@print/shared";
 import { formatBytes, formatDimensions, formatVolume } from "@/lib/format";
+import { getPrinterSpec } from "@/lib/printer";
 import { PrinterMarkPdf } from "./printer-mark-pdf";
 
 /** react-pdf cannot load a variable-weight woff2, so the PDF uses the built-in
@@ -154,8 +155,8 @@ function PdfFooter({ number, brandName }: { number: string; brandName: string })
   return (
     <View style={s.footer} fixed>
       <Text>
-        This quotation is an estimate generated from real OrcaSlicer slicing on a Bambu Lab A1
-        (0.4mm nozzle). Prices are in Indian Rupees and include a one-time setup fee. Filament
+        This quotation is an estimate generated from real OrcaSlicer slicing on a {getPrinterSpec().name}{" "}
+        ({getPrinterSpec().nozzleMm}mm nozzle). Prices are in Indian Rupees and include a one-time setup fee. Filament
         weight and print time come directly from the slicer. This is not a tax invoice.
       </Text>
       <Text style={{ marginTop: 4 }}>

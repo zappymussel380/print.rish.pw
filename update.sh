@@ -139,6 +139,13 @@ stage_apply() {
     restore_previous_code "$prev"
     exit 1
   fi
+  # The printer's slicing profiles come from the new image's OrcaSlicer presets
+  # (and installs from before printer choice get their Bambu Lab A1 set here).
+  if ! generate_printer_profiles; then
+    err "The site is still running the previous version."
+    restore_previous_code "$prev"
+    exit 1
+  fi
 
   head_line "Restarting"
   # migrate runs first (web and worker depend on it), applying any new

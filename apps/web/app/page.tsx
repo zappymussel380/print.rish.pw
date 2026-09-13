@@ -8,7 +8,7 @@ import { getSiteProfile } from "@/lib/site-profile";
 import { HOMEPAGE_MODEL_SOURCES } from "@/lib/model-sources";
 import { getRecentPrints } from "@/lib/recent-prints";
 
-const steps = [
+const steps = (printerName: string) => [
   {
     icon: FileUp,
     title: "Upload your models",
@@ -17,7 +17,7 @@ const steps = [
   {
     icon: ScanEye,
     title: "We actually slice them",
-    body: "No guesswork: every file is sliced by OrcaSlicer with a real Bambu Lab A1 profile, so weight and time come from the printer's own toolpath.",
+    body: `No guesswork: every file is sliced by OrcaSlicer with a real ${printerName} profile, so weight and time come from the printer's own toolpath.`,
   },
   {
     icon: IndianRupee,
@@ -52,6 +52,7 @@ export default async function HomePage() {
     (a, b) => catalog.materials[a].sellPerGramPaise - catalog.materials[b].sellPerGramPaise,
   )[0];
   const colourCount = new Set(offered.flatMap((m) => availability.colours[m])).size;
+  const printer = catalog.printers[catalog.defaultPrinterId]!;
 
   return (
     <div className="mx-auto max-w-6xl px-5">
@@ -94,7 +95,7 @@ export default async function HomePage() {
           From file to quote in under a minute
         </h2>
         <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map((step, i) => (
+          {steps(printer.name).map((step, i) => (
             <li key={step.title} className="tile tile-hover p-5">
               <div className="flex items-center justify-between">
                 <step.icon strokeWidth={1.65} className="size-5 text-accent" aria-hidden="true" />
@@ -182,10 +183,10 @@ export default async function HomePage() {
             <div>
               <p className="eyebrow">The kit</p>
               <h2 id="kit-title" className="mt-2 text-xl font-[650] tracking-tight">
-                Bambu Lab A1 · 0.4 mm nozzle
+                {printer.name} · {printer.nozzleMm} mm nozzle
               </h2>
               <p className="mt-2 max-w-md text-sm leading-6 text-muted">
-                Up to 256 × 256 × 256 mm builds. Layer heights of 0.12, 0.16 and 0.20 mm; infill
+                Up to {printer.bedMm.join(" × ")} mm builds. Layer heights of 0.12, 0.16 and 0.20 mm; infill
                 from 10 to 60%; automatic supports when your part needs them.
               </p>
             </div>

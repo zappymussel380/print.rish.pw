@@ -22,7 +22,8 @@ const runtimeDeps = new Set(
 await build({
   // parse-child is its own entry: the orchestrator spawns dist/parse-child.js
   // as a sandboxed subprocess rather than importing it.
-  entryPoints: ["src/index.ts", "src/parse-child.ts"],
+  // profile-gen is a CLI the self-host installer runs in this image.
+  entryPoints: ["src/index.ts", "src/parse-child.ts", "src/profile-gen.ts"],
   bundle: true,
   platform: "node",
   format: "esm",
