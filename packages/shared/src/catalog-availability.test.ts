@@ -14,9 +14,9 @@ import {
   defaultAvailability,
   firstEnabledColour,
   isColourEnabled,
-  normalizeAvailability,
   toPublicCatalog,
 } from "./catalog-availability";
+import { normalizeAvailability } from "./catalog-availability-schema";
 
 describe("colour palette integrity", () => {
   it("has a MASTER_COLOURS entry for every COLOUR_ID and vice versa", () => {

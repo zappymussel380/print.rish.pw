@@ -10,13 +10,8 @@ import { formatDuration, formatGrams, formatPaise } from "./money";
 import { SLICE_PIPELINE_VERSION, settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
-import {
-  customerSchema,
-  sliceSettingsSchema,
-  type Customer,
-  type LayerHeightUm,
-  type SliceSettings,
-} from "./quote-types";
+import { customerSchema, sliceSettingsSchema, type Customer, type SliceSettings } from "./quote-schema";
+import type { LayerHeightUm } from "./quote-types";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "./whatsapp";
 
 describe("quote schemas", () => {

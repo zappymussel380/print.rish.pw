@@ -1,5 +1,7 @@
-import { z } from "zod";
-import { MATERIAL_IDS, type MaterialId } from "./quote-types";
+import type { MaterialId } from "./quote-types";
+
+// Zod-free on purpose: the quote page shows custom colours. Hardening stored
+// lists lives in custom-colours-schema.ts.
 
 /**
  * Admin-defined colours, created in the catalog editor with a hex picker. They
@@ -26,33 +28,10 @@ export const CUSTOM_COLOUR_PREFIX = "custom-";
 export const CUSTOM_COLOUR_GROUP = "Custom";
 
 export const HEX_COLOUR_RE = /^#[0-9a-fA-F]{6}$/;
-const CUSTOM_ID_RE = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-export const customColourSchema = z.object({
-  id: z.string().max(64).regex(CUSTOM_ID_RE),
-  name: z.string().trim().min(1).max(CUSTOM_COLOUR_NAME_MAX),
-  hex: z.string().regex(HEX_COLOUR_RE),
-  material: z.enum(MATERIAL_IDS),
-});
+export const CUSTOM_ID_RE = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function isCustomColourId(id: string): boolean {
   return id.startsWith(CUSTOM_COLOUR_PREFIX);
-}
-
-/** Harden a stored/submitted list: drop invalid entries and duplicate ids,
- *  normalise the hex, and cap the length. Never throws. */
-export function normalizeCustomColours(raw: unknown): CustomColour[] {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const out: CustomColour[] = [];
-  for (const entry of raw) {
-    const parsed = customColourSchema.safeParse(entry);
-    if (!parsed.success || seen.has(parsed.data.id)) continue;
-    seen.add(parsed.data.id);
-    out.push({ ...parsed.data, hex: parsed.data.hex.toUpperCase() });
-    if (out.length >= MAX_CUSTOM_COLOURS) break;
-  }
-  return out;
 }
 
 function slug(text: string): string {

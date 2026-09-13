@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { colourKeySchema } from "./quote-schema";
 import {
-  colourKeySchema,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
   MATERIAL_IDS,
