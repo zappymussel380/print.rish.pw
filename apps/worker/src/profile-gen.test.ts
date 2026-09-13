@@ -1,7 +1,7 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MATERIAL_IDS } from "@print/shared";
 import {
   ProfileIndex,
@@ -149,5 +149,28 @@ describe("profile-gen", () => {
   it("reads a build volume and picks a plate the filament supports", () => {
     expect(bedOf({ printable_area: ["-5x-5", "245x-5", "245x215", "-5x215"], printable_height: "220" })).toEqual([250, 220, 220]);
     expect(plateFor({ textured_plate_temp: ["0"], hot_plate_temp: ["0"], cool_plate_temp: ["35"] })).toBe("Cool Plate");
+  });
+
+  it("builds the A1 set from the committed profiles, not the shop's PROFILES_DIR", async () => {
+    // The installer runs `generate` in a worker container whose PROFILES_DIR is
+    // the shop's (still empty) set; copying from there shipped no profiles.
+    const empty = mkdtempSync(join(tmpdir(), "shop-profiles-"));
+    const out = mkdtempSync(join(tmpdir(), "a1-out-"));
+    vi.stubEnv("PROFILES_DIR", empty);
+    vi.resetModules();
+    const { main } = await import("./profile-gen");
+    const { COMMITTED_PROFILES_DIR } = await import("./config");
+    const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    try {
+      await main(["generate", "Bambu Lab A1 0.4 nozzle", out]);
+    } finally {
+      stdout.mockRestore();
+      vi.unstubAllEnvs();
+    }
+    const committed = readdirSync(COMMITTED_PROFILES_DIR).filter((f) => f.endsWith(".json") && f !== "printer.json");
+    expect(committed).toContain("machine.bbl-a1-04.json");
+    expect(readdirSync(out).sort()).toEqual([...committed, "printer.json"].sort());
+    rmSync(empty, { recursive: true, force: true });
+    rmSync(out, { recursive: true, force: true });
   });
 });
