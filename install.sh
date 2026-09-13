@@ -138,6 +138,58 @@ sec_shop() {
   ask CITY "City you print from (shown as '3D printing · City')" "" valid_city "Up to 60 plain characters, please."
 }
 
+# ── Printer ───────────────────────────────────────────────────────────────────
+PRINTERS_FILE="$ROOT_DIR/docker/selfhost/printers.tsv"
+vendor_label() { case "$1" in BBL) echo "Bambu Lab" ;; *) echo "$1" ;; esac; }
+MENU_MAX=0
+valid_menu_index() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$MENU_MAX" ]; }
+
+# Every single-nozzle, 0.4 mm printer OrcaSlicer ships (docker/selfhost/printers.tsv:
+# vendor, model, Orca machine preset, build volume). Quotes are sliced with the
+# chosen printer's own profiles, generated after the build.
+sec_printer() {
+  head_line "Your printer"
+  hint "Every quote is sliced with your printer's own OrcaSlicer profiles, so weight, time and fit match it."
+  [ -f "$PRINTERS_FILE" ] || die "Missing $PRINTERS_FILE — the download looks incomplete."
+  local machine="" i=1 vendor row def
+  if [ -n "${PS_PRINTER:-}" ]; then
+    machine=$(awk -F'\t' -v p="$PS_PRINTER" '$3==p || $2==p {print $3; exit}' "$PRINTERS_FILE")
+    [ -n "$machine" ] || die "PS_PRINTER: no printer called '$PS_PRINTER' (see $PRINTERS_FILE)."
+  else
+    local -a vendors models
+    mapfile -t vendors < <(cut -f1 "$PRINTERS_FILE" | awk '!seen[$0]++')
+    def=1
+    for vendor in "${vendors[@]}"; do
+      [ "$vendor" = BBL ] && def=$i
+      printf '  %3d) %-24s' "$i" "$(vendor_label "$vendor")"
+      [ $((i % 3)) -eq 0 ] && echo
+      i=$((i + 1))
+    done
+    echo
+    MENU_MAX=${#vendors[@]}
+    ask PRINTER_VENDOR "Printer brand (number)" "$def" valid_menu_index "Pick a number from the list."
+    vendor=${vendors[$((ANS[PRINTER_VENDOR] - 1))]}
+    mapfile -t models < <(awk -F'\t' -v v="$vendor" '$1==v' "$PRINTERS_FILE")
+    i=1; def=1
+    for row in "${models[@]}"; do
+      IFS=$'\t' read -r _ model mach bed <<<"$row"
+      [ "$mach" = "$A1_MACHINE" ] && def=$i
+      # The preset name, not the model: a few models come in variants that share one.
+      printf '  %3d) %-44s %s mm\n' "$i" "${mach% 0.4 nozzle}" "${bed//x/ × }"
+      i=$((i + 1))
+    done
+    MENU_MAX=${#models[@]}
+    ask PRINTER_MODEL "Which $(vendor_label "$vendor") printer (number)" "$def" valid_menu_index "Pick a number from the list."
+    machine=$(cut -f3 <<<"${models[$((ANS[PRINTER_MODEL] - 1))]}")
+  fi
+  ANS[PRINTER_MACHINE]=$machine
+  ANS[PRINTER_MULTI]=0
+  if confirm "Does it have an AMS, MMU or tool changer for automatic multicolour?" N MULTI_MATERIAL; then
+    ANS[PRINTER_MULTI]=1
+  fi
+  ok "Printer: $(awk -F'\t' -v m="$machine" '$3==m {print $2; exit}' "$PRINTERS_FILE")"
+}
+
 sec_address() {
   head_line "Web address and HTTPS"
   hint "You need a domain (e.g. print.example.com) — the site only runs over HTTPS."
@@ -310,6 +362,7 @@ summary() {
   for m in "${OFFERED[@]}"; do rates+="${rates:+, }$m ₹$(from_paise "$(to_paise "${ANS[RATE_$m]}")")/g"; done
   say "  Shop:        ${ANS[BRAND]}${ANS[CITY]:+ · ${ANS[CITY]}}  (quotes numbered ${ANS[QUOTE_PREFIX]:-RSP}-$(date +%Y)-0001)"
   say "  Address:     https://${ANS[DOMAIN]}  (${ANS[MODE]})"
+  say "  Printer:     ${ANS[PRINTER_MACHINE]% 0.4 nozzle}$([ "${ANS[PRINTER_MULTI]:-0}" = 1 ] && echo " (automatic multicolour)")"
   say "  Materials:   $rates"
   say "  Setup fee:   ₹$(from_paise "$(to_paise "${ANS[SETUP_FEE]}")") per order"
   say "  Materials page: $(material_ids "${ANS[MATERIALS_PAGE]}" | paste -sd, - | sed 's/,/, /g')"
@@ -383,6 +436,8 @@ configure_env() {
     CFG[MAX_UPLOAD_MB]=300
   fi
   CFG[COMPOSE_FILE]=$(compose_files_for_mode "$mode")
+  [ -n "${ANS[PRINTER_MACHINE]:-}" ] && CFG[PRINTER_MACHINE]=${ANS[PRINTER_MACHINE]}
+  [ -n "${ANS[PRINTER_MULTI]:-}" ] && CFG[PRINTER_MULTI_MATERIAL]=${ANS[PRINTER_MULTI]}
 }
 
 generate_secrets() {
@@ -565,12 +620,13 @@ existing_menu() {
   say "  2) Change the web address / HTTPS setup"
   say "  3) Change the admin password"
   say "  4) Change optional extras (email, shipping, Telegram, map)"
-  say "  5) Start over with new shop settings  ${C_DIM}(replaces name, rates, materials and contact set in admin)${C_OFF}"
-  say "  6) Uninstall"
-  say "  7) Quit"
-  ask MENU "Choose" "1" valid_menu "Please answer 1–7."
+  say "  5) Change the printer"
+  say "  6) Start over with new shop settings  ${C_DIM}(replaces name, rates, materials and contact set in admin)${C_OFF}"
+  say "  7) Uninstall"
+  say "  8) Quit"
+  ask MENU "Choose" "1" valid_menu "Please answer 1–8."
 }
-valid_menu() { [[ "$1" =~ ^[1-7]$ ]]; }
+valid_menu() { [[ "$1" =~ ^[1-8]$ ]]; }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
@@ -598,7 +654,8 @@ main() {
   if [ "${CFG[SELFHOST]:-}" = "1" ]; then
     existing_menu
     case "${ANS[MENU]}" in
-      1) apply_env_defaults || true; write_env; render_caddyfile; build_images; start_stack; finish ;;
+      1) apply_env_defaults || true; write_env; render_caddyfile; build_images
+         generate_printer_profiles || die "Slicing profiles could not be built."; start_stack; finish ;;
       2) local old_mode=${CFG[SELFHOST_MODE]}
          sec_address; configure_env
          # A different edge layout needs its networks recreated.
@@ -608,11 +665,20 @@ main() {
       4) ANS[DOMAIN]=${CFG[SELFHOST_DOMAIN]}
          ask MAPS_URL "Google Maps embed link (optional)" "${CFG[GOOGLE_MAPS_EMBED_URL]:-}" valid_maps_or_empty "Paste the https://www.google.com/maps/embed?... link."
          sec_integrations; configure_integrations; write_env; dc up -d --force-recreate web; wait_healthy 180; ok "Saved" ;;
-      5) ANS[DOMAIN]=${CFG[SELFHOST_DOMAIN]}; sec_shop; sec_materials; sec_contact
+      5) sec_printer
+         local old_machine=${CFG[PRINTER_MACHINE]:-} old_multi=${CFG[PRINTER_MULTI_MATERIAL]:-0}
+         CFG[PRINTER_MACHINE]=${ANS[PRINTER_MACHINE]}; CFG[PRINTER_MULTI_MATERIAL]=${ANS[PRINTER_MULTI]}
+         if ! generate_printer_profiles; then
+           CFG[PRINTER_MACHINE]=$old_machine; CFG[PRINTER_MULTI_MATERIAL]=$old_multi
+           die "Kept the previous printer."
+         fi
+         write_env
+         dc up -d --force-recreate web worker; wait_healthy 240; ok "Now quoting for ${CFG[PRINTER_MACHINE]% 0.4 nozzle}" ;;
+      6) ANS[DOMAIN]=${CFG[SELFHOST_DOMAIN]}; sec_shop; sec_materials; sec_contact
          confirm "Replace the shop settings in the admin dashboard with these?" N RESET || die "Nothing was changed."
          seed_shop_settings ;;
-      6) uninstall ;;
-      7) exit 0 ;;
+      7) uninstall ;;
+      8) exit 0 ;;
     esac
     exit 0
   fi
@@ -620,6 +686,7 @@ main() {
   say "This sets up the whole site: shop details, web address, rates, then a build."
   hint "Press Enter to accept a [default]. Ctrl+C stops at any point without changing anything."
   sec_shop
+  sec_printer
   sec_address
   sec_admin
   sec_materials
@@ -641,6 +708,7 @@ main() {
 install_from_build() {
   render_caddyfile
   build_images
+  generate_printer_profiles || die "Pick another printer with: sudo $ROOT_DIR/install.sh (option 5)."
   set_admin_password
   start_stack
   seed_shop_settings

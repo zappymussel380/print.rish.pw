@@ -7,6 +7,7 @@ import {
   sliceJobId,
   sliceSettingsSchema,
 } from "@print/shared";
+import { getPrinterSpec } from "@/lib/printer";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
   const material = assertConfigAvailable(settings, await getCatalogAvailability());
   if (!material.ok) return jsonError(422, material.code, material.message);
 
-  const key = sliceArtifactKey(model.format as "stl" | "3mf" | "obj" | "amf", settings);
+  const key = sliceArtifactKey(model.format as "stl" | "3mf" | "obj" | "amf", settings, getPrinterSpec().id);
 
   const existing = await prisma.sliceResult.findUnique({
     where: { fileHash_settingsKey: { fileHash: model.fileHash, settingsKey: key } },

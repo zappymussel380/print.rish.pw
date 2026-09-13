@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getPrinterSpec } from "@/lib/printer";
 import { PageIntro } from "@/components/shell/page-intro";
 import { RecentPrintsGrid } from "@/components/showcase/recent-prints-grid";
 import { getRecentPrints } from "@/lib/recent-prints";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Recent prints",
-  description:
-    "Photos of real parts printed on our Bambu Lab A1 — what the machine actually produces, not renders.",
-};
+export function generateMetadata(): Metadata {
+  return {
+    title: "Recent prints",
+    description: `Photos of real parts printed on our ${getPrinterSpec().name} — what the machine actually produces, not renders.`,
+  };
+}
 
 export default async function RecentPrintsPage() {
   const prints = await getRecentPrints();
@@ -20,7 +22,7 @@ export default async function RecentPrintsPage() {
       <PageIntro
         eyebrow="Recent prints"
         title="Things we've printed"
-        lede="Real parts off the Bambu Lab A1, photographed as they came off the plate. No renders — if it's here, it printed."
+        lede={`Real parts off the ${getPrinterSpec().name}, photographed as they came off the plate. No renders — if it's here, it printed.`}
       />
 
       <div className="mt-10">

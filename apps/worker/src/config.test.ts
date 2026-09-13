@@ -57,7 +57,9 @@ describe("filamentProfile", () => {
     // before slicing anything (every slice failed NO_OUTPUT, exit 134).
     expect(profile).not.toHaveProperty("filament_notes");
     // A tier must never slice with another family's temperatures.
-    expect((profile.filament_type as string[])[0]!.startsWith(materialFamily(material))).toBe(true);
+    const type = (profile.filament_type as string[])[0]!;
+    // Orca's generic PETG presets report their type as "PET".
+    expect(type.startsWith(materialFamily(material)) || (materialFamily(material) === "PETG" && type === "PET")).toBe(true);
     // The catalog's informational density tracks the profile the grams come from.
     expect(Number((profile.filament_density as string[])[0])).toBe(
       CATALOG.materials[material].densityGcm3,

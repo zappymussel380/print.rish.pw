@@ -13,6 +13,7 @@ import {
   resolveColourName,
   summariseItems,
 } from "@print/shared";
+import { getPrinterSpec } from "@/lib/printer";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
@@ -139,6 +140,7 @@ async function postQuotation(request: NextRequest) {
           settingsKey: sliceArtifactKey(
             model.format as "stl" | "3mf" | "obj" | "amf",
             normalizedConfig,
+            getPrinterSpec().id,
           ),
         },
       },

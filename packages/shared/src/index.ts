@@ -13,6 +13,7 @@ export * from "./money";
 export * from "./order-summary";
 export * from "./pricing";
 export * from "./pricing-settings";
+export * from "./printer";
 export * from "./quotation-number";
 export * from "./quote-types";
 export * from "./recent-prints";

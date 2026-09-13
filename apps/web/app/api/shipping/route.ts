@@ -8,6 +8,7 @@ import {
   sliceArtifactKey,
   settingsKey,
 } from "@print/shared";
+import { getPrinterSpec } from "@/lib/printer";
 import { jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
@@ -99,6 +100,7 @@ async function rebuildTotals(
           settingsKey: sliceArtifactKey(
             model.format as "stl" | "3mf" | "obj" | "amf",
             config,
+            getPrinterSpec().id,
           ),
         },
       },

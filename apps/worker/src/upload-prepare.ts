@@ -10,7 +10,6 @@ import {
   type ThreeMfSourceConfig,
 } from "@print/geometry";
 import {
-  CATALOG,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
   LAYER_HEIGHTS_UM,
@@ -21,12 +20,13 @@ import {
   type ModelFormat,
   type UploadFormat,
 } from "@print/shared";
+import { printerSpec } from "./config.js";
 
 const CANONICAL_ARCHIVE_HEADER = "print.rish.pw canonical archive geometry";
 
 /** The machine we quote for. Loose 3MF build items are packed onto plates this
  *  size, so a part the source slicer left off its plate still gets sliced. */
-const BED_MM = CATALOG.printers[CATALOG.defaultPrinterId]!.bedMm;
+const BED_MM = printerSpec.bedMm;
 
 export interface PreparedUploadModel {
   originalName: string;
