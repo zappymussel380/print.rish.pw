@@ -197,7 +197,9 @@ It offers to:
 - uninstall
 
 Uninstalling removes the containers. Your data (database, uploaded models,
-quotation PDFs) is only deleted if you confirm twice.
+quotation PDFs) is only deleted if you confirm twice. Data you keep stays in
+Docker even if you delete the install folder, and its password is in that
+folder's `.env`, so keep `.env` if you might install again.
 
 ## Unattended install
 
@@ -236,6 +238,7 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_CONFIRM_RESEND` + `PS_RESEND_KEY`, `PS_MAIL_TO`, `PS_CONTACT_FROM_EMAIL` | Contact-form email |
 | `PS_CONFIRM_SHIPROCKET` + `PS_SHIPROCKET_EMAIL`, `PS_SHIPROCKET_PASSWORD`, `PS_PINCODE` | Shiprocket |
 | `PS_CONFIRM_TELEGRAM` + `PS_TELEGRAM_TOKEN`, `PS_TELEGRAM_CHAT` | Telegram alerts |
+| `PS_EXISTING_DATA` | Only asked when the server still has a database from an earlier install: `keep` (default) or `delete` (also needs `PS_CONFIRM_DELETE_TEXT=DELETE`) |
 
 ## Where things live
 
@@ -244,7 +247,7 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `.env` | Web address, generated passwords and API keys. Private (`chmod 600`); back it up. |
 | `.selfhost/` | Files rendered from `.env` (the Caddyfile) and update state. |
 | `backups/` | Database backups taken before each update. |
-| Docker volumes `print_*` | Database, uploads and quotation PDFs. |
+| Docker volumes `print_*` | Database, uploads and quotation PDFs. They stay when the install folder is deleted. |
 
 Useful commands, run from the install folder:
 
@@ -263,6 +266,23 @@ docker compose restart web
   check `docker compose logs caddy`.
 - **Slices fail on big models.** The slicer needs memory; 8 GB is recommended.
 - **Uploads over 95 MB fail with a tunnel.** That is Cloudflare's limit.
+- **`migrate` fails with `P1000: Authentication failed … for print_owner`.**
+  The server still has the database of an earlier install (Postgres logs
+  "Skipping initialization"), and that database uses the password from the
+  earlier `.env`. Run `sudo ./install.sh` again from the install folder: it
+  asks whether to keep that data or delete it. With an installer older than
+  this check, you can keep the data by switching it to the current password,
+  then running the installer again:
+
+  ```bash
+  docker compose up -d postgres
+  docker compose exec -T postgres sh <<'EOF'
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "ALTER ROLE \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD'"
+  EOF
+  ```
+
+  Or delete that data (database, uploads and PDFs) with `docker compose down -v`.
 
 ## For the maintainer: shipping updates to self-hosters
 
