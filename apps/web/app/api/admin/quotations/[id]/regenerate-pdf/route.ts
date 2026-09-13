@@ -6,6 +6,7 @@ import { jsonError, requireAdminApi } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { buildAnnexure } from "@/lib/pdf/annexure-data";
 import { renderQuotationPdf } from "@/lib/pdf/quotation-pdf";
+import { getPrinterProfile } from "@/lib/printer";
 import { assertSameOrigin, withRedisLock } from "@/lib/security";
 import {
   ensureStorageDirs,
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     await ensureStorageDirs();
     const pdf = await renderQuotationPdf({
       brandName: (await getSiteProfile()).brandName,
+      printer: await getPrinterProfile(),
       number: quotation.number,
       createdAt: quotation.createdAt,
       customer: {

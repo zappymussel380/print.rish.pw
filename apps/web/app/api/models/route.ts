@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import { fitsBed, modelConfigSchema, type ModelConfig } from "@print/shared";
-import { getPrinterSpec } from "@/lib/printer";
+import { getPrinterProfile } from "@/lib/printer";
 import { guardMutation, readJsonBody } from "@/lib/api-util";
 import { RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
@@ -26,7 +26,7 @@ type RestorableModelRow = {
   lockedConfig: unknown;
 };
 
-function serializeModel(model: RestorableModelRow): UploadedModelDto {
+function serializeModel(model: RestorableModelRow, bedMm: readonly [number, number, number]): UploadedModelDto {
   const bboxMm = {
     x: model.bboxXMm ?? 0,
     y: model.bboxYMm ?? 0,
@@ -40,7 +40,7 @@ function serializeModel(model: RestorableModelRow): UploadedModelDto {
     sizeBytes: model.sizeBytes,
     bboxMm,
     volumeCm3: model.volumeCm3 ?? 0,
-    fitsBed: fitsBed(bboxMm, getPrinterSpec().bedMm),
+    fitsBed: fitsBed(bboxMm, bedMm),
     ...(model.partCount && model.partCount > 1 ? { partCount: model.partCount } : {}),
     defaultConfig: parseDefaultConfig(model.defaultConfig),
     sourceConfig: parseDefaultConfig(model.sourceConfig),
@@ -95,7 +95,8 @@ export async function GET(request: NextRequest) {
         lockedConfig: true,
       },
     });
-    return NextResponse.json({ count: models.length, models: models.map(serializeModel) });
+    const { bedMm } = await getPrinterProfile();
+    return NextResponse.json({ count: models.length, models: models.map((m) => serializeModel(m, bedMm)) });
   }
 
   const count = await prisma.uploadedModel.count({

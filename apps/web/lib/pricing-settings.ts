@@ -1,8 +1,9 @@
 import { cache } from "react";
-import { getPrinterSpec } from "./printer";
+import { getPrinterProfile, getPrinterSpec } from "./printer";
 import { Prisma, prisma } from "@print/db";
 import {
   type PricingInput,
+  type PrinterProfileSpec,
   type PricingSettings,
   normalizePricing,
   toPricingInput,
@@ -15,20 +16,20 @@ export const PRICING_KEY = "pricing";
  *  `cache()` dedupes the read within a request, so a page and the pricing it
  *  hands the client always agree. */
 export const getPricing = cache(async (): Promise<PricingSettings> => {
+  const printer = await getPrinterProfile().catch(() => getPrinterSpec());
   try {
     const row = await prisma.appSetting.findUnique({ where: { key: PRICING_KEY } });
-    return withPrinter(normalizePricing(row?.value ?? null));
+    return withPrinter(normalizePricing(row?.value ?? null), printer);
   } catch {
     // Pricing must never take the site down: fall back to the code defaults,
     // which are what every shop runs on until its admin saves new rates.
-    return withPrinter(normalizePricing(null));
+    return withPrinter(normalizePricing(null), printer);
   }
 });
 
 /** The catalog's printer is the shop's real one (name, build volume, multicolour);
  *  its power draw stays the admin-editable rate. */
-function withPrinter(settings: PricingSettings): PricingSettings {
-  const spec = getPrinterSpec();
+function withPrinter(settings: PricingSettings, spec: PrinterProfileSpec): PricingSettings {
   const { catalog } = settings;
   const current = catalog.printers[catalog.defaultPrinterId]!;
   catalog.printers[catalog.defaultPrinterId] = {

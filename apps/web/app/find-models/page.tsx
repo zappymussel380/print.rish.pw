@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { getPrinterSpec } from "@/lib/printer";
+import { getPrinterProfile } from "@/lib/printer";
 import { PageIntro } from "@/components/shell/page-intro";
 import { MODEL_SOURCES } from "@/lib/model-sources";
 
@@ -26,7 +26,8 @@ const checks = (printer: { name: string; bedMm: readonly number[] }): { title: s
   },
 ];
 
-export default function FindModelsPage() {
+export default async function FindModelsPage() {
+  const printer = await getPrinterProfile();
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
       <PageIntro
@@ -69,7 +70,7 @@ export default function FindModelsPage() {
           Before you order a print
         </h2>
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          {checks(getPrinterSpec()).map((check) => (
+          {checks(printer).map((check) => (
             <article key={check.title} className="tile p-5">
               <h3 className="text-[0.95rem] font-[650]">{check.title}</h3>
               <p className="mt-2 text-sm leading-6 text-muted">{check.body}</p>

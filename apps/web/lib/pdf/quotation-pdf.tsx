@@ -91,6 +91,8 @@ export interface QuotationPdfData {
   totalPrintSeconds: number;
   completion: Date | null;
   annexures: PdfAnnexure[];
+  /** The printer it was sliced for; the installed one when omitted. */
+  printer?: PdfPrinter;
 }
 
 const ACCENT = "#ff5555";
@@ -151,12 +153,14 @@ function Letterhead({ brandName, compact = false }: { brandName: string; compact
   );
 }
 
-function PdfFooter({ number, brandName }: { number: string; brandName: string }) {
+type PdfPrinter = { name: string; nozzleMm: number };
+
+function PdfFooter({ number, brandName, printer }: { number: string; brandName: string; printer: PdfPrinter }) {
   return (
     <View style={s.footer} fixed>
       <Text>
-        This quotation is an estimate generated from real OrcaSlicer slicing on a {getPrinterSpec().name}{" "}
-        ({getPrinterSpec().nozzleMm}mm nozzle). Prices are in Indian Rupees and include a one-time setup fee. Filament
+        This quotation is an estimate generated from real OrcaSlicer slicing on a {printer.name}{" "}
+        ({printer.nozzleMm}mm nozzle). Prices are in Indian Rupees and include a one-time setup fee. Filament
         weight and print time come directly from the slicer. This is not a tax invoice.
       </Text>
       <Text style={{ marginTop: 4 }}>
@@ -188,6 +192,7 @@ function AnnexurePage({
   number,
   createdAt,
   brandName,
+  printer,
 }: {
   annexure: PdfAnnexure;
   index: number;
@@ -195,6 +200,7 @@ function AnnexurePage({
   number: string;
   createdAt: Date;
   brandName: string;
+  printer: PdfPrinter;
 }) {
   const { geometry, settings, slicer, pricing } = annexure;
   return (
@@ -268,12 +274,13 @@ function AnnexurePage({
         </View>
       </View>
 
-      <PdfFooter number={number} brandName={brandName} />
+      <PdfFooter number={number} brandName={brandName} printer={printer} />
     </Page>
   );
 }
 
 function QuotationDocument({ data }: { data: QuotationPdfData }) {
+  const printer = data.printer ?? getPrinterSpec();
   return (
     <Document title={`Quotation ${data.number}`} author={data.brandName}>
       <Page size="A4" style={s.page}>
@@ -360,7 +367,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           </View>
         ) : null}
 
-        <PdfFooter number={data.number} brandName={data.brandName} />
+        <PdfFooter number={data.number} brandName={data.brandName} printer={printer} />
       </Page>
       {data.annexures.map((annexure, i) => (
         <AnnexurePage
@@ -371,6 +378,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           number={data.number}
           createdAt={data.createdAt}
           brandName={data.brandName}
+          printer={printer}
         />
       ))}
     </Document>
