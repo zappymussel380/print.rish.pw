@@ -21,6 +21,13 @@ if [ "$mode" = "migrate" ]; then
   exit 0
 fi
 
+if [ "$mode" = "seed-settings" ]; then
+  # Self-host installer only: write the shop's initial settings (stdin JSON).
+  export DATABASE_URL="${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}"
+  shift
+  exec node /app/seed-settings.mjs "$@"
+fi
+
 if [ "$mode" != "web" ]; then
   echo "Unknown entrypoint mode: $mode" >&2
   exit 64

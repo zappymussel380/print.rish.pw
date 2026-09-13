@@ -1,0 +1,41 @@
+# Public HTTPS on this server: Caddy takes ports 80/443, fetches and renews a
+# Let's Encrypt certificate for SELFHOST_DOMAIN, and is the one trusted edge in
+# front of the compose nginx (TRUSTED_PROXY_CIDR = its fixed address below).
+services:
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    depends_on:
+      - proxy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./.selfhost/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      edge:
+        ipv4_address: ${EDGE_CADDY_IP:?Run ./install.sh}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    mem_limit: 256m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    restart: unless-stopped
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:?Run ./install.sh}
+
+volumes:
+  caddy_data:
+  caddy_config:
