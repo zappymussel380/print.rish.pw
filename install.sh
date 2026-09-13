@@ -172,7 +172,7 @@ sec_printer() {
     mapfile -t models < <(awk -F'\t' -v v="$vendor" '$1==v' "$PRINTERS_FILE")
     i=1; def=1
     for row in "${models[@]}"; do
-      IFS=$'\t' read -r _ model mach bed <<<"$row"
+      IFS=$'\t' read -r _ _ mach bed <<<"$row"
       [ "$mach" = "$A1_MACHINE" ] && def=$i
       # The preset name, not the model: a few models come in variants that share one.
       printf '  %3d) %-44s %s mm\n' "$i" "${mach% 0.4 nozzle}" "${bed//x/ × }"
@@ -438,6 +438,9 @@ configure_env() {
   CFG[COMPOSE_FILE]=$(compose_files_for_mode "$mode")
   [ -n "${ANS[PRINTER_MACHINE]:-}" ] && CFG[PRINTER_MACHINE]=${ANS[PRINTER_MACHINE]}
   [ -n "${ANS[PRINTER_MULTI]:-}" ] && CFG[PRINTER_MULTI_MATERIAL]=${ANS[PRINTER_MULTI]}
+  # Menu 2 asks no printer questions: the tests above then fail, and that
+  # status must not become the function's, or set -e ends the installer.
+  return 0
 }
 
 generate_secrets() {
