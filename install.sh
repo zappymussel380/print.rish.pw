@@ -215,7 +215,10 @@ sec_address() {
     4|local) ;;
     *)
       hint "You need a domain (e.g. print.example.com) — a public site only runs over HTTPS."
-      ask DOMAIN "Domain name" "${CFG[SELFHOST_DOMAIN]:-}" valid_domain "Enter just the domain, like print.example.com (no https://)." ;;
+      # Coming from local test mode the stored "domain" is localhost — no default then.
+      local domain_default=${CFG[SELFHOST_DOMAIN]:-}
+      [ "${CFG[SELFHOST_MODE]:-}" = local ] && domain_default=""
+      ask DOMAIN "Domain name" "$domain_default" valid_domain "Enter just the domain, like print.example.com (no https://)." ;;
   esac
   case "${ANS[MODE_CHOICE]}" in
     1|caddy)
