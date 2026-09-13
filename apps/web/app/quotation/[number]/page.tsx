@@ -60,7 +60,12 @@ export default async function ConfirmationPage({
   });
 
   const materialsSummary = summariseItems(
-    quotation.items.map((i) => ({ material: i.material, colour: i.colour, quantity: i.quantity })),
+    quotation.items.map((i) => ({
+      material: i.material,
+      colour: i.colour,
+      colourName: i.colourName,
+      quantity: i.quantity,
+    })),
   );
   const whatsappUrl = siteConfig.whatsappNumber
     ? buildWhatsAppUrl({
