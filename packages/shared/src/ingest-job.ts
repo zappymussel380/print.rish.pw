@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  COLOUR_IDS,
+  colourKeySchema,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
   MATERIAL_IDS,
@@ -71,7 +71,8 @@ export interface UploadedModelDto {
 export const partialConfigSchema = z
   .object({
     material: z.enum(MATERIAL_IDS),
-    colour: z.enum(COLOUR_IDS),
+    // Same shape check as a customer's own choice; availability is the gate.
+    colour: colourKeySchema,
     layerHeightUm: z.union([z.literal(120), z.literal(160), z.literal(200)]),
     infillPct: z.number().int().min(INFILL_MIN_PCT).max(INFILL_MAX_PCT),
     supports: z.enum(SUPPORT_MODES),

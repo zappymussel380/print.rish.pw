@@ -6,7 +6,14 @@ import {
   MATERIAL_COLOURS,
   DEFAULT_ENABLED_COLOURS,
   DEFAULT_ENABLED_MATERIALS,
+  colourName,
 } from "./colours";
+import {
+  CUSTOM_COLOUR_GROUP,
+  MAX_CUSTOM_COLOURS,
+  normalizeCustomColours,
+  type CustomColour,
+} from "./custom-colours";
 
 /**
  * Runtime, admin-controlled availability of materials and colours, overlaid on
@@ -15,8 +22,11 @@ import {
  */
 export interface Availability {
   materials: Record<MaterialId, boolean>;
-  /** Enabled colour ids per material — always a subset of `MATERIAL_COLOURS`. */
-  colours: Record<MaterialId, ColourId[]>;
+  /** Enabled colour ids per material — always a subset of that material's
+   *  palette (`MATERIAL_COLOURS`) plus its custom colours. */
+  colours: Record<MaterialId, string[]>;
+  /** Admin-defined hex colours, saved in the same blob as their enabled flags. */
+  customColours: CustomColour[];
 }
 
 /** Legacy colour ids resolve to their modern equivalent for availability checks
@@ -34,6 +44,9 @@ export const availabilitySchema = z.object({
   // ignores anything else.
   materials: z.record(z.string(), z.boolean()).optional(),
   colours: z.record(z.string(), z.array(z.string())).optional(),
+  // Entries are hardened one by one in `normalizeCustomColours`; only the
+  // length is bounded here so an oversized blob is refused outright.
+  customColours: z.array(z.unknown()).max(MAX_CUSTOM_COLOURS).optional(),
 });
 export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 
@@ -42,38 +55,39 @@ export type AvailabilityInput = z.infer<typeof availabilitySchema>;
  *  in-stock set. */
 export function defaultAvailability(): Availability {
   const materials = {} as Record<MaterialId, boolean>;
-  const colours = {} as Record<MaterialId, ColourId[]>;
+  const colours = {} as Record<MaterialId, string[]>;
   for (const m of MATERIAL_IDS) {
     materials[m] = DEFAULT_ENABLED_MATERIALS[m];
     colours[m] = [...DEFAULT_ENABLED_COLOURS[m]];
   }
-  return { materials, colours };
+  return { materials, colours, customColours: [] };
+}
+
+/** Every colour id a material can offer: its palette, then its custom colours. */
+function colourUniverse(material: MaterialId, customs: readonly CustomColour[]): string[] {
+  return [
+    ...MATERIAL_COLOURS[material],
+    ...customs.filter((c) => c.material === material).map((c) => c.id),
+  ];
 }
 
 /** Harden arbitrary/stored input into a valid Availability: fill missing keys
  *  from defaults, drop unknown materials, and drop any colour that isn't part of
- *  that material's real palette. */
+ *  that material's real palette or its custom colours. */
 export function normalizeAvailability(raw: unknown): Availability {
   const base = defaultAvailability();
   const parsed = availabilitySchema.safeParse(raw ?? {});
   if (!parsed.success) return base;
 
+  base.customColours = normalizeCustomColours(parsed.data.customColours);
   for (const m of MATERIAL_IDS) {
     const enabled = parsed.data.materials?.[m];
     if (typeof enabled === "boolean") base.materials[m] = enabled;
 
     const rawColours = parsed.data.colours?.[m];
     if (Array.isArray(rawColours)) {
-      const universe = new Set<string>(MATERIAL_COLOURS[m]);
-      const seen = new Set<ColourId>();
-      const cleaned: ColourId[] = [];
-      for (const c of rawColours) {
-        if (universe.has(c) && !seen.has(c as ColourId)) {
-          seen.add(c as ColourId);
-          cleaned.push(c as ColourId);
-        }
-      }
-      base.colours[m] = cleaned;
+      const universe = new Set(colourUniverse(m, base.customColours));
+      base.colours[m] = [...new Set(rawColours.filter((c) => universe.has(c)))];
     }
   }
   return base;
@@ -88,7 +102,7 @@ export function isColourEnabled(
   material: MaterialId,
   colour: string,
 ): boolean {
-  const resolved = (LEGACY_COLOUR_ALIAS[colour] ?? colour) as ColourId;
+  const resolved = LEGACY_COLOUR_ALIAS[colour] ?? colour;
   return avail.colours[material]?.includes(resolved) ?? false;
 }
 
@@ -119,13 +133,15 @@ export function assertConfigAvailable(
 }
 
 export interface PublicColour {
-  id: ColourId;
+  id: string;
   name: string;
   hex: string;
   /** Present only for dual/tri-colour filament — see `swatchBackground`. */
   stops?: readonly string[];
   /** Sub-section within a multi-line tier ("Matte", "Silk" …) — see `groupColours`. */
   group?: string;
+  /** Admin-defined (hex picker) rather than a supplier palette colour. */
+  custom?: true;
   enabled: boolean;
 }
 export interface PublicMaterial {
@@ -142,25 +158,46 @@ export function toPublicCatalog(avail: Availability): { materials: PublicMateria
     id: m,
     name: materialName(m),
     enabled: isMaterialEnabled(avail, m),
-    colours: MATERIAL_COLOURS[m].map((id) => {
-      const { name, hex, stops, group } = MASTER_COLOURS[id];
-      return {
-        id,
-        name,
-        hex,
-        ...(stops ? { stops } : {}),
-        ...(group ? { group } : {}),
-        enabled: avail.colours[m]?.includes(id) ?? false,
-      };
-    }),
+    colours: [
+      ...MATERIAL_COLOURS[m].map((id): PublicColour => {
+        const { name, hex, stops, group } = MASTER_COLOURS[id];
+        return {
+          id,
+          name,
+          hex,
+          ...(stops ? { stops } : {}),
+          ...(group ? { group } : {}),
+          enabled: avail.colours[m]?.includes(id) ?? false,
+        };
+      }),
+      ...avail.customColours
+        .filter((c) => c.material === m)
+        .map(
+          (c): PublicColour => ({
+            id: c.id,
+            name: c.name,
+            hex: c.hex,
+            // A heading only where it separates customs from a palette.
+            ...(MATERIAL_COLOURS[m].length > 0 ? { group: CUSTOM_COLOUR_GROUP } : {}),
+            custom: true,
+            enabled: avail.colours[m]?.includes(c.id) ?? false,
+          }),
+        ),
+    ],
   }));
   return { materials };
+}
+
+/** Display name for any colour id, custom colours included. Palette and legacy
+ *  ids resolve without the list; an unknown custom id falls back to the raw id. */
+export function resolveColourName(id: string, customs: readonly CustomColour[]): string {
+  return customs.find((c) => c.id === id)?.name ?? colourName(id);
 }
 
 /** First enabled colour for a material, if any (used to reset a stale choice). */
 export function firstEnabledColour(
   avail: Availability,
   material: MaterialId,
-): ColourId | undefined {
+): string | undefined {
   return avail.colours[material]?.[0];
 }

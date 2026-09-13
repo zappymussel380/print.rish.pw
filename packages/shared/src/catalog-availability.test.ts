@@ -141,10 +141,13 @@ describe("normalizeAvailability", () => {
       PLA_CF: false,
       PETG: true,
       PETG_PREMIUM: false,
+      ABS: false,
+      ASA: false,
     });
     expect(norm.colours.PLA).toEqual(["royal-blue", "magenta"]);
     expect(norm.colours.PETG).toEqual(["pitch-black"]);
     expect(norm.colours.PLA_AESTHETIC).toEqual([]);
+    expect(norm.customColours).toEqual([]);
   });
 
   it("keeps a premium colour only in its own tier", () => {
@@ -221,6 +224,8 @@ describe("toPublicCatalog / firstEnabledColour", () => {
       "PLA-CF",
       "PETG",
       "PETG Premium",
+      "ABS",
+      "ASA",
     ]);
     const aesthetic = pub.materials.find((m) => m.id === "PLA_AESTHETIC")!;
     expect(aesthetic.colours.find((c) => c.id === "tri-red-orange-gold")!.stops).toHaveLength(3);

@@ -30,7 +30,9 @@ export type FilamentLine =
   | "petgHs"
   | "translucent"
   | "translucentGlitter"
-  | "petgCf";
+  | "petgCf"
+  | "abs"
+  | "asa";
 
 export interface InternalCostBasis {
   /** Supplier list price per 1 kg spool, in whole rupees, before GST. */
@@ -68,6 +70,9 @@ export const INTERNAL_COST: InternalCostBasis = {
     translucent: 599,
     translucentGlitter: 699,
     petgCf: 1149,
+    // Placeholders until the operator enters real spool prices in admin → Rates.
+    abs: 650,
+    asa: 900,
   },
   gstRate: 0.18,
   spoolShippingPaise: 90_00,
@@ -108,8 +113,8 @@ const AESTHETIC_PREFIX: [string, FilamentLine][] = [
 /** The product line a quoted colour is bought as. Colour ids carry their line
  *  as a prefix within the premium tiers; basic PLA is bought as PLA+ (what the
  *  tier slices with), including baby pink from another supplier, which the
- *  operator costs on the same basis. Unknown or legacy ids fall back to the
- *  tier's own line. */
+ *  operator costs on the same basis. Unknown, legacy and admin-defined custom
+ *  colour ids fall back to the tier's own line. */
 export function filamentLine(material: MaterialId, colour: string): FilamentLine {
   switch (material) {
     case "PLA":
@@ -128,6 +133,10 @@ export function filamentLine(material: MaterialId, colour: string): FilamentLine
     case "PETG_PREMIUM":
       if (colour.startsWith("petg-cf-")) return "petgCf";
       return colour.endsWith("-glitter") ? "translucentGlitter" : "translucent";
+    case "ABS":
+      return "abs";
+    case "ASA":
+      return "asa";
   }
 }
 

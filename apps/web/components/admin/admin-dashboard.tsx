@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ChevronDown,
   Download,
   ExternalLink,
   FolderArchive,
@@ -13,14 +12,12 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  CATALOG,
-  colourShortName,
   formatPaise,
-  groupColours,
-  swatchBackground,
+  type MaterialFamily,
   type PublicMaterial,
   type RecentPrint,
 } from "@print/shared";
+import { CatalogEditor } from "./catalog-editor";
 import { ShowcaseEditor } from "./showcase-editor";
 
 export interface QuotationRow {
@@ -47,8 +44,7 @@ export interface AdminStats {
   aovPaise: number;
   printHours: number;
   filamentKg: number;
-  plaGrams: number;
-  petgGrams: number;
+  familyGrams: Record<MaterialFamily, number>;
   statusCounts: Record<string, number>;
 }
 
@@ -172,7 +168,7 @@ export function AdminDashboard({
         <StatCard label="Filament" value={`${stats.filamentKg.toFixed(2)} kg`} />
       </div>
       <div className="mt-3">
-        <MaterialSplit pla={stats.plaGrams} petg={stats.petgGrams} />
+        <MaterialSplit grams={stats.familyGrams} />
       </div>
       <p className="mt-3 text-xs text-faint">
         Lifetime · Revenue {formatPaise(stats.revenuePaise)} · Profit{" "}
@@ -317,246 +313,37 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MaterialSplit({ pla, petg }: { pla: number; petg: number }) {
-  const total = pla + petg;
-  const plaPct = total > 0 ? (pla / total) * 100 : 0;
+// Bar shades per family, strongest first; PLA and PETG keep their old look.
+const FAMILY_SHADE: Record<MaterialFamily, string> = {
+  PLA: "var(--accent)",
+  PETG: "color-mix(in srgb, var(--accent) 45%, transparent)",
+  ABS: "color-mix(in srgb, var(--accent) 70%, var(--text))",
+  ASA: "color-mix(in srgb, var(--accent) 25%, transparent)",
+};
+
+function MaterialSplit({ grams }: { grams: Record<MaterialFamily, number> }) {
+  const total = Object.values(grams).reduce((a, b) => a + b, 0);
+  // PLA and PETG always show; ABS/ASA only once something has been quoted in them.
+  const families = (Object.keys(FAMILY_SHADE) as MaterialFamily[]).filter(
+    (f) => f === "PLA" || f === "PETG" || grams[f] > 0,
+  );
   return (
     <div className="tile p-4">
-      <div className="flex items-center justify-between text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
         <span>Material split</span>
-        <span>
-          PLA {(pla / 1000).toFixed(2)}kg · PETG {(petg / 1000).toFixed(2)}kg
-        </span>
+        <span>{families.map((f) => `${f} ${(grams[f] / 1000).toFixed(2)}kg`).join(" · ")}</span>
       </div>
       <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--line)_60%,transparent)]">
-        <div className="h-full bg-accent" style={{ width: `${plaPct}%` }} />
-        <div className="h-full bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" style={{ width: `${100 - plaPct}%` }} />
+        {total > 0 &&
+          families.map((f) => (
+            <div
+              key={f}
+              className="h-full"
+              style={{ width: `${(grams[f] / total) * 100}%`, background: FAMILY_SHADE[f] }}
+            />
+          ))}
       </div>
     </div>
-  );
-}
-
-interface CatalogEditState {
-  materials: Record<string, boolean>;
-  colours: Record<string, Record<string, boolean>>;
-}
-
-function toEditState(catalog: { materials: PublicMaterial[] }): CatalogEditState {
-  const materials: Record<string, boolean> = {};
-  const colours: Record<string, Record<string, boolean>> = {};
-  for (const m of catalog.materials) {
-    materials[m.id] = m.enabled;
-    const row: Record<string, boolean> = {};
-    for (const c of m.colours) row[c.id] = c.enabled;
-    colours[m.id] = row;
-  }
-  return { materials, colours };
-}
-
-/** Enable/disable materials and, per material, each colour in the Numakers
- *  palette. Saves the whole availability blob at once. Each material folds away
- *  (switched-off tiers start folded), and the filter narrows every tier at once —
- *  All/None then act on just the matching colours, e.g. "silk" → All. */
-function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }) {
-  const router = useRouter();
-  const [state, setState] = useState<CatalogEditState>(() => toEditState(catalog));
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(catalog.materials.map((m) => [m.id, m.enabled])),
-  );
-  const needle = filter.trim().toLowerCase();
-
-  const mutate = (fn: (draft: CatalogEditState) => void) => {
-    setState((prev) => {
-      const next: CatalogEditState = {
-        materials: { ...prev.materials },
-        colours: Object.fromEntries(
-          Object.entries(prev.colours).map(([m, cs]) => [m, { ...cs }]),
-        ),
-      };
-      fn(next);
-      return next;
-    });
-    setDirty(true);
-  };
-
-  const setColours = (material: string, ids: string[], on: boolean) =>
-    mutate((d) => {
-      for (const id of ids) d.colours[material]![id] = on;
-    });
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const colours: Record<string, string[]> = {};
-      for (const m of catalog.materials) {
-        colours[m.id] = m.colours.filter((c) => state.colours[m.id]?.[c.id]).map((c) => c.id);
-      }
-      const res = await fetch("/api/admin/catalog", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-        body: JSON.stringify({ materials: state.materials, colours }),
-      });
-      if (!res.ok) {
-        alert("Saving catalog changes failed.");
-        return;
-      }
-      setDirty(false);
-      router.refresh();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <details className="tile mt-4 p-0 [&_summary]:list-none">
-      <summary className="flex cursor-pointer items-center justify-between p-4 text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
-        <span>Catalog · materials &amp; colours</span>
-        <span className="text-faint">manage</span>
-      </summary>
-      <div className="space-y-5 border-t border-line p-4">
-        <label className="relative block">
-          <span className="sr-only">Filter colours</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
-          <input
-            type="search"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter colours — e.g. silk, glow, translucent"
-            className="input-base w-full pl-9 text-sm"
-          />
-        </label>
-        {catalog.materials.map((m) => {
-          const enabledCount = m.colours.filter((c) => state.colours[m.id]?.[c.id]).length;
-          const materialOn = state.materials[m.id];
-          const shown = needle
-            ? m.colours.filter((c) => c.name.toLowerCase().includes(needle))
-            : m.colours;
-          if (needle && shown.length === 0) return null;
-          const open = needle ? true : expanded[m.id];
-          const shownIds = shown.map((c) => c.id);
-          return (
-            <div key={m.id}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    aria-label={`${open ? "Collapse" : "Expand"} ${m.name}`}
-                    onClick={() => setExpanded((e) => ({ ...e, [m.id]: !e[m.id] }))}
-                    disabled={Boolean(needle)}
-                    className="grid size-6 place-items-center rounded text-faint hover:text-text disabled:opacity-40"
-                  >
-                    <ChevronDown className={`size-4 transition-transform ${open ? "" : "-rotate-90"}`} />
-                  </button>
-                  <label className="flex items-center gap-2 text-sm font-[650]">
-                    <input
-                      type="checkbox"
-                      checked={materialOn}
-                      onChange={(e) => mutate((d) => (d.materials[m.id] = e.target.checked))}
-                      className="size-4 accent-[var(--accent)]"
-                    />
-                    {m.name}
-                    <span className="text-xs font-[450] text-faint">
-                      {formatPaise(CATALOG.materials[m.id].sellPerGramPaise)}/g ·{" "}
-                      {enabledCount}/{m.colours.length} colours
-                    </span>
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <button type="button" className="btn-ghost" onClick={() => setColours(m.id, shownIds, true)}>
-                    {needle ? `All ${shown.length}` : "All"}
-                  </button>
-                  <button type="button" className="btn-ghost" onClick={() => setColours(m.id, shownIds, false)}>
-                    None
-                  </button>
-                </div>
-              </div>
-              {open ? (
-                <div
-                  className={`mt-3 space-y-3 ${materialOn ? "" : "pointer-events-none opacity-40"}`}
-                >
-                  {/* Multi-line tiers (Aesthetic PLA, PETG Premium) split into their
-                      filament lines, each with its own All/None. */}
-                  {groupColours(shown).map(({ group, colours }) => {
-                    const ids = colours.map((c) => c.id);
-                    const groupOn = colours.filter((c) => state.colours[m.id]?.[c.id]).length;
-                    return (
-                      <div key={group ?? "all"}>
-                        {group ? (
-                          <div className="mb-1.5 flex items-center justify-between gap-3">
-                            <span className="text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-muted">
-                              {group}
-                              <span className="ml-2 font-[450] normal-case tracking-normal text-faint">
-                                {groupOn}/{colours.length}
-                              </span>
-                            </span>
-                            <span className="flex items-center gap-3 text-xs">
-                              <button
-                                type="button"
-                                aria-label={`Enable all ${group}`}
-                                className="text-faint hover:text-text"
-                                onClick={() => setColours(m.id, ids, true)}
-                              >
-                                All
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`Disable all ${group}`}
-                                className="text-faint hover:text-text"
-                                onClick={() => setColours(m.id, ids, false)}
-                              >
-                                None
-                              </button>
-                            </span>
-                          </div>
-                        ) : null}
-                        <div className="flex flex-wrap gap-1.5">
-                          {colours.map((c) => {
-                            const on = state.colours[m.id]?.[c.id] ?? false;
-                            return (
-                              <button
-                                key={c.id}
-                                type="button"
-                                aria-pressed={on}
-                                title={c.name}
-                                onClick={() => mutate((d) => (d.colours[m.id]![c.id] = !on))}
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                                  on ? "border-accent text-text" : "border-line text-faint hover:text-muted"
-                                }`}
-                              >
-                                <span
-                                  className="size-3 rounded-full border border-line"
-                                  style={{ background: swatchBackground(c) }}
-                                />
-                                {colourShortName(c)}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={save}
-            disabled={!dirty || saving}
-            className="btn-pill text-sm disabled:opacity-40"
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </button>
-          {dirty && !saving ? <span className="text-xs text-faint">Unsaved changes</span> : null}
-        </div>
-      </div>
-    </details>
   );
 }
 

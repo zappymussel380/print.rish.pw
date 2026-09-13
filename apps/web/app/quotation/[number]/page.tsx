@@ -60,7 +60,12 @@ export default async function ConfirmationPage({
   });
 
   const materialsSummary = summariseItems(
-    quotation.items.map((i) => ({ material: i.material, colour: i.colour, quantity: i.quantity })),
+    quotation.items.map((i) => ({
+      material: i.material,
+      colour: i.colour,
+      colourName: i.colourName,
+      quantity: i.quantity,
+    })),
   );
   const whatsappUrl = siteConfig.whatsappNumber
     ? buildWhatsAppUrl({
@@ -105,7 +110,7 @@ export default async function ConfirmationPage({
               <div className="min-w-0">
                 <p className="font-[600]">
                   {i.quantity > 1 ? `${i.quantity}× ` : ""}
-                  {materialName(i.material)} · {colourName(i.colour)}
+                  {materialName(i.material)} · {i.colourName ?? colourName(i.colour)}
                 </p>
                 <p className="text-xs text-faint">
                   {(i.layerHeightUm / 1000).toFixed(2)}mm · {i.infillPct}% ·{" "}

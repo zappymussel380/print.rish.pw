@@ -18,7 +18,7 @@ would be reused under the new slicer.
 
 ## The committed, flattened profiles
 
-`apps/worker/profiles/` holds nine standalone JSON profiles:
+`apps/worker/profiles/` holds eleven standalone JSON profiles:
 
 | File | Source (Bambu A1) |
 | --- | --- |
@@ -29,6 +29,8 @@ would be reused under the new slicer.
 | `filament.pla-cf.json` | Numakers PLA-CF (density 1.22) |
 | `filament.petg.json` | Numakers PETG HS (density 1.28) |
 | `filament.petg-premium.json` | Numakers PETG-CF (density 1.25) |
+| `filament.abs.json` | Orca Generic ABS @BBL A1 (density 1.04) |
+| `filament.asa.json` | Orca Generic ASA @BBL A1 (density 1.04) |
 
 Each material tier maps to one filament profile (`filamentProfile` in
 `apps/worker/src/config.ts`).
@@ -45,6 +47,8 @@ cube at 0.20 mm / 15% (2026-09-12), and reproduced exactly by that product:
 | Numakers PLA-CF (`filament.pla-cf.json`) | 1.22 | 0.950 | 3.45 |
 | Numakers PETG HS (`filament.petg.json`) | 1.28 | 0.980 | 3.73 |
 | Numakers PETG-CF (`filament.petg-premium.json`) | 1.25 | 0.960 | 3.57 |
+| Generic ABS (`filament.abs.json`) | 1.04 | 0.950 | see below |
+| Generic ASA (`filament.asa.json`) | 1.04 | 0.950 | see below |
 
 Two tiers span several filament lines and slice them all with one preset, so
 some lines in them are quoted slightly light:
@@ -58,6 +62,12 @@ some lines in them are quoted slightly light:
   than the PETG HS preset that plain translucent would slice with.
 
 Splitting a line into its own tier (and profile) removes its error.
+
+**ABS and ASA** have no supplier preset: `flatten-orca-profiles.py` flattens
+Orca's own `Generic ABS/ASA @BBL A1` and `overlay-numakers-profiles.py` ships
+them base-only (same cleanup as every other profile). The A1 is open-frame and
+Bambu does not recommend ABS/ASA on it (warping on large flat parts, fumes), so
+both tiers ship disabled until the operator chooses to offer them.
 
 ### Filament profiles: Numakers presets over a Bambu base
 

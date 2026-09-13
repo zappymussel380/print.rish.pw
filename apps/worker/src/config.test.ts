@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CATALOG, MATERIAL_IDS } from "@print/shared";
+import { CATALOG, MATERIAL_IDS, materialFamily } from "@print/shared";
 import { MACHINE_PROFILE, config, filamentProfile, stubSlicerEnabled } from "./config";
 
 describe("stubSlicerEnabled", () => {
@@ -56,9 +56,8 @@ describe("filamentProfile", () => {
     // "" — Orca 2.4.1 reads that as an empty vector and aborts in set_at()
     // before slicing anything (every slice failed NO_OUTPUT, exit 134).
     expect(profile).not.toHaveProperty("filament_notes");
-    // PLA tiers must never slice with PETG temperatures, or vice versa.
-    const family = material.startsWith("PETG") ? "PETG" : "PLA";
-    expect((profile.filament_type as string[])[0]!.startsWith(family)).toBe(true);
+    // A tier must never slice with another family's temperatures.
+    expect((profile.filament_type as string[])[0]!.startsWith(materialFamily(material))).toBe(true);
     // The catalog's informational density tracks the profile the grams come from.
     expect(Number((profile.filament_density as string[])[0])).toBe(
       CATALOG.materials[material].densityGcm3,

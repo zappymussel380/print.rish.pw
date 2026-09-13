@@ -203,6 +203,8 @@ export interface TelegramQuotationLine {
   fileName: string;
   material: string;
   colour: string;
+  /** Resolved at submission so custom (admin-defined) colours read by name. */
+  colourName?: string | null;
   layerHeightUm: number;
   infillPct: number;
   supports: string;
@@ -261,7 +263,7 @@ export function buildNewQuotationTelegramMessage(input: NewQuotationTelegramInpu
     const downloadUrl = absoluteUrl(`/api/models/${line.modelId}/file`, origin);
     parts.push(
       `${index + 1}. ${singleLine(line.fileName, 140)}`,
-      `   ${materialName(line.material)} ${colourName(line.colour)}, ${(line.layerHeightUm / 1000).toFixed(2)}mm, ${line.infillPct}% infill, supports ${line.supports}, qty ${line.quantity}`,
+      `   ${materialName(line.material)} ${line.colourName ?? colourName(line.colour)}, ${(line.layerHeightUm / 1000).toFixed(2)}mm, ${line.infillPct}% infill, supports ${line.supports}, qty ${line.quantity}`,
       `   ${formatGrams(line.totalGrams)}, ${formatDuration(line.totalPrintSeconds)}, ${money(line.subtotalPaise)}`,
       `   ${downloadUrl}`,
     );

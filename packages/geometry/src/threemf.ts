@@ -742,6 +742,8 @@ function normalizeMaterial(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const upper = value.trim().toUpperCase();
   if (upper.includes("PETG")) return "PETG";
+  if (upper.includes("ASA")) return "ASA";
+  if (upper.includes("ABS")) return "ABS";
   if (upper.includes("PLA")) return "PLA";
   return undefined;
 }

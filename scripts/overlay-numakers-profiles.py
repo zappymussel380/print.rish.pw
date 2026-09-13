@@ -21,13 +21,16 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "scripts" / "profile-sources"
 OUT = ROOT / "apps" / "worker" / "profiles"
 
-# (output filename, family base, Numakers preset) — one per material tier.
+# (output filename, family base, Numakers preset) — one per material tier. A
+# tier without a supplier preset (None) ships its base, cleaned up the same way.
 TARGETS = [
     ("filament.pla.json", "bambu-pla-basic.json", "pla-plus.json"),
     ("filament.pla-aesthetic.json", "bambu-pla-basic.json", "pla-silk.json"),
     ("filament.pla-cf.json", "bambu-pla-basic.json", "pla-cf.json"),
     ("filament.petg.json", "generic-petg.json", "petg-hs.json"),
     ("filament.petg-premium.json", "generic-petg.json", "petg-cf.json"),
+    ("filament.abs.json", "generic-abs.json", None),
+    ("filament.asa.json", "generic-asa.json", None),
 ]
 
 # Export-side bookkeeping that must not reach the CLI: an empty `inherits` is
@@ -54,13 +57,13 @@ def overlay(base: dict, vendor: dict) -> dict:
 def main() -> None:
     for out_name, base_name, vendor_name in TARGETS:
         base = json.loads((SOURCES / base_name).read_text())
-        vendor = json.loads((SOURCES / "numakers" / vendor_name).read_text())
+        vendor = json.loads((SOURCES / "numakers" / vendor_name).read_text()) if vendor_name else {}
         profile = overlay(base, vendor)
         density = float(profile.get("filament_density", ["0"])[0])
         if density <= 0:
-            raise RuntimeError(f"{vendor_name}: no usable filament_density")
+            raise RuntimeError(f"{vendor_name or base_name}: no usable filament_density")
         (OUT / out_name).write_text(json.dumps(profile, indent=2) + "\n")
-        print(f"{out_name:30} <- {vendor_name:14} on {base_name:22} "
+        print(f"{out_name:30} <- {vendor_name or '(base only)':14} on {base_name:22} "
               f"({len(profile)} keys, density {density})")
 
 

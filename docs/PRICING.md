@@ -53,15 +53,19 @@ as the `CATALOG` constant. Current values:
 | PLA-CF sell | ₹3.50 / g (cost ₹1,499/kg, density 1.22) |
 | PETG sell | ₹2.50 / g (cost ₹800/kg, density 1.28) |
 | PETG Premium sell | ₹3.50 / g (cost ₹1,149/kg, density 1.25) — translucent/glitter and carbon-fibre PETG |
+| ABS sell | ₹2.50 / g (cost ₹650/kg, density 1.04) — placeholder rates, confirm before enabling |
+| ASA sell | ₹3.00 / g (cost ₹900/kg, density 1.04) — placeholder rates, confirm before enabling |
 | Electricity | ₹10 / kWh × 0.09 kWh per print-hour |
 | Maintenance | ₹0.20 / g |
 | Lead time | 8 print-hours/day + 2 buffer days |
 | Bed | 256 × 256 × 256 mm (Bambu Lab A1) |
 
 Colour never affects price; the material tier does. The three premium tiers
-ship **disabled** (`DEFAULT_ENABLED_MATERIALS` in `colours.ts`) — the operator
+and ABS/ASA ship **disabled** (`DEFAULT_ENABLED_MATERIALS` in `colours.ts`) — the operator
 switches each on, with its colours, from the admin catalog editor as the
-filament is stocked. Each tier slices with its own Numakers profile, so grams
+filament is stocked. ABS and ASA have no supplier palette: their colours are
+added in the same editor by name and hex code (any other tier can take such
+custom colours too, alongside its Numakers palette). Each tier slices with its own Numakers profile, so grams
 (and therefore price) follow that filament's density × flow ratio — see
 [ORCA-PROFILES.md](ORCA-PROFILES.md) for the measured figures and the two tiers
 that approximate some of their lines.

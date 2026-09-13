@@ -11,6 +11,7 @@ import {
   priceQuote,
   type QuoteLineInput,
   sliceArtifactKey,
+  resolveColourName,
   summariseItems,
 } from "@print/shared";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
@@ -103,6 +104,9 @@ async function postQuotation(request: NextRequest) {
   // the customer submitted. The legit client can't produce duplicates.
   const seenModels = new Set<string>();
   const availability = await getCatalogAvailability();
+  // Custom colours can be deleted later, so every record of this quotation
+  // carries the colour's name as it was at submission.
+  const nameOf = (colour: string) => resolveColourName(colour, availability.customColours);
 
   for (const raw of rawItems) {
     const modelId = (raw as { modelId?: unknown })?.modelId;
@@ -299,6 +303,7 @@ async function postQuotation(request: NextRequest) {
                 sliceResultId: e.sliceResultId,
                 material: e.config.material,
                 colour: e.config.colour,
+                colourName: nameOf(e.config.colour),
                 layerHeightUm: e.config.layerHeightUm,
                 infillPct: e.config.infillPct,
                 supports: SUPPORT_ENUM[e.config.supports],
@@ -356,6 +361,7 @@ async function postQuotation(request: NextRequest) {
             settings: {
               material: line.config.material,
               colour: line.config.colour,
+              colourName: nameOf(line.config.colour),
               layerHeightUm: line.config.layerHeightUm,
               infillPct: line.config.infillPct,
               supports: line.config.supports,
@@ -385,6 +391,7 @@ async function postQuotation(request: NextRequest) {
         fileName: entries[i]!.fileName,
         material: line.config.material,
         colour: line.config.colour,
+        colourName: nameOf(line.config.colour),
         layerHeightUm: line.config.layerHeightUm,
         infillPct: line.config.infillPct,
         supports: line.config.supports,
@@ -450,6 +457,7 @@ async function postQuotation(request: NextRequest) {
         fileName: entry.fileName,
         material: line.config.material,
         colour: line.config.colour,
+        colourName: nameOf(line.config.colour),
         layerHeightUm: line.config.layerHeightUm,
         infillPct: line.config.infillPct,
         supports: line.config.supports,
@@ -465,7 +473,12 @@ async function postQuotation(request: NextRequest) {
   });
 
   const materialsSummary = summariseItems(
-    entries.map((e) => ({ material: e.config.material, colour: e.config.colour, quantity: e.config.quantity })),
+    entries.map((e) => ({
+      material: e.config.material,
+      colour: e.config.colour,
+      colourName: nameOf(e.config.colour),
+      quantity: e.config.quantity,
+    })),
   );
   const whatsappUrl = siteConfig.whatsappNumber
     ? buildWhatsAppUrl({

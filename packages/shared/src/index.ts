@@ -3,6 +3,7 @@ export * from "./catalog-availability";
 export * from "./colours";
 export * from "./completion-date";
 export * from "./costs";
+export * from "./custom-colours";
 export * from "./filename";
 export * from "./ingest-job";
 export * from "./parse-child-contract";

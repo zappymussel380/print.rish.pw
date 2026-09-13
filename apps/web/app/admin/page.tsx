@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { type Prisma, prisma } from "@print/db";
 import {
   estimateOrderCostPaise,
+  materialFamily,
   type CostItem,
+  type MaterialFamily,
   type MaterialId,
   toPublicCatalog,
 } from "@print/shared";
@@ -87,8 +89,7 @@ function computeStats(quotations: QuotationWithItems[]): AdminStats {
   let profitPaise = 0;
   let billableCount = 0;
   let printSeconds = 0;
-  let plaGrams = 0;
-  let petgGrams = 0;
+  const familyGrams: Record<MaterialFamily, number> = { PLA: 0, PETG: 0, ABS: 0, ASA: 0 };
 
   for (const q of quotations) {
     statusCounts[q.status] = (statusCounts[q.status] ?? 0) + 1;
@@ -100,8 +101,7 @@ function computeStats(quotations: QuotationWithItems[]): AdminStats {
       const grams = Number(item.unitGrams) * item.quantity;
       printSeconds += item.unitPrintSeconds * item.quantity;
       // Split by family: the premium tiers are still PLA or PETG on the spool.
-      if (item.material.startsWith("PETG")) petgGrams += grams;
-      else plaGrams += grams;
+      familyGrams[materialFamily(item.material as MaterialId)] += grams;
     }
   }
 
@@ -111,9 +111,8 @@ function computeStats(quotations: QuotationWithItems[]): AdminStats {
     profitPaise,
     aovPaise: billableCount > 0 ? Math.round(revenuePaise / billableCount) : 0,
     printHours: printSeconds / 3600,
-    filamentKg: (plaGrams + petgGrams) / 1000,
-    plaGrams,
-    petgGrams,
+    filamentKg: Object.values(familyGrams).reduce((a, b) => a + b, 0) / 1000,
+    familyGrams,
     statusCounts,
   };
 }
