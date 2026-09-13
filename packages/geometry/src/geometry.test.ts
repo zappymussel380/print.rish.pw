@@ -201,6 +201,40 @@ describe("parseModel", () => {
     expect(() => parseModel(archive, "3mf")).toThrowError(/unsupported unit/);
   });
 
+  it.each([
+    ["ABS", "ABS"],
+    ["ABS-GF", "ABS"],
+    ["ASA", "ASA"],
+    ["PLA Silk", "PLA"],
+  ])("imports a 3MF sliced with %s filament as %s", (filamentType, material) => {
+    const model = `<?xml version="1.0" encoding="UTF-8"?>
+      <model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+        <resources>
+          <object id="1" type="model">
+            <mesh>
+              <vertices>
+                <vertex x="0" y="0" z="0"/><vertex x="20" y="0" z="0"/>
+                <vertex x="0" y="20" z="0"/><vertex x="0" y="0" z="20"/>
+              </vertices>
+              <triangles>
+                <triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/>
+                <triangle v1="1" v2="2" v3="3"/><triangle v1="2" v2="0" v3="3"/>
+              </triangles>
+            </mesh>
+          </object>
+        </resources>
+        <build><item objectid="1"/></build>
+      </model>`;
+    const archive = Buffer.from(
+      zipSync({
+        "[Content_Types].xml": strToU8("<Types/>"),
+        "3D/3dmodel.model": strToU8(model),
+        "Metadata/project_settings.config": strToU8(JSON.stringify({ filament_type: [filamentType] })),
+      }),
+    );
+    expect(extract3mfSourceConfig(archive)?.material).toBe(material);
+  });
+
   it("extracts Bambu-style 3MF plates as normalized STL models", () => {
     const mainModel = `<?xml version="1.0" encoding="UTF-8"?>
       <model unit="millimeter"

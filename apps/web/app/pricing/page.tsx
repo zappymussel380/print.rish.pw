@@ -24,6 +24,8 @@ const MATERIAL_BLURB: Record<MaterialId, string> = {
   PLA_CF: "Carbon-fibre-filled PLA — stiff, matte, and dimensionally stable.",
   PETG: "Tougher, heat-resistant parts for real-world use.",
   PETG_PREMIUM: "Translucent and glitter PETG, plus carbon-fibre PETG for rigid functional parts.",
+  ABS: "Heat-tolerant and impact-tough, for functional parts near engines, lamps and electronics.",
+  ASA: "ABS's weatherproof sibling — holds its colour and strength outdoors and in the sun.",
 };
 
 export default async function PricingPage() {

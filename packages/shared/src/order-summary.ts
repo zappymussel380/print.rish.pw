@@ -5,6 +5,9 @@ import type { MaterialId } from "./quote-types";
 export interface OrderItemLike {
   material: MaterialId;
   colour: string;
+  /** Colour name captured at submission — the only record of a custom colour
+   *  the admin has since deleted. */
+  colourName?: string | null;
   quantity: number;
 }
 
@@ -13,7 +16,7 @@ export interface OrderItemLike {
 export function summariseItems(items: OrderItemLike[]): string {
   const groups = new Map<string, number>();
   for (const it of items) {
-    const k = `${materialName(it.material)} (${colourName(it.colour)})`;
+    const k = `${materialName(it.material)} (${it.colourName ?? colourName(it.colour)})`;
     groups.set(k, (groups.get(k) ?? 0) + it.quantity);
   }
   return [...groups].map(([k, q]) => `${q}× ${k}`).join(", ");

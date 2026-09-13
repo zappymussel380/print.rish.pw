@@ -25,6 +25,8 @@ enum MaterialId {
   PLA_CF
   PETG
   PETG_PREMIUM
+  ABS
+  ASA
 }
 
 enum SupportMode {
@@ -184,6 +186,9 @@ model QuotationItem {
 
   material      MaterialId
   colour        String
+  /// Display name captured at submission. Admin-defined colours can be deleted
+  /// later; palette ids still resolve from code when this is null (older rows).
+  colourName    String?
   layerHeightUm Int
   infillPct     Int
   supports      SupportMode

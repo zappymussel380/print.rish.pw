@@ -3,7 +3,15 @@ import { z } from "zod";
 /** Materials, colours, layer heights and support modes offered to customers.
  *  Extend these tuples (plus `catalog.ts`) to add options — everything else
  *  (validation, pricing, UI selects) derives from them. */
-export const MATERIAL_IDS = ["PLA", "PLA_AESTHETIC", "PLA_CF", "PETG", "PETG_PREMIUM"] as const;
+export const MATERIAL_IDS = [
+  "PLA",
+  "PLA_AESTHETIC",
+  "PLA_CF",
+  "PETG",
+  "PETG_PREMIUM",
+  "ABS",
+  "ASA",
+] as const;
 /** The full orderable colour universe (Numakers palette), plus the legacy
  *  `black`/`white` ids kept accept-only for records created before the palette
  *  expanded. Which of these a customer may actually pick is a runtime,
@@ -168,6 +176,13 @@ export const MAX_QUANTITY = 100;
 
 export type MaterialId = (typeof MATERIAL_IDS)[number];
 export type ColourId = (typeof COLOUR_IDS)[number];
+
+/** Shape of any colour a model may carry: a palette id from `COLOUR_IDS` or an
+ *  admin-defined custom colour (`custom-…`, see `custom-colours.ts`). The shape
+ *  is all the wire schema can check — whether the colour may actually be
+ *  ordered is decided against live availability by `assertConfigAvailable`. */
+export const COLOUR_KEY_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const colourKeySchema = z.string().max(64).regex(COLOUR_KEY_RE);
 export type LayerHeightUm = (typeof LAYER_HEIGHTS_UM)[number];
 export type SupportMode = (typeof SUPPORT_MODES)[number];
 
@@ -183,7 +198,7 @@ export type SliceSettings = z.infer<typeof sliceSettingsSchema>;
 
 /** Full per-model configuration as chosen by the customer. */
 export const modelConfigSchema = sliceSettingsSchema.extend({
-  colour: z.enum(COLOUR_IDS),
+  colour: colourKeySchema,
   quantity: z.number().int().min(1).max(MAX_QUANTITY),
 });
 export type ModelConfig = z.infer<typeof modelConfigSchema>;

@@ -40,6 +40,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     fileName: item.model.originalName,
     material: item.material as MaterialId,
     colour: item.colour,
+    colourName: item.colourName,
     layerHeightUm: item.layerHeightUm,
     infillPct: item.infillPct,
     supports: item.supports.toLowerCase() as SupportMode,
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         settings: {
           material: lines[i]!.material,
           colour: item.colour,
+          colourName: item.colourName,
           layerHeightUm: item.layerHeightUm,
           infillPct: item.infillPct,
           supports: lines[i]!.supports,

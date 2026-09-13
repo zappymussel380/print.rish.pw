@@ -204,6 +204,8 @@ export const DEFAULT_ENABLED_MATERIALS: Record<MaterialId, boolean> = {
   PLA_CF: false,
   PETG: true,
   PETG_PREMIUM: false,
+  ABS: false,
+  ASA: false,
 };
 
 /** Colours enabled out of the box — the black/white that were always in stock,
@@ -214,6 +216,9 @@ export const DEFAULT_ENABLED_COLOURS: Record<MaterialId, readonly ColourId[]> = 
   PLA_CF: [],
   PETG: ["pitch-black", "pure-white"],
   PETG_PREMIUM: [],
+  // No supplier palette: every ABS/ASA colour is added in the admin editor.
+  ABS: [],
+  ASA: [],
 };
 
 /** Human-readable name for any colour id, including legacy values. */

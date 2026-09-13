@@ -100,6 +100,22 @@ export const CATALOG: Catalog = {
       densityGcm3: 1.25,
       colours: MATERIAL_COLOURS.PETG_PREMIUM,
     },
+    // ABS and ASA have no supplier palette — their colours are admin-defined
+    // (hex picker). Sliced with Orca's generic A1 presets; both ship disabled.
+    ABS: {
+      name: "ABS",
+      sellPerGramPaise: 250,
+      costPerKgPaise: 650_00,
+      densityGcm3: 1.04,
+      colours: MATERIAL_COLOURS.ABS,
+    },
+    ASA: {
+      name: "ASA",
+      sellPerGramPaise: 300,
+      costPerKgPaise: 900_00,
+      densityGcm3: 1.04,
+      colours: MATERIAL_COLOURS.ASA,
+    },
   },
   electricityPerKwhPaise: 10_00,
   maintenancePerGramPaise: 20,
@@ -113,6 +129,24 @@ export const CATALOG: Catalog = {
  *  Unknown values (never expected) fall through verbatim. */
 export function materialName(id: string): string {
   return id in CATALOG.materials ? CATALOG.materials[id as MaterialId].name : id;
+}
+
+/** The base polymer a material tier is made of. Tiers of one family share its
+ *  handling (print temperatures, reported weight splits, 3MF import). */
+export type MaterialFamily = "PLA" | "PETG" | "ABS" | "ASA";
+
+export const MATERIAL_FAMILY: Record<MaterialId, MaterialFamily> = {
+  PLA: "PLA",
+  PLA_AESTHETIC: "PLA",
+  PLA_CF: "PLA",
+  PETG: "PETG",
+  PETG_PREMIUM: "PETG",
+  ABS: "ABS",
+  ASA: "ASA",
+};
+
+export function materialFamily(id: MaterialId): MaterialFamily {
+  return MATERIAL_FAMILY[id];
 }
 
 /** True when the bounding box fits the default printer's bed in some axis

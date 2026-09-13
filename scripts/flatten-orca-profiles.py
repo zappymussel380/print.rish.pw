@@ -20,7 +20,7 @@ from pathlib import Path
 
 VENDOR_DIRS = ["machine", "process", "filament"]
 
-# (source profile name, output filename) — the six presets print.rish.pw uses.
+# (source profile name, output filename) — the presets print.rish.pw builds on.
 TARGETS = {
     "machine": [("Bambu Lab A1 0.4 nozzle", "machine.bbl-a1-04.json")],
     "process": [
@@ -33,6 +33,9 @@ TARGETS = {
     "filament": [
         ("Bambu PLA Basic @BBL A1", "bambu-pla-basic.json"),
         ("Generic PETG @BBL A1", "generic-petg.json"),
+        # No supplier preset for these: shipped as the flattened base itself.
+        ("Generic ABS @BBL A1", "generic-abs.json"),
+        ("Generic ASA @BBL A1", "generic-asa.json"),
     ],
 }
 

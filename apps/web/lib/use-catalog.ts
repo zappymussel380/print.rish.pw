@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { defaultAvailability, toPublicCatalog, type PublicMaterial } from "@print/shared";
+import {
+  colourName,
+  defaultAvailability,
+  toPublicCatalog,
+  type PublicMaterial,
+} from "@print/shared";
 
 export interface PublicCatalog {
   materials: PublicMaterial[];
@@ -46,4 +51,13 @@ export function useCatalog(): PublicCatalog {
   }, []);
 
   return catalog;
+}
+
+/** Display name for a colour as the live catalog knows it — custom colours
+ *  included — falling back to the palette lookup. */
+export function catalogColourName(catalog: PublicCatalog, material: string, colour: string): string {
+  return (
+    catalog.materials.find((m) => m.id === material)?.colours.find((c) => c.id === colour)?.name ??
+    colourName(colour)
+  );
 }

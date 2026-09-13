@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import {
-  type ColourId,
   groupColours,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
@@ -26,6 +25,10 @@ const MATERIAL_INFO =
   "PLA is stiff and easy to print — ideal for prototypes, models and display pieces. PETG is tougher and more heat- and moisture-resistant — better for functional or outdoor parts.";
 const PREMIUM_INFO =
   " Aesthetic PLA covers silk, matte, metallic, starlight, glow and wood finishes; the carbon-fibre and premium PETG tiers suit stiff functional parts and translucent pieces. Each is charged at its own per-gram rate.";
+const PREMIUM_TIERS: readonly MaterialId[] = ["PLA_AESTHETIC", "PLA_CF", "PETG_PREMIUM"];
+const ENGINEERING_INFO =
+  " ABS and ASA handle heat best (around 95–100 °C) and are tough enough for functional parts; ASA also resists sun and weather, so it is the pick for outdoor parts that must last.";
+const ENGINEERING_TIERS: readonly MaterialId[] = ["ABS", "ASA"];
 
 const SUPPORT_LABEL: Record<(typeof SUPPORT_MODES)[number], string> = {
   auto: "Auto",
@@ -52,7 +55,11 @@ export function SettingsPanel({
   const enabledMaterials = catalog.materials.filter((m) => m.enabled);
   const currentMaterial = catalog.materials.find((m) => m.id === config.material);
   const enabledColours = (currentMaterial?.colours ?? []).filter((c) => c.enabled);
-  const premiumEnabled = enabledMaterials.some((m) => m.id !== "PLA" && m.id !== "PETG");
+  const anyEnabled = (ids: readonly MaterialId[]) => enabledMaterials.some((m) => ids.includes(m.id));
+  const materialInfo =
+    MATERIAL_INFO +
+    (anyEnabled(PREMIUM_TIERS) ? PREMIUM_INFO : "") +
+    (anyEnabled(ENGINEERING_TIERS) ? ENGINEERING_INFO : "");
 
   const chooseMaterial = (v: MaterialId) => {
     const next = catalog.materials.find((m) => m.id === v);
@@ -86,7 +93,7 @@ export function SettingsPanel({
     <div className="grid gap-4 sm:grid-cols-2">
       <Field
         label="Material"
-        info={premiumEnabled ? MATERIAL_INFO + PREMIUM_INFO : MATERIAL_INFO}
+        info={materialInfo}
         notice={sourceNotice("material", config, sourceConfig)}
       >
         {enabledMaterials.length > MAX_SEGMENTED_MATERIALS ? (
@@ -386,9 +393,9 @@ function ColourSelect({
   options,
   onChange,
 }: {
-  value: ColourId;
-  options: { id: ColourId; name: string; hex: string; stops?: readonly string[]; group?: string }[];
-  onChange: (id: ColourId) => void;
+  value: string;
+  options: { id: string; name: string; hex: string; stops?: readonly string[]; group?: string }[];
+  onChange: (id: string) => void;
 }) {
   const selected = options.find((o) => o.id === value);
   return (

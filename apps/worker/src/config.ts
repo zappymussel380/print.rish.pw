@@ -98,7 +98,8 @@ export function processProfile(layerHeightUm: number): string {
   }
 }
 
-/** Numakers' own slicer preset per material tier (scripts/overlay-numakers-profiles.py).
+/** Slicer preset per material tier (scripts/overlay-numakers-profiles.py):
+ *  Numakers' own for the PLA/PETG tiers, Orca's generic A1 preset for ABS/ASA.
  *  A Record, not a fallback branch, so a new material can never silently slice
  *  with another tier's temperatures and density. */
 const FILAMENT_PROFILES: Record<MaterialId, string> = {
@@ -107,6 +108,8 @@ const FILAMENT_PROFILES: Record<MaterialId, string> = {
   PLA_CF: "filament.pla-cf.json",
   PETG: "filament.petg.json",
   PETG_PREMIUM: "filament.petg-premium.json",
+  ABS: "filament.abs.json",
+  ASA: "filament.asa.json",
 };
 
 export function filamentProfile(material: MaterialId): string {

@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import {
   CATALOG,
-  colourName,
   formatDuration,
   formatGrams,
   formatPaise,
@@ -17,6 +16,7 @@ import { computePricing } from "@/lib/pricing-client";
 import { submitQuotation, type CheckoutError } from "@/lib/checkout-client";
 import { emailSuggestions, isProbablyEmail } from "@/lib/email-hint";
 import { sliceCacheKey, useQuoteStore } from "@/lib/quote-store";
+import { catalogColourName, useCatalog } from "@/lib/use-catalog";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
@@ -37,6 +37,7 @@ const normalizeMobile = (raw: string): string => {
 
 export function CheckoutForm() {
   const router = useRouter();
+  const catalog = useCatalog();
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
   const shipping = useQuoteStore((s) => s.shipping);
@@ -272,7 +273,7 @@ export function CheckoutForm() {
                       {fileName}
                     </p>
                     <p className="text-xs text-faint">
-                      {materialName(config.material)} · {colourName(config.colour)} ·{" "}
+                      {materialName(config.material)} · {catalogColourName(catalog, config.material, config.colour)} ·{" "}
                       {formatGrams(grams)}
                     </p>
                   </div>
