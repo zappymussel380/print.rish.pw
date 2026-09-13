@@ -65,6 +65,8 @@ export interface ParseSourceInput {
 export interface PreparedParseInput extends Omit<ParseSourceInput, "format"> {
   originalName: string;
   format: UploadFormat;
+  /** Build volume loose 3MF build items are packed onto. */
+  bedMm?: [number, number, number];
 }
 
 export interface PreparedParse {
@@ -326,6 +328,7 @@ export async function runPreparedParse(
         outDir,
         thumbSize: config.thumbSize,
         maxUploadBytes: config.maxUploadBytes,
+        ...(input.bedMm ? { bedMm: input.bedMm } : {}),
         ...(input.format === "step"
           ? {
               stepConvertBin: config.stepConvertBin,

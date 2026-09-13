@@ -230,3 +230,42 @@ model AppSetting {
   value     Json
   updatedAt DateTime @updatedAt
 }
+
+enum SlicerProfileStatus {
+  PENDING
+  TESTING
+  ACTIVE
+  FAILED
+  SKIPPED
+  RETIRED
+}
+
+/// An OrcaSlicer preset the owner uploaded in advanced mode (admin → Slicer
+/// profiles). One upload — a preset .json or an .orca_printer/.orca_filament
+/// bundle — is one batch, test-sliced as a whole by the worker before any of
+/// it goes live. A slot's live preset is its ACTIVE row; activating a new one
+/// retires the previous in the same transaction.
+model SlicerProfileUpload {
+  id           String              @id @default(uuid()) @db.Uuid
+  batchId      String              @db.Uuid
+  /// machine | process:<µm> | filament:<MaterialId>. Null until the worker
+  /// has read a bundled process preset's layer height.
+  slot         String?
+  originalName String
+  presetName   String
+  /// The preset exactly as uploaded.
+  raw          Json
+  /// Inherits chain resolved and cleaned (worker-written) — what slices load.
+  flattened    Json?
+  /// Build volume / nozzle / plate the rest of the app needs (worker-written).
+  meta         Json?
+  status       SlicerProfileStatus @default(PENDING)
+  error        String?
+  /// Grams of the test cube sliced with this preset live.
+  testGrams    Float?
+  createdAt    DateTime            @default(now())
+  checkedAt    DateTime?
+
+  @@index([status, slot])
+  @@index([batchId])
+}

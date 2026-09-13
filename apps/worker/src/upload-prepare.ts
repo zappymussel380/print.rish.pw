@@ -57,6 +57,8 @@ interface PrepareUploadInput {
   originalName: string;
   format: UploadFormat;
   sourceSha256: string;
+  /** Build volume to pack loose 3MF items onto; the installed printer's by default. */
+  bedMm?: [number, number, number];
 }
 
 function sha256(contents: Buffer): string {
@@ -137,7 +139,7 @@ export function prepareUploadModels(input: PrepareUploadInput): PreparedUpload {
   let models: PreparedUploadModel[];
 
   if (format === "3mf") {
-    const inspection = inspect3mfUpload(contents, { bedMm: BED_MM });
+    const inspection = inspect3mfUpload(contents, { bedMm: input.bedMm ?? BED_MM });
     if (inspection.plates.length > 1) {
       models = inspection.plates.map((plate) => {
         const sourceConfig =

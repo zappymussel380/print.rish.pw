@@ -24,6 +24,8 @@ export const parseChildParamsSchema = z.discriminatedUnion("mode", [
       outDir: z.string().min(1),
       thumbSize: z.number().int().min(16).max(4096),
       maxUploadBytes: z.number().int().positive(),
+      /** Printer build volume in mm; the child's own printer spec otherwise. */
+      bedMm: z.tuple([z.number().positive().max(2000), z.number().positive().max(2000), z.number().positive().max(2000)]).optional(),
       /** STEP→STL converter binary; orchestrator-controlled, defaults in-child. */
       stepConvertBin: z.string().min(1).optional(),
       stepConvertTimeoutMs: z.number().int().positive().optional(),

@@ -71,6 +71,11 @@ export const config = {
   maxModelsPerSession: int("MAX_MODELS_PER_SESSION", 20),
   storageReserveBytes: int("STORAGE_RESERVE_MB", 2048) * 1024 * 1024,
   slicerVersion: str("ORCA_VERSION", "2.4.1"),
+  /** OrcaSlicer's bundled presets — what an uploaded preset's `inherits` names. */
+  orcaProfilesRoot: str("ORCA_PROFILES_ROOT", "/opt/orca/resources/profiles"),
+  /** Advanced mode (self-host installer): the owner uploads their own presets
+   *  in the admin dashboard, and slices use them once a test slice passes. */
+  advancedProfiles: process.env.ADVANCED_PROFILES === "1",
   thumbSize: Math.min(int("THUMB_SIZE", 512), 1024),
   /** Hours to keep uploads never attached to a submitted quotation. */
   uploadRetentionHours: int("UPLOAD_RETENTION_HOURS", 48),
@@ -138,3 +143,19 @@ export const printerSpec: PrinterProfileSpec = (() => {
     return DEFAULT_PRINTER_SPEC;
   }
 })();
+
+/** One complete set of slicer profiles: the directory holding them, the
+ *  machine file's name in it, and the printer they describe. */
+export interface ProfileSet {
+  dir: string;
+  machineFile: string;
+  spec: PrinterProfileSpec;
+}
+
+/** The installer-generated (or committed A1) set, with no uploads applied —
+ *  what every slice uses unless advanced mode has live uploads. */
+export const BASE_PROFILE_SET: ProfileSet = {
+  dir: config.profilesDir,
+  machineFile: MACHINE_PROFILE,
+  spec: printerSpec,
+};

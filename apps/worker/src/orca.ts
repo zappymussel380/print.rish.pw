@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { extractZipEntry, PREARRANGED_PLATE_STL_HEADER } from "@print/geometry";
 import type { SliceSettings } from "@print/shared";
-import { MACHINE_PROFILE, config, filamentProfile, printerSpec, processProfile } from "./config.js";
+import { BASE_PROFILE_SET, config, filamentProfile, processProfile, type ProfileSet } from "./config.js";
 import { runStubSlice } from "./stub-slicer.js";
 
 export interface SliceOutcome {
@@ -69,9 +69,9 @@ export function parseOrcaProgressLine(line: string): OrcaProgress | null {
 /** Build the per-job process profile: the flattened base for the chosen layer
  *  height with the customer's infill/support overrides merged in. The Orca CLI
  *  does NOT resolve `inherits`, so we always hand it a complete profile. */
-async function writeJobProcess(workDir: string, settings: SliceSettings): Promise<string> {
+async function writeJobProcess(workDir: string, settings: SliceSettings, set: ProfileSet): Promise<string> {
   const base = JSON.parse(
-    await readFile(join(config.profilesDir, processProfile(settings.layerHeightUm)), "utf8"),
+    await readFile(join(set.dir, processProfile(settings.layerHeightUm)), "utf8"),
   ) as Record<string, unknown>;
 
   base.name = "job-process";
@@ -79,7 +79,7 @@ async function writeJobProcess(workDir: string, settings: SliceSettings): Promis
   // The flattened profiles do not carry a bed selection, and Orca defaults to
   // Cool Plate — invalid for PETG. Use the plate the printer spec picked for
   // this material (one its filament profile has a bed temperature for).
-  base.curr_bed_type = printerSpec.plates[settings.material];
+  base.curr_bed_type = set.spec.plates[settings.material];
 
   if (settings.supports === "off") {
     base.enable_support = "0";
@@ -328,6 +328,8 @@ export async function runSlice(
   workDir: string,
   identity: SlicerIdentity,
   onProgress?: (progress: OrcaProgress) => void,
+  /** Profiles to slice with; advanced mode passes the owner's live set. */
+  set: ProfileSet = BASE_PROFILE_SET,
 ): Promise<SliceOutcome> {
   onProgress?.({ percent: 1, message: "Preparing model" });
   await mkdir(config.workRoot, { recursive: true, mode: 0o711 });
@@ -369,11 +371,11 @@ export async function runSlice(
     return runStubSlice(onProgress);
   }
 
-  const jobProcess = await writeJobProcess(workDir, settings);
+  const jobProcess = await writeJobProcess(workDir, settings, set);
   const profiles: OrcaSliceProfiles = {
     jobProcess,
-    machine: join(config.profilesDir, MACHINE_PROFILE),
-    filament: join(config.profilesDir, filamentProfile(settings.material)),
+    machine: join(set.dir, set.machineFile),
+    filament: join(set.dir, filamentProfile(settings.material)),
     identity,
   };
   const prearrangedPlate = await isPrearrangedPlateStl(stagedPath);
