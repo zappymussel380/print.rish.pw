@@ -37,6 +37,7 @@ function pageCount(pdf: Buffer): number {
 
 function fixture(overrides: Partial<QuotationPdfData> = {}): QuotationPdfData {
   return {
+    brandName: "print.rish.pw",
     number: "RSP-2026-0042",
     createdAt: new Date("2026-07-15T10:00:00Z"),
     customer: {

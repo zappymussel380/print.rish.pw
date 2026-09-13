@@ -15,7 +15,7 @@ import {
   QuotationAccessBridge,
 } from "@/components/quote/quotation-access-bridge";
 import { getQuotationAccessCookie, quotationAccessMatches } from "@/lib/quotation-access";
-import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
+import { getSiteProfile, profileWhatsappUrl } from "@/lib/site-profile";
 
 export const metadata: Metadata = {
   title: "Quotation confirmed",
@@ -67,9 +67,11 @@ export default async function ConfirmationPage({
       quantity: i.quantity,
     })),
   );
-  const whatsappUrl = siteConfig.whatsappNumber
+  const profile = await getSiteProfile();
+  const whatsappUrl = profile.contact.whatsappNumber
     ? buildWhatsAppUrl({
-        number: siteConfig.whatsappNumber,
+        number: profile.contact.whatsappNumber,
+        brandName: profile.brandName,
         quotationNumber: quotation.number,
         customerName: quotation.customerName,
         materialsSummary,
@@ -78,7 +80,7 @@ export default async function ConfirmationPage({
         shippingPincode: quotation.shippingPincode,
         notes: quotation.notes,
       })
-    : whatsappChatUrl();
+    : profileWhatsappUrl(profile);
 
   const pdfUrl = `/api/quotations/${quotation.number}/pdf`;
 

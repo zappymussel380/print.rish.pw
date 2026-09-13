@@ -74,6 +74,7 @@ describe("settingsKey", () => {
 describe("buildWhatsAppUrl", () => {
   const input = {
     number: "+91 98765-43210",
+    brandName: "print.rish.pw",
     quotationNumber: "RSP-2026-0042",
     customerName: "Asha",
     materialsSummary: "2× PLA (black)",
@@ -89,6 +90,13 @@ describe("buildWhatsAppUrl", () => {
     const text = decodeURIComponent(url.split("?text=")[1]!);
     expect(text).toContain("RSP-2026-0042");
     expect(text).toContain("₹450.50");
+  });
+
+  it("names the shop the quotation was submitted on", () => {
+    expect(buildWhatsAppMessage(input)).toContain("RSP-2026-0042* on print.rish.pw.");
+    expect(buildWhatsAppMessage({ ...input, brandName: "Acme Prints" })).toContain(
+      "on Acme Prints.",
+    );
   });
 
   it("states that shipping is excluded when the quote has none", () => {

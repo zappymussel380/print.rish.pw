@@ -7,6 +7,8 @@ import {
   type CostItem,
   type MaterialFamily,
   type MaterialId,
+  type InternalCostBasis,
+  toPricingInput,
   toPublicCatalog,
 } from "@print/shared";
 import {
@@ -15,6 +17,8 @@ import {
   type QuotationRow,
 } from "@/components/admin/admin-dashboard";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getPricing } from "@/lib/pricing-settings";
+import { getStoredSiteProfile } from "@/lib/site-profile";
 import { getRecentPrints } from "@/lib/recent-prints";
 import { isAdmin } from "@/lib/session";
 
@@ -36,6 +40,9 @@ export default async function AdminPage() {
     include: { items: true },
   });
 
+  const pricing = await getPricing();
+  const costBasis = pricing.costBasis;
+
   const rows: QuotationRow[] = quotations.map((q) => ({
     id: q.id,
     number: q.number,
@@ -53,18 +60,22 @@ export default async function AdminPage() {
     // Profit = everything charged (incl. the ₹150 setup fee, pure margin) minus
     // our production cost. Recomputed from stored grams/seconds and each line's
     // material + colour, so every order reflects the current spool costs.
-    profitPaise: q.totalPaise - estimateOrderCostPaise(orderCostItems(q)),
+    profitPaise: q.totalPaise - estimateOrderCostPaise(orderCostItems(q), costBasis),
   }));
 
-  const stats = computeStats(quotations);
+  const stats = computeStats(quotations, costBasis);
   const catalog = toPublicCatalog(await getCatalogAvailability());
   const recentPrints = await getRecentPrints();
+  const siteProfile = await getStoredSiteProfile().catch(() => null);
 
   return (
     <AdminDashboard
       quotations={rows}
       stats={stats}
       catalog={catalog}
+      pricing={toPricingInput(pricing)}
+      rates={pricing.catalog}
+      siteProfile={siteProfile}
       recentPrints={recentPrints}
     />
   );
@@ -83,7 +94,7 @@ function orderCostItems(q: QuotationWithItems): CostItem[] {
   }));
 }
 
-function computeStats(quotations: QuotationWithItems[]): AdminStats {
+function computeStats(quotations: QuotationWithItems[], costBasis: InternalCostBasis): AdminStats {
   const statusCounts: Record<string, number> = {};
   let revenuePaise = 0;
   let profitPaise = 0;
@@ -95,7 +106,7 @@ function computeStats(quotations: QuotationWithItems[]): AdminStats {
     statusCounts[q.status] = (statusCounts[q.status] ?? 0) + 1;
     if (q.status === "CANCELLED") continue;
     revenuePaise += q.totalPaise;
-    profitPaise += q.totalPaise - estimateOrderCostPaise(orderCostItems(q));
+    profitPaise += q.totalPaise - estimateOrderCostPaise(orderCostItems(q), costBasis);
     billableCount += 1;
     for (const item of q.items) {
       const grams = Number(item.unitGrams) * item.quantity;

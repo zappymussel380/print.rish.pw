@@ -1,7 +1,10 @@
 import { ArrowRight, ExternalLink, FileUp, IndianRupee, ScanEye, Send } from "lucide-react";
 import Link from "next/link";
-import { CATALOG, formatPaise } from "@print/shared";
+import { formatPaise, listJoin, materialFamily, materialName, MATERIAL_IDS } from "@print/shared";
 import { RecentPrintsGrid } from "@/components/showcase/recent-prints-grid";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getPricing } from "@/lib/pricing-settings";
+import { getSiteProfile } from "@/lib/site-profile";
 import { HOMEPAGE_MODEL_SOURCES } from "@/lib/model-sources";
 import { getRecentPrints } from "@/lib/recent-prints";
 
@@ -35,22 +38,41 @@ export const dynamic = "force-dynamic";
 const HOMEPAGE_PRINT_COUNT = 6;
 
 export default async function HomePage() {
-  const recentPrints = (await getRecentPrints()).slice(0, HOMEPAGE_PRINT_COUNT);
+  const [allPrints, profile, availability, { catalog }] = await Promise.all([
+    getRecentPrints(),
+    getSiteProfile(),
+    getCatalogAvailability(),
+    getPricing(),
+  ]);
+  const recentPrints = allPrints.slice(0, HOMEPAGE_PRINT_COUNT);
+  const offered = MATERIAL_IDS.filter((m) => availability.materials[m]);
+  const families = [...new Set(offered.map(materialFamily))];
+  // The headline rate is the cheapest material actually on sale.
+  const cheapest = [...offered].sort(
+    (a, b) => catalog.materials[a].sellPerGramPaise - catalog.materials[b].sellPerGramPaise,
+  )[0];
+  const colourCount = new Set(offered.flatMap((m) => availability.colours[m])).size;
 
   return (
     <div className="mx-auto max-w-6xl px-5">
       {/* Hero */}
       <section className="py-20 sm:py-28">
-        <p className="eyebrow">3D printing · Guwahati</p>
+        <p className="eyebrow">{profile.city ? `3D printing · ${profile.city}` : "3D printing"}</p>
         <h1 className="mt-4 max-w-3xl text-[clamp(2.6rem,6.5vw,5.5rem)] font-[600] leading-[0.95] tracking-[-0.05em]">
           Upload a model.
           <br />
           <span className="text-accent">Know the price.</span>
         </h1>
         <p className="mt-6 max-w-xl text-[0.95rem] leading-7 text-muted">
-          Instant quotations for FDM 3D printing in PLA and PETG — priced from real slicing data,
-          not rough estimates. Setup fee {formatPaise(CATALOG.setupFeePaise)}, PLA from{" "}
-          {formatPaise(CATALOG.materials.PLA.sellPerGramPaise)}/g.
+          Instant quotations for FDM 3D printing{families.length > 0 ? ` in ${listJoin(families)}` : ""} —
+          priced from real slicing data, not rough estimates. Setup fee{" "}
+          {formatPaise(catalog.setupFeePaise)}
+          {cheapest ? (
+            <>
+              , {materialName(cheapest)} from {formatPaise(catalog.materials[cheapest].sellPerGramPaise)}/g
+            </>
+          ) : null}
+          .
         </p>
         <div className="mt-9 flex flex-wrap items-center gap-4">
           <Link href="/quote" className="btn-pill">
@@ -168,10 +190,16 @@ export default async function HomePage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <span className="chip chip-accent">PLA {formatPaise(CATALOG.materials.PLA.sellPerGramPaise)}/g</span>
-              <span className="chip chip-accent">PETG {formatPaise(CATALOG.materials.PETG.sellPerGramPaise)}/g</span>
-              <span className="chip">Black</span>
-              <span className="chip">White</span>
+              {offered.map((m) => (
+                <span key={m} className="chip chip-accent">
+                  {materialName(m)} {formatPaise(catalog.materials[m].sellPerGramPaise)}/g
+                </span>
+              ))}
+              {colourCount > 0 ? (
+                <span className="chip">
+                  {colourCount} colour{colourCount === 1 ? "" : "s"}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>

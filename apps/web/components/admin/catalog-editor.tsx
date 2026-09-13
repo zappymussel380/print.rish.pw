@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Pencil, Search, Trash2, X } from "lucide-react";
 import {
-  CATALOG,
   CUSTOM_COLOUR_GROUP,
   CUSTOM_COLOUR_NAME_MAX,
   HEX_COLOUR_RE,
@@ -13,6 +12,7 @@ import {
   groupColours,
   newCustomColourId,
   swatchBackground,
+  type Catalog,
   type CustomColour,
   type MaterialId,
   type PublicColour,
@@ -68,7 +68,13 @@ function editorColours(m: PublicMaterial, customs: readonly CustomColour[]): Pub
  *  ASA have). Saves the whole availability blob at once. Each material folds
  *  away (switched-off tiers start folded), and the filter narrows every tier at
  *  once — All/None then act on just the matching colours, e.g. "silk" → All. */
-export function CatalogEditor({ catalog }: { catalog: { materials: PublicMaterial[] } }) {
+export function CatalogEditor({
+  catalog,
+  rates,
+}: {
+  catalog: { materials: PublicMaterial[] };
+  rates: Catalog;
+}) {
   const router = useRouter();
   const [state, setState] = useState<CatalogEditState>(() => toEditState(catalog));
   const [dirty, setDirty] = useState(false);
@@ -201,7 +207,7 @@ export function CatalogEditor({ catalog }: { catalog: { materials: PublicMateria
                     />
                     {m.name}
                     <span className="text-xs font-[450] text-faint">
-                      {formatPaise(CATALOG.materials[m.id].sellPerGramPaise)}/g ·{" "}
+                      {formatPaise(rates.materials[m.id].sellPerGramPaise)}/g ·{" "}
                       {enabledCount}/{all.length} colours
                     </span>
                   </label>

@@ -34,6 +34,29 @@ export type FilamentLine =
   | "abs"
   | "asa";
 
+/** How each line is named in the admin rates editor. A Record, so a new line
+ *  cannot ship without a label. */
+export const FILAMENT_LINE_LABELS: Record<FilamentLine, string> = {
+  plaPlus: "PLA+ (basic PLA colours)",
+  pla: "PLA (Ivory)",
+  matte: "Matte PLA",
+  silk: "Silk PLA",
+  silkClearance: "Silk PLA (clearance colours)",
+  dualTriSilk: "Dual / tri-colour silk",
+  metallic: "Metallic PLA",
+  stone: "Stone PLA",
+  starlight: "Starlight PLA",
+  glow: "Glow PLA",
+  wood: "Wood PLA",
+  plaCf: "PLA-CF",
+  petgHs: "PETG HS",
+  translucent: "Translucent PETG",
+  translucentGlitter: "Glitter PETG",
+  petgCf: "PETG-CF",
+  abs: "ABS",
+  asa: "ASA",
+};
+
 export interface InternalCostBasis {
   /** Supplier list price per 1 kg spool, in whole rupees, before GST. */
   spoolListPriceInr: Record<FilamentLine, number>;

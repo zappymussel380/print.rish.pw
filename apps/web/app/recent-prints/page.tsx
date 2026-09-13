@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Recent prints",
   description:
-    "Photos of real parts printed on our Bambu Lab A1 in PLA and PETG — what the machine actually produces, not renders.",
+    "Photos of real parts printed on our Bambu Lab A1 — what the machine actually produces, not renders.",
 };
 
 export default async function RecentPrintsPage() {

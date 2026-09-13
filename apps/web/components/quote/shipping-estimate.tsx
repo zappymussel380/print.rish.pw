@@ -4,6 +4,8 @@ import { useId, useRef, useState } from "react";
 import { Loader2, Truck } from "lucide-react";
 import { formatPaise, settingsKey } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
+import { useCatalog } from "@/lib/use-catalog";
+import { useSite } from "@/lib/site-context";
 import { sliceCacheKey, useQuoteStore } from "@/lib/quote-store";
 
 interface Estimate {
@@ -24,7 +26,9 @@ export function ShippingEstimate() {
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
   const setShipping = useQuoteStore((s) => s.setShipping);
-  const { breakdown, ingesting } = computePricing(models, slices);
+  const { pricing } = useCatalog();
+  const { city } = useSite();
+  const { breakdown, ingesting } = computePricing(models, slices, pricing);
 
   const [pincode, setPincode] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -135,7 +139,7 @@ export function ShippingEstimate() {
       </div>
       <p className="mt-1.5 text-xs leading-5 text-muted">
         Your quote is complete without this &mdash; skip straight to Continue if you like. Enter a
-        pincode only to preview prepaid shipping from Guwahati for your parts + 200&nbsp;g of
+        pincode only to preview prepaid shipping{city ? ` from ${city}` : ""} for your parts + 200&nbsp;g of
         packaging. Final shipping is confirmed over WhatsApp either way.
       </p>
 

@@ -1,20 +1,27 @@
-import { MessageCircle } from "lucide-react";
+import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import { ContactForm } from "@/components/contact/contact-form";
 import { PageIntro } from "@/components/shell/page-intro";
-import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
+import { siteConfig } from "@/lib/site-config";
+import { getSiteProfile, profileWhatsappUrl } from "@/lib/site-profile";
 
-export const metadata: Metadata = {
-  title: "Contact",
-  description: "Reach print.rish.pw by WhatsApp or the contact form. Based in Guwahati, India.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { brandName, city } = await getSiteProfile();
+  return {
+    title: "Contact",
+    description: `Reach ${brandName} by WhatsApp or the contact form.${city ? ` Based in ${city}, India.` : ""}`,
+  };
+}
 
 // Rendered per request so runtime contact links and embeds are available
 // (they aren't available at Docker build time, when static pages are baked).
 export const dynamic = "force-dynamic";
 
-export default function ContactPage() {
-  const waUrl = whatsappChatUrl("Hi! I have a question about 3D printing.");
+export default async function ContactPage() {
+  const profile = await getSiteProfile();
+  const waUrl = profileWhatsappUrl(profile, "Hi! I have a question about 3D printing.");
+  const { email, phone, address } = profile.contact;
+  const phoneHref = phone.replace(/[^0-9+]/g, "");
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
@@ -42,6 +49,34 @@ export default function ContactPage() {
             )}
           </div>
         </div>
+
+        {email || phone || address ? (
+          <div className="tile flex flex-col gap-3 p-6 text-sm sm:col-span-2">
+            <h2 className="text-lg font-[650]">Other ways to reach us</h2>
+            {email ? (
+              <p className="flex items-center gap-2.5">
+                <Mail strokeWidth={1.65} className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                <a href={`mailto:${email}`} className="underline decoration-accent underline-offset-4 hover:text-accent">
+                  {email}
+                </a>
+              </p>
+            ) : null}
+            {phone ? (
+              <p className="flex items-center gap-2.5">
+                <Phone strokeWidth={1.65} className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                <a href={`tel:${phoneHref}`} className="underline decoration-accent underline-offset-4 hover:text-accent">
+                  {phone}
+                </a>
+              </p>
+            ) : null}
+            {address ? (
+              <p className="flex items-start gap-2.5">
+                <MapPin strokeWidth={1.65} className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
+                <span className="whitespace-pre-line text-muted">{address}</span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <ContactForm />
       </div>

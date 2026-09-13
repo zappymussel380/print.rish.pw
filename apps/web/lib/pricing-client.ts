@@ -1,5 +1,5 @@
 import {
-  CATALOG,
+  type Catalog,
   type QuoteBreakdown,
   type QuoteLineInput,
   estimateCompletionDate,
@@ -26,6 +26,7 @@ export interface LivePricing {
 export function computePricing(
   models: QuoteModel[],
   slices: Record<string, SliceState>,
+  catalog: Catalog,
 ): LivePricing {
   const inputs: QuoteLineInput[] = [];
   let ingesting = 0;
@@ -54,7 +55,7 @@ export function computePricing(
     return { breakdown: null, ingesting, pending, failed, priced: 0, completion: null };
   }
 
-  const breakdown = priceQuote(inputs, CATALOG);
-  const completion = estimateCompletionDate(breakdown.totals.printSeconds, CATALOG.leadTime);
+  const breakdown = priceQuote(inputs, catalog);
+  const completion = estimateCompletionDate(breakdown.totals.printSeconds, catalog.leadTime);
   return { breakdown, ingesting, pending, failed, priced: inputs.length, completion };
 }

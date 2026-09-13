@@ -4,7 +4,6 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertTriangle, Box, Clock, IndianRupee, Loader2, Trash2, Weight } from "lucide-react";
 import {
-  CATALOG,
   formatDuration,
   formatGrams,
   formatPaise,
@@ -21,6 +20,7 @@ import {
 import { deleteModel, uploadQueueMessage } from "@/lib/upload-client";
 import { useSliceSync } from "@/hooks/use-slice-sync";
 import { useUploadSync } from "@/hooks/use-upload-sync";
+import { useCatalog } from "@/lib/use-catalog";
 import { SettingsPanel } from "./settings-panel";
 
 const ModelViewer = dynamic(() => import("./model-viewer"), {
@@ -38,6 +38,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
 
   const remove = useQuoteStore((s) => s.remove);
   const slices = useQuoteStore((s) => s.slices);
+  const { pricing } = useCatalog();
   const [removing, setRemoving] = useState(false);
   const [view3d, setView3d] = useState(false);
   const [wireframe, setWireframe] = useState(false);
@@ -51,7 +52,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
 
   const line =
     slice?.status === "done" && slice.result
-      ? priceLine({ modelId: server!.id, config: model.config, stats: slice.result }, CATALOG)
+      ? priceLine({ modelId: server!.id, config: model.config, stats: slice.result }, pricing)
       : null;
 
   const onRemove = async () => {

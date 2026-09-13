@@ -1,106 +1,113 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  MATERIAL_GUIDE,
+  MATERIAL_GUIDE_ROWS,
+  listJoin,
+  materialName,
+  type MaterialId,
+} from "@print/shared";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getPricing } from "@/lib/pricing-settings";
+import { getSiteProfile } from "@/lib/site-profile";
 
-export const metadata: Metadata = {
-  title: "Materials",
-  description: "PLA vs PETG compared: strength, flexibility, temperature and UV resistance, print quality and what to use each for.",
-};
+/** "PLA or PETG", "PLA, PETG or ABS". */
+function orJoin(items: readonly string[]): string {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+}
 
-const rows: { label: string; pla: string; petg: string }[] = [
-  {
-    label: "Strength",
-    pla: "Stiff and strong in static loads; can be brittle under impact.",
-    petg: "Slightly less stiff but much tougher — absorbs impacts without cracking.",
-  },
-  {
-    label: "Flexibility",
-    pla: "Low — snaps rather than bends.",
-    petg: "Moderate — flexes and springs back, good for clips and snap-fits.",
-  },
-  {
-    label: "Temperature resistance",
-    pla: "Softens around 55–60 °C. Keep out of parked cars and direct sun.",
-    petg: "Comfortable up to ~75–80 °C. Fine for warm environments and enclosures.",
-  },
-  {
-    label: "UV / outdoor resistance",
-    pla: "Degrades and fades with prolonged sun exposure.",
-    petg: "Good UV and moisture resistance — the default for outdoor parts.",
-  },
-  {
-    label: "Print quality",
-    pla: "Excellent — sharp corners, clean overhangs, the best-looking surface finish.",
-    petg: "Very good, slightly glossier; fine details are a touch softer than PLA.",
-  },
-  {
-    label: "Best for",
-    pla: "Prototypes, figurines, architectural models, jigs, indoor decorative parts.",
-    petg: "Functional parts, brackets, enclosures, planters, anything outdoors or load-bearing.",
-  },
-];
+export async function generateMetadata(): Promise<Metadata> {
+  const { materialsPage } = await getSiteProfile();
+  return {
+    title: "Materials",
+    description: `${materialsPage.length === 2 ? materialsPage.map(materialName).join(" vs ") : listJoin(materialsPage.map(materialName))} compared: strength, flexibility, temperature and UV resistance, print quality and what to use each for.`,
+  };
+}
 
-export default function MaterialsPage() {
+/** The shop chooses which materials this page compares (admin → Site). */
+export default async function MaterialsPage() {
+  const [{ materialsPage }, { catalog }] = await Promise.all([getSiteProfile(), getPricing()]);
+  const shown: MaterialId[] = materialsPage;
+  const names = shown.map(materialName);
+  const printer = catalog.printers[catalog.defaultPrinterId]!.name;
+  const pair = shown.length === 2;
+
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
       <PageIntro
         eyebrow="Materials"
-        title="PLA or PETG?"
-        lede="Both print beautifully on the Bambu Lab A1 in black or white. The right choice depends on where the part lives and what it has to survive."
+        title={shown.length === 1 ? `About ${names[0]}` : `${orJoin(names)}?`}
+        lede={
+          shown.length === 1
+            ? `What ${names[0]} is good at on the ${printer}, and where it struggles.`
+            : `${pair ? "Both" : "All of them"} print beautifully on the ${printer}. The right choice depends on where the part lives and what it has to survive.`
+        }
       />
 
       <div className="mx-auto mt-10 max-w-4xl md:hidden">
         <div className="border-y border-line">
-          {rows.map((row) => (
-            <article key={row.label} className="border-b border-line py-5 last:border-b-0">
+          {MATERIAL_GUIDE_ROWS.map((row) => (
+            <article key={row.key} className="border-b border-line py-5 last:border-b-0">
               <h2 className="text-sm font-[700] text-text">{row.label}</h2>
-              <div className="mt-4 grid gap-4 min-[520px]:grid-cols-2">
-                <section className="min-w-0">
-                  <h3 className="chip chip-accent w-fit">PLA</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted">{row.pla}</p>
-                </section>
-                <section className="min-w-0 border-t border-line pt-4 min-[520px]:border-t-0 min-[520px]:border-l min-[520px]:pt-0 min-[520px]:pl-4">
-                  <h3 className="chip chip-accent w-fit">PETG</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted">{row.petg}</p>
-                </section>
+              {/* Two materials sit side by side on wider phones; more stack. */}
+              <div className={`mt-4 grid gap-4 ${pair ? "min-[520px]:grid-cols-2" : ""}`}>
+                {shown.map((m, i) => (
+                  <section
+                    key={m}
+                    className={`min-w-0 ${
+                      i === 0
+                        ? ""
+                        : pair
+                          ? "border-t border-line pt-4 min-[520px]:border-t-0 min-[520px]:border-l min-[520px]:pt-0 min-[520px]:pl-4"
+                          : "border-t border-line pt-4"
+                    }`}
+                  >
+                    <h3 className="chip chip-accent w-fit">{materialName(m)}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted">{MATERIAL_GUIDE[m][row.key]}</p>
+                  </section>
+                ))}
               </div>
             </article>
           ))}
         </div>
       </div>
 
-      <div className="mx-auto mt-12 hidden max-w-4xl overflow-x-auto md:block">
-        <table className="w-full min-w-[36rem] border-collapse text-sm">
-          <caption className="sr-only">Comparison of PLA and PETG properties</caption>
+      {/* The original two-column comparison keeps its width; more columns get
+          the page's full width and, past that, scroll. */}
+      <div
+        className={`mx-auto mt-12 hidden overflow-x-auto md:block ${pair || shown.length === 1 ? "max-w-4xl" : "max-w-6xl"}`}
+      >
+        <table
+          className="w-full border-collapse text-sm"
+          style={{ minWidth: `${Math.max(36, 11 + shown.length * 11.5)}rem` }}
+        >
+          <caption className="sr-only">Comparison of {listJoin(names)} properties</caption>
           <thead>
             <tr>
               <th scope="col" className="w-44 pb-4 text-left align-bottom">
                 <span className="eyebrow text-[0.7rem]">Property</span>
               </th>
-              <th scope="col" className="tile rounded-b-none border-b-0 p-4 text-left">
-                <span className="text-base font-[650]">PLA</span>
-                <span className="mt-1 block text-xs font-[450] text-muted">Polylactic acid</span>
-              </th>
-              <th scope="col" className="tile rounded-b-none border-b-0 p-4 text-left">
-                <span className="text-base font-[650]">PETG</span>
-                <span className="mt-1 block text-xs font-[450] text-muted">
-                  Glycol-modified PET
-                </span>
-              </th>
+              {shown.map((m) => (
+                <th key={m} scope="col" className="tile rounded-b-none border-b-0 p-4 text-left">
+                  <span className="text-base font-[650]">{materialName(m)}</span>
+                  <span className="mt-1 block text-xs font-[450] text-muted">
+                    {MATERIAL_GUIDE[m].subtitle}
+                  </span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.label} className="border-t border-line">
+            {MATERIAL_GUIDE_ROWS.map((row) => (
+              <tr key={row.key} className="border-t border-line">
                 <th scope="row" className="py-4 pr-4 text-left align-top font-[650] text-text">
                   {row.label}
                 </th>
-                <td className="border-x border-line bg-surface p-4 align-top leading-6 text-muted">
-                  {row.pla}
-                </td>
-                <td className="border-x border-line bg-surface p-4 align-top leading-6 text-muted">
-                  {row.petg}
-                </td>
+                {shown.map((m) => (
+                  <td key={m} className="border-x border-line bg-surface p-4 align-top leading-6 text-muted">
+                    {MATERIAL_GUIDE[m][row.key]}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -109,10 +116,15 @@ export default function MaterialsPage() {
 
       <div className="mx-auto mt-12 max-w-4xl text-sm leading-7 text-muted">
         <p>
-          Rule of thumb: if it's decorative or a prototype, choose <strong className="text-text">PLA</strong>.
-          If it clamps, carries load, lives outside or gets warm, spend the little extra on{" "}
-          <strong className="text-text">PETG</strong>. Still unsure? Mention what the part is for in
-          the notes when you submit your quote — we'll flag it if the material looks wrong.
+          {shown.includes("PLA") && shown.includes("PETG") ? (
+            <>
+              Rule of thumb: if it&apos;s decorative or a prototype, choose{" "}
+              <strong className="text-text">PLA</strong>. If it clamps, carries load, lives outside or
+              gets warm, spend the little extra on <strong className="text-text">PETG</strong>.{" "}
+            </>
+          ) : null}
+          Still unsure? Mention what the part is for in the notes when you submit your quote —
+          we&apos;ll flag it if the material looks wrong.
         </p>
         <Link href="/quote" className="btn-pill mt-8">
           Upload a model
