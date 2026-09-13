@@ -593,6 +593,71 @@ set_admin_password() {
   ok "Admin password set"
 }
 
+# Postgres only reads POSTGRES_PASSWORD when it creates its database. The
+# project name is pinned ("print"), so a database left by an earlier install —
+# even one whose folder was deleted — is picked up again, still locked with
+# the password from that install's .env, and migrate fails with P1000. Find
+# that case before starting and let the owner keep the data or delete it.
+# The scripts below run inside the postgres container, so the credentials come
+# from its environment (this .env) and never appear on a command line.
+# shellcheck disable=SC2016
+PG_OWN_PASSWORD_WORKS='PGPASSWORD="$POSTGRES_PASSWORD" psql -X -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "select 1"'
+# shellcheck disable=SC2016
+PG_SOCKET_WORKS='psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "select 1"'
+# shellcheck disable=SC2016
+PG_SET_OWN_PASSWORD='psql -X -q -v ON_ERROR_STOP=1 -v owner="$POSTGRES_USER" -v pw="$POSTGRES_PASSWORD" -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+valid_existing_data() { [[ "$1" =~ ^(1|2|3|keep|delete|quit)$ ]]; }
+
+reconcile_database() {
+  local vol created waited=0 health typed
+  vol=$(docker volume ls -q --filter label=com.docker.compose.project=print \
+    --filter label=com.docker.compose.volume=pgdata 2>/dev/null | head -n1 || true)
+  [ -n "$vol" ] || return 0
+
+  dc up -d postgres </dev/null >/dev/null 2>&1 || die "The database didn't start. See: cd $ROOT_DIR && docker compose logs --tail 80 postgres"
+  while true; do
+    health=$(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q postgres 2>/dev/null)" 2>/dev/null || echo starting)
+    [ "$health" = healthy ] && break
+    [ "$waited" -ge 120 ] && die "The database didn't start. See: cd $ROOT_DIR && docker compose logs --tail 80 postgres"
+    sleep 3; waited=$((waited + 3))
+  done
+  # Over the network, as migrate connects: loopback connections are trusted
+  # and would pass whatever the password.
+  dc exec -T postgres sh -c "$PG_OWN_PASSWORD_WORKS" </dev/null >/dev/null 2>&1 && return 0
+
+  dc exec -T postgres sh -c "$PG_SOCKET_WORKS" </dev/null >/dev/null 2>&1 \
+    || die "This server has a database from an earlier install ($vol) that this installer can't use.
+  It doesn't have the '${CFG[POSTGRES_USER]}' user or the '${CFG[POSTGRES_DB]}' database.
+  To delete it and start fresh: cd $ROOT_DIR && docker compose down -v   (this deletes its data)"
+
+  created=$(docker volume inspect -f '{{.CreatedAt}}' "$vol" 2>/dev/null || true)
+  created=${created:0:16}
+  head_line "Database from an earlier install"
+  warn "This server still has the database of an earlier install${created:+ (created ${created/T/ })}."
+  hint "Docker keeps it after the install folder is deleted, but its password was in that"
+  hint "install's .env, so this one can't open it."
+  say "   1) Keep it — switch it to this install's password  ${C_DIM}(its quotes and uploads stay; the shop settings you entered replace its old ones)${C_OFF}"
+  say "   2) Delete it and start with an empty database  ${C_DIM}(also deletes its uploaded models and PDFs)${C_OFF}"
+  say "   3) Quit without changing anything"
+  ask EXISTING_DATA "Choose 1–3" 1 valid_existing_data "Please answer 1, 2 or 3."
+  case "${ANS[EXISTING_DATA]}" in
+    1|keep)
+      printf '%s\n' "ALTER ROLE :\"owner\" WITH PASSWORD :'pw';" \
+        | dc exec -T postgres sh -c "$PG_SET_OWN_PASSWORD" >/dev/null \
+        || die "Could not change the old database's password."
+      dc exec -T postgres sh -c "$PG_OWN_PASSWORD_WORKS" </dev/null >/dev/null 2>&1 \
+        || die "The old database still refuses this install's password."
+      ok "Kept the earlier database; it now uses this install's password" ;;
+    2|delete)
+      typed="${PS_CONFIRM_DELETE_TEXT:-}"
+      unattended || read -r -p "Type DELETE to confirm: " typed </dev/tty
+      [ "$typed" = "DELETE" ] || die "Nothing was deleted. Run this again to choose."
+      dc --profile tools down -v --remove-orphans
+      ok "Deleted the earlier install's data" ;;
+    *) die "Nothing was changed. Run this again to choose." ;;
+  esac
+}
+
 start_stack() {
   head_line "Starting"
   dc up -d --remove-orphans || die "Starting failed. See: cd $ROOT_DIR && docker compose logs --tail 80"
@@ -695,17 +760,26 @@ uninstall() {
   dc --profile tools down --remove-orphans
   ok "Containers removed (your data is still there)"
   warn "The database, uploaded models and quotation PDFs are kept in Docker volumes."
+  local deleted=0
   if confirm "Delete ALL of that data permanently?" N DELETE_DATA; then
     local typed="${PS_CONFIRM_DELETE_TEXT:-}"
     unattended || read -r -p "Type DELETE to confirm: " typed </dev/tty
     if [ "$typed" = "DELETE" ]; then
       dc --profile tools down -v --remove-orphans
       ok "Data deleted"
+      deleted=1
     else
       say "  Kept the data."
     fi
   fi
-  say "  The code is still in $ROOT_DIR — delete that folder to remove everything."
+  if [ "$deleted" = 1 ]; then
+    say "  The code is still in $ROOT_DIR — delete that folder to remove everything."
+  else
+    # The volumes outlive the folder, but their password lives in its .env.
+    say "  The code is still in $ROOT_DIR. Its .env holds the password to the data kept above:"
+    say "  keep it, and bring the site back any time with: sudo $ROOT_DIR/install.sh"
+    say "  To remove everything, uninstall again and delete the data, then delete the folder."
+  fi
   exit 0
 }
 
@@ -805,6 +879,9 @@ main() {
 # Everything after the questions; also where an interrupted install resumes.
 install_from_build() {
   render_caddyfile
+  # Before the long build: it may need an answer, and only uses the stock
+  # postgres image.
+  reconcile_database
   build_images
   generate_printer_profiles || die "Pick another printer with: sudo $ROOT_DIR/install.sh (option 5)."
   set_admin_password
