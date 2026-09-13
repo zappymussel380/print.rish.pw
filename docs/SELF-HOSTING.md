@@ -30,7 +30,9 @@ asks, in plain language:
 1. **Your shop:** name, the initials your quotation numbers start with
    (e.g. `AP-2026-0001`), a one-line tagline, and your city.
 2. **Your printer:** pick the brand, then the model (with its build volume),
-   and say whether it has an AMS/MMU for automatic multicolour.
+   and say whether it has an AMS/MMU for automatic multicolour. Using your own
+   tuned OrcaSlicer presets? Choose **2) Skip** and upload them in the admin
+   dashboard later (see [below](#your-own-printer-or-profiles-advanced-mode)).
 3. **Web address and HTTPS:** your domain, and how visitors reach the server
    (see [HTTPS options](#https-options)).
 4. **Admin password:** for `https://your-domain/admin`.
@@ -88,10 +90,10 @@ quotations come along.
 
 Is your printer missing from OrcaSlicer's list (a Voron, a modded Ender, a
 self-build), or do you slice with profiles you've tuned yourself? At the
-printer question, choose **2) Advanced**. You then:
-1. pick a starting point: a generic Klipper, Marlin, RepRapFirmware or
-   Repetier printer, or any printer from OrcaSlicer's list
-2. give the printer name customers see, e.g. *Voron 2.4 300*
+printer question, choose **2) Skip — I'll upload my own tuned OrcaSlicer
+presets**. The installer then only asks the printer name customers see (e.g.
+*Voron 2.4 300*) and whether it does automatic multicolour. Until you upload,
+quotes use a generic Klipper preset, so upload before you share the site.
 
 The admin dashboard then has a **Slicer profiles** section. There you upload
 the presets you use in OrcaSlicer:
@@ -106,7 +108,7 @@ the presets you use in OrcaSlicer:
 Every upload is **test-sliced** on a 20 mm cube with the rest of your live
 presets before it replaces anything. If OrcaSlicer rejects it, you see its
 error and quotes keep using what was live. A row you haven't uploaded to uses
-the starting point's preset, and **Use installed** puts a row back on it.
+the installed generic preset, and **Use installed** puts a row back on it.
 
 Presets that build on one of OrcaSlicer's own ("inherits") are resolved
 against the presets this OrcaSlicer ships. Presets that build on another of
@@ -217,10 +219,10 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_DIR`, `PS_BRANCH`, `PS_REPO` | Install folder (`/opt/print-shop`), branch (`main`), repository |
 | `PS_BRAND`, `PS_TAGLINE`, `PS_CITY` | Shop name, tagline, city |
 | `PS_QUOTE_PREFIX` | Quotation-number initials, 2–5 letters (default: the shop name's initials) |
-| `PS_PRINTER_SETUP` | `1` a printer from OrcaSlicer's list (default), `2` advanced mode |
-| `PS_PRINTER` | Printer: the exact OrcaSlicer preset, e.g. `Prusa MK4 0.4 nozzle` (list: `docker/selfhost/printers.tsv`, 3rd column). In advanced mode this is the starting point, e.g. `MyKlipper 0.4 nozzle` |
-| `PS_PRINTER_BASE` | Advanced mode starting point when `PS_PRINTER` is unset: `1` Klipper, `2` Marlin, `3` RepRapFirmware, `4` Repetier |
-| `PS_PRINTER_NAME` | Advanced mode: the printer name customers see |
+| `PS_PRINTER_SETUP` | `1` a printer from OrcaSlicer's list (default), `2` skip — your own presets, uploaded in the admin dashboard |
+| `PS_PRINTER` | Printer: the exact OrcaSlicer preset, e.g. `Prusa MK4 0.4 nozzle` (list: `docker/selfhost/printers.tsv`, 3rd column). With `PS_PRINTER_SETUP=2`, optional: the preset quotes use until you upload yours |
+| `PS_PRINTER_BASE` | With `PS_PRINTER_SETUP=2` and no `PS_PRINTER`, optional: `1` generic Klipper (default), `2` Marlin, `3` RepRapFirmware, `4` Repetier |
+| `PS_PRINTER_NAME` | With `PS_PRINTER_SETUP=2`: the printer name customers see (default "3D printer") |
 | `PS_CONFIRM_MULTI_MATERIAL` | `y` if the printer has an AMS/MMU for automatic multicolour |
 | `PS_DOMAIN` | Domain name (not needed for local test mode) |
 | `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed) |

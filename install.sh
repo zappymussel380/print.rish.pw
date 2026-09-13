@@ -148,7 +148,6 @@ valid_menu_index() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$ME
 # vendor, model, Orca machine preset, build volume). Quotes are sliced with the
 # chosen printer's own profiles, generated after the build.
 valid_printer_setup() { [[ "$1" =~ ^(1|2|list|advanced)$ ]]; }
-valid_printer_base() { [[ "$1" =~ ^[1-5]$ ]]; }
 valid_printer_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._+/()-]{0,59}$ ]]; }
 
 sec_printer() {
@@ -156,7 +155,7 @@ sec_printer() {
   hint "Every quote is sliced with your printer's own OrcaSlicer profiles, so weight, time and fit match it."
   [ -f "$PRINTERS_FILE" ] || die "Missing $PRINTERS_FILE — the download looks incomplete."
   say "   1) Pick it from OrcaSlicer's list  (recommended — 300+ printers)"
-  say "   2) Advanced — my own printer, or my own tuned OrcaSlicer profiles"
+  say "   2) Skip — I'll upload my own tuned OrcaSlicer presets in the admin dashboard after setup"
   ask PRINTER_SETUP "Choose 1–2" "$([ "${CFG[PRINTER_ADVANCED]:-0}" = 1 ] && echo 2 || echo 1)" valid_printer_setup "Please answer 1 or 2."
   local machine
   ANS[PRINTER_ADVANCED]=0
@@ -164,26 +163,23 @@ sec_printer() {
   case "${ANS[PRINTER_SETUP]}" in
     2|advanced)
       ANS[PRINTER_ADVANCED]=1
-      hint "Quotes start on a generic preset. Then, in the admin dashboard (Slicer profiles), you upload"
-      hint "the presets you use in OrcaSlicer — each one is test-sliced before quotes use it."
-      if [ -n "${PS_PRINTER:-}" ]; then
-        pick_listed_printer; machine=$PICKED_MACHINE
-      else
-        say "   1) Generic Klipper printer"
-        say "   2) Generic Marlin printer"
-        say "   3) Generic RepRapFirmware printer"
-        say "   4) Generic Repetier printer"
-        say "   5) A printer from OrcaSlicer's list, fine-tuned with my own presets"
-        ask PRINTER_BASE "Start from (number)" 1 valid_printer_base "Pick a number from 1 to 5."
-        case "${ANS[PRINTER_BASE]}" in
-          1) machine="MyKlipper 0.4 nozzle" ;;
-          2) machine="MyMarlin 0.4 nozzle" ;;
-          3) machine="MyRRF 0.4 nozzle" ;;
-          4) machine="MyRepetier 0.4 nozzle" ;;
-          5) pick_listed_printer; machine=$PICKED_MACHINE ;;
-        esac
-      fi
-      ask PRINTER_NAME "Printer name customers see (e.g. Voron 2.4 300)" "${CFG[PRINTER_DISPLAY_NAME]:-}" valid_printer_name \
+      hint "Until you upload, quotes use a generic preset. After setup: admin → Slicer profiles → upload a"
+      hint "printer bundle (OrcaSlicer: File → Export → Export Preset Bundle → Printer bundle)."
+      hint "Every upload is test-sliced before quotes use it."
+      # No base question: the owner's uploads replace it. Unattended installs
+      # can still start from a listed printer (PS_PRINTER) or PS_PRINTER_BASE.
+      case "${PS_PRINTER_BASE:-}" in
+        2) machine="MyMarlin 0.4 nozzle" ;;
+        3) machine="MyRRF 0.4 nozzle" ;;
+        4) machine="MyRepetier 0.4 nozzle" ;;
+        5) [ -n "${PS_PRINTER:-}" ] || die "PS_PRINTER_BASE=5 needs PS_PRINTER, the listed printer to start from." ;;
+        ""|1) machine="MyKlipper 0.4 nozzle" ;;
+        *) die "PS_PRINTER_BASE: pick a number from 1 to 5 (got '$PS_PRINTER_BASE')." ;;
+      esac
+      if [ -n "${PS_PRINTER:-}" ]; then pick_listed_printer; machine=$PICKED_MACHINE; fi
+      # The name lands in customer copy ("a real ___ profile"), so the default
+      # has to read well there.
+      ask PRINTER_NAME "Printer name customers see (e.g. Voron 2.4 300)" "${CFG[PRINTER_DISPLAY_NAME]:-3D printer}" valid_printer_name \
         "Use 1–60 letters, numbers, spaces and . _ + / ( ) -" ;;
     *) pick_listed_printer; machine=$PICKED_MACHINE ;;
   esac
@@ -193,7 +189,7 @@ sec_printer() {
     ANS[PRINTER_MULTI]=1
   fi
   if [ "${ANS[PRINTER_ADVANCED]}" = 1 ]; then
-    ok "Printer: ${ANS[PRINTER_NAME]} (advanced mode, starting from ${machine% 0.4 nozzle})"
+    ok "Printer: ${ANS[PRINTER_NAME]} (your own OrcaSlicer presets — upload them in admin → Slicer profiles)"
   else
     ok "Printer: $(awk -F'\t' -v m="$machine" '$3==m {print $2; exit}' "$PRINTERS_FILE")"
   fi
@@ -442,7 +438,7 @@ summary() {
   say "  Shop:        ${ANS[BRAND]}${ANS[CITY]:+ · ${ANS[CITY]}}  (quotes numbered ${ANS[QUOTE_PREFIX]:-RSP}-$(date +%Y)-0001)"
   say "  Address:     $(site_url)  (${ANS[MODE]})"
   if [ "${ANS[PRINTER_ADVANCED]:-0}" = 1 ]; then
-    say "  Printer:     ${ANS[PRINTER_NAME]} — advanced mode, starting from ${ANS[PRINTER_MACHINE]% 0.4 nozzle}"
+    say "  Printer:     ${ANS[PRINTER_NAME]} — your own OrcaSlicer presets, uploaded in admin → Slicer profiles$([ "${ANS[PRINTER_MULTI]:-0}" = 1 ] && echo " (automatic multicolour)")"
   else
     say "  Printer:     ${ANS[PRINTER_MACHINE]% 0.4 nozzle}$([ "${ANS[PRINTER_MULTI]:-0}" = 1 ] && echo " (automatic multicolour)")"
   fi
@@ -679,6 +675,9 @@ finish() {
   esac
   say ""
   say "  Next, in the admin dashboard:"
+  if [ "${CFG[PRINTER_ADVANCED]:-0}" = 1 ]; then
+    say "   • Slicer profiles — upload your OrcaSlicer presets (quotes use a generic preset until you do)"
+  fi
   say "   • Catalog — switch on the colours you actually stock"
   say "   • Rates — your filament costs, so profit estimates are right"
   say "   • Site — name, contact details and the Materials page, any time"
