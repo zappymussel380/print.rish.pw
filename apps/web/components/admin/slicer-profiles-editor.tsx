@@ -126,6 +126,7 @@ export function SlicerProfilesEditor({ initial }: { initial: SlicerProfilesState
         <input
           ref={fileInput}
           type="file"
+          aria-label="OrcaSlicer preset or bundle"
           accept=".json,.orca_printer,.orca_filament,application/json,application/zip"
           className="hidden"
           onChange={(e) => {

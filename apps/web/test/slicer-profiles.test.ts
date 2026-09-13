@@ -25,6 +25,7 @@ vi.mock("@/lib/api-util", () => apiUtil);
 vi.mock("@/lib/security", () => security);
 
 const { GET, POST, DELETE } = await import("@/app/api/admin/slicer-profiles/route");
+const { getPrinterProfile, getPrinterSpec } = await import("@/lib/printer");
 
 const json = (value: object) => strToU8(JSON.stringify(value));
 const myPla = { name: "My PLA", inherits: "Generic PLA @System", filament_settings_id: ["My PLA"] };
@@ -146,5 +147,23 @@ describe("/api/admin/slicer-profiles", () => {
       data: { status: "RETIRED", checkedAt: expect.any(Date) },
     });
     expect((await DELETE(req("?slot=nope"))).status).toBe(422);
+  });
+});
+
+describe("getPrinterProfile", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("is the installed printer, untouched, outside advanced mode (print.rish.pw)", async () => {
+    vi.stubEnv("ADVANCED_PROFILES", "");
+    expect(await getPrinterProfile()).toBe(getPrinterSpec());
+    expect(db.findMany).not.toHaveBeenCalled();
+  });
+
+  it("carries the live uploads' revision in advanced mode", async () => {
+    vi.stubEnv("ADVANCED_PROFILES", "1");
+    db.findMany.mockResolvedValue([{ id: "u1", slot: "filament:PLA", meta: { presetName: "My PLA", plate: "Cool Plate" } }]);
+    const spec = await getPrinterProfile();
+    expect(spec.id).toMatch(/^bbl-a1-r[0-9a-z]{11}$/);
+    expect(spec.plates.PLA).toBe("Cool Plate");
   });
 });
