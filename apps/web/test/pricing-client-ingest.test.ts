@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MODEL_CONFIG, settingsKey } from "@print/shared";
+import { CATALOG, DEFAULT_MODEL_CONFIG, settingsKey } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { type QuoteModel, sliceCacheKey } from "@/lib/quote-store";
 
@@ -54,7 +54,7 @@ describe("pricing while upload ingest is pending", () => {
   it.each(["uploading", "queued", "processing"] as const)(
     "reports %s separately even when another model already has a price",
     (status) => {
-      const result = computePricing([ready, pending(status)], slices);
+      const result = computePricing([ready, pending(status)], slices, CATALOG);
 
       expect(result.breakdown).not.toBeNull();
       expect(result.priced).toBe(1);
@@ -63,7 +63,7 @@ describe("pricing while upload ingest is pending", () => {
   );
 
   it("does not keep checkout blocked for a terminal upload error", () => {
-    const result = computePricing([ready, pending("error")], slices);
+    const result = computePricing([ready, pending("error")], slices, CATALOG);
 
     expect(result.breakdown).not.toBeNull();
     expect(result.ingesting).toBe(0);

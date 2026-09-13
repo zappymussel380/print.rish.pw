@@ -10,7 +10,28 @@ const footerLinks = [
   { href: "/contact", label: "Contact" },
 ];
 
-export function SiteFooter() {
+// A bare domain in the footer note ("A rish.pw project") becomes a link.
+const DOMAIN = /\b([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b/i;
+
+function FooterNote({ note }: { note: string }) {
+  const match = DOMAIN.exec(note);
+  if (!match) return <>{note}</>;
+  const [domain] = match;
+  return (
+    <>
+      {note.slice(0, match.index)}
+      <a
+        href={`https://${domain}`}
+        className="underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
+      >
+        {domain}
+      </a>
+      {note.slice(match.index + domain.length)}
+    </>
+  );
+}
+
+export function SiteFooter({ note, city, brandName }: { note: string; city: string; brandName: string }) {
   return (
     <footer className="border-t border-line">
       <div className="mx-auto max-w-6xl px-5 py-8 text-sm text-muted">
@@ -26,14 +47,8 @@ export function SiteFooter() {
           ))}
         </nav>
         <p>
-          A{" "}
-          <a
-            href="https://rish.pw"
-            className="underline decoration-accent underline-offset-4 transition-colors hover:text-accent"
-          >
-            rish.pw
-          </a>{" "}
-          project · Guwahati, India
+          <FooterNote note={note || brandName} />
+          {city ? ` · ${city}, India` : " · India"}
         </p>
       </div>
     </footer>

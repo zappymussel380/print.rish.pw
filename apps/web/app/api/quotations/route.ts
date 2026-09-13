@@ -4,7 +4,6 @@ import { z } from "zod";
 import { Prisma, prisma, type Quotation } from "@print/db";
 import {
   assertConfigAvailable,
-  CATALOG,
   customerSchema,
   estimateCompletionDate,
   modelConfigSchema,
@@ -16,6 +15,7 @@ import {
 } from "@print/shared";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getPricing } from "@/lib/pricing-settings";
 import { env } from "@/lib/env";
 import { logger, safeErrorMessage } from "@/lib/logger";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
@@ -32,7 +32,7 @@ import {
 } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
 import { verifyEstimateToken } from "@/lib/shipping";
-import { siteConfig, whatsappChatUrl } from "@/lib/site-config";
+import { getSiteProfile, profileWhatsappUrl } from "@/lib/site-profile";
 import {
   ensureStorageDirs,
   hasPdfStorageHeadroom,
@@ -167,13 +167,16 @@ async function postQuotation(request: NextRequest) {
     stats: e.stats,
   }));
 
+  // The authoritative price uses the live (admin-editable) rates, never the
+  // client's; the snapshot below records exactly which rates those were.
+  const { catalog } = await getPricing();
   let breakdown;
   try {
-    breakdown = priceQuote(inputs, CATALOG);
+    breakdown = priceQuote(inputs, catalog);
   } catch {
     return jsonError(422, "PRICING_FAILED", "Could not price this quote");
   }
-  const completion = estimateCompletionDate(breakdown.totals.printSeconds, CATALOG.leadTime);
+  const completion = estimateCompletionDate(breakdown.totals.printSeconds, catalog.leadTime);
   const access = issueQuotationAccess();
 
   // Optional prepaid shipping. The client sends the signed estimate token it got
@@ -287,7 +290,7 @@ async function postQuotation(request: NextRequest) {
           shippingPincode,
           estimatedCompletion: completion,
           pricingSnapshot: {
-            catalog: CATALOG,
+            catalog,
             breakdown,
             shipping:
               shippingPaise > 0
@@ -378,6 +381,7 @@ async function postQuotation(request: NextRequest) {
       )
     ).filter((annexure) => annexure !== null);
     const pdf = await renderQuotationPdf({
+      brandName: (await getSiteProfile()).brandName,
       number: created.number,
       createdAt: created.createdAt,
       customer: {
@@ -480,9 +484,11 @@ async function postQuotation(request: NextRequest) {
       quantity: e.config.quantity,
     })),
   );
-  const whatsappUrl = siteConfig.whatsappNumber
+  const profile = await getSiteProfile();
+  const whatsappUrl = profile.contact.whatsappNumber
     ? buildWhatsAppUrl({
-        number: siteConfig.whatsappNumber,
+        number: profile.contact.whatsappNumber,
+        brandName: profile.brandName,
         quotationNumber: created.number,
         customerName: customer.data.name,
         materialsSummary,
@@ -491,7 +497,7 @@ async function postQuotation(request: NextRequest) {
         shippingPincode,
         notes: customer.data.notes,
       })
-    : whatsappChatUrl();
+    : profileWhatsappUrl(profile);
 
   const response = NextResponse.json(
     {

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { ArrowRight, Loader2 } from "lucide-react";
-import { CATALOG, formatDuration, formatGrams, formatPaise } from "@print/shared";
+import { formatDuration, formatGrams, formatPaise } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
+import { useCatalog } from "@/lib/use-catalog";
 import { useQuoteStore } from "@/lib/quote-store";
 import { RollingValue } from "./rolling-value";
 
@@ -12,11 +13,12 @@ const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short
 export function SummaryBar() {
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
+  const { pricing } = useCatalog();
 
   const readyModels = models.filter((m) => m.status === "ready");
   if (readyModels.length === 0) return null;
 
-  const { breakdown, ingesting, pending, failed, priced, completion } = computePricing(models, slices);
+  const { breakdown, ingesting, pending, failed, priced, completion } = computePricing(models, slices, pricing);
   const canContinue = !!breakdown && ingesting === 0 && pending === 0;
 
   return (
@@ -66,7 +68,7 @@ export function SummaryBar() {
         </div>
       </div>
       <p className="mx-auto max-w-3xl px-1 pb-3 text-[0.7rem] text-faint">
-        Includes a {formatPaise(CATALOG.setupFeePaise)} one-time setup fee. Prices come from real
+        Includes a {formatPaise(pricing.setupFeePaise)} one-time setup fee. Prices come from real
         slicing; final confirmation happens over WhatsApp.
       </p>
     </div>

@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getSiteProfile } from "@/lib/site-profile";
 
 export const metadata: Metadata = {
   title: "FAQ",
   description: "Frequently asked questions: file formats, turnaround, maximum size, colours, shipping, layer lines and durability.",
 };
 
-const faqs: { q: string; a: string; more?: { href: string; label: string } }[] = [
+type Faq = { q: string; a: string; more?: { href: string; label: string } };
+
+/** `city` is the shop's (admin → Site); empty drops the local-pickup detail. */
+const faqs = (city: string): Faq[] => [
   {
     q: "Which file formats can I upload?",
     a: "STL, 3MF, OBJ and AMF — plus STEP/STP, which we convert for you automatically on upload. STL is the safest export from almost any CAD tool. If your software offers 3MF, prefer it — it preserves units and orientation more reliably.",
@@ -28,7 +32,7 @@ const faqs: { q: string; a: string; more?: { href: string; label: string } }[] =
   },
   {
     q: "Why is pricing per gram?",
-    a: "Because material is what a print actually consumes, so per-gram billing stays fair and transparent — you pay for your model, not a flat guess. Small items are genuinely cheap: a keychain is only a few grams of filament plus the one-time setup fee. The live per-gram rates for PLA and PETG are on the Pricing page.",
+    a: "Because material is what a print actually consumes, so per-gram billing stays fair and transparent — you pay for your model, not a flat guess. Small items are genuinely cheap: a keychain is only a few grams of filament plus the one-time setup fee. The live per-gram rate for each material is on the Pricing page.",
   },
   {
     q: "What's the maximum printable size?",
@@ -36,7 +40,7 @@ const faqs: { q: string; a: string; more?: { href: string; label: string } }[] =
   },
   {
     q: "Which colours are available?",
-    a: "Black and white, in both PLA and PETG, kept permanently in stock. For a reasonably large print — roughly 800 g or more — we can order in whatever colour you'd like and print the whole job in it. For smaller prints, other colours can sometimes still be arranged; ask on WhatsApp before ordering.",
+    a: "Every colour in stock is in the colour picker on the quote page, for each material. For a reasonably large print — roughly 800 g or more — we can order in whatever colour you'd like and print the whole job in it. For smaller prints, other colours can sometimes still be arranged; ask on WhatsApp before ordering.",
   },
   {
     q: "Can you do multicolour prints?",
@@ -44,11 +48,11 @@ const faqs: { q: string; a: string; more?: { href: string; label: string } }[] =
   },
   {
     q: "How long until I get my prints?",
-    a: "Your quote shows an estimated completion date based on total print time plus a small buffer for preparation and quality checks. Most small orders are ready in 2–4 days. Local pickup in Guwahati is same-day once printing finishes.",
+    a: `Your quote shows an estimated completion date based on total print time plus a small buffer for preparation and quality checks. Most small orders are ready in 2–4 days.${city ? ` Local pickup in ${city} is same-day once printing finishes.` : ""}`,
   },
   {
     q: "Do you ship?",
-    a: "Yes — anywhere in India via courier at actual shipping cost, agreed on WhatsApp after your quotation. Pickup in Guwahati is free.",
+    a: `Yes — anywhere in India via courier at actual shipping cost, agreed on WhatsApp after your quotation.${city ? ` Pickup in ${city} is free.` : ""}`,
   },
   {
     q: "Will I see layer lines?",
@@ -76,7 +80,8 @@ const faqs: { q: string; a: string; more?: { href: string; label: string } }[] =
   },
 ];
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const { city } = await getSiteProfile();
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
       <PageIntro
@@ -86,7 +91,7 @@ export default function FaqPage() {
       />
 
       <div className="mx-auto mt-12 max-w-3xl space-y-3">
-        {faqs.map((item) => (
+        {faqs(city).map((item) => (
           <details key={item.q} className="tile group p-0">
             <summary className="cursor-pointer list-none p-5 text-[0.95rem] font-[650] transition-colors hover:text-accent [&::-webkit-details-marker]:hidden">
               <span className="flex items-center justify-between gap-4">

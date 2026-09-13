@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import {
-  CATALOG,
   formatDuration,
   formatGrams,
   formatPaise,
@@ -17,6 +16,7 @@ import { submitQuotation, type CheckoutError } from "@/lib/checkout-client";
 import { emailSuggestions, isProbablyEmail } from "@/lib/email-hint";
 import { sliceCacheKey, useQuoteStore } from "@/lib/quote-store";
 import { catalogColourName, useCatalog } from "@/lib/use-catalog";
+import { useSite } from "@/lib/site-context";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
@@ -38,6 +38,7 @@ const normalizeMobile = (raw: string): string => {
 export function CheckoutForm() {
   const router = useRouter();
   const catalog = useCatalog();
+  const { city } = useSite();
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
   const shipping = useQuoteStore((s) => s.shipping);
@@ -51,7 +52,7 @@ export function CheckoutForm() {
   const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => void (emailTimer.current && clearTimeout(emailTimer.current)), []);
 
-  const { breakdown, ingesting, pending, completion } = computePricing(models, slices);
+  const { breakdown, ingesting, pending, completion } = computePricing(models, slices, catalog.pricing);
 
   const items = useMemo(
     () =>
@@ -300,8 +301,8 @@ export function CheckoutForm() {
           <p className="mt-3 text-[0.7rem] leading-5 text-faint">
             {shippingValid
               ? "Includes estimated prepaid shipping. "
-              : "Shipping is not included — pickup in Guwahati or arranged over WhatsApp. "}
-            Estimate from real slicing on a {CATALOG.printers[CATALOG.defaultPrinterId]!.name}. Final
+              : `Shipping is not included — ${city ? `pickup in ${city} or ` : ""}arranged over WhatsApp. `}
+            Estimate from real slicing on a {catalog.pricing.printers[catalog.pricing.defaultPrinterId]!.name}. Final
             confirmation over WhatsApp.
           </p>
         </div>

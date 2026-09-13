@@ -14,6 +14,7 @@ import {
   formatGrams,
   formatPaise,
   materialName,
+  splitBrand,
   type MaterialId,
   type SupportMode,
 } from "@print/shared";
@@ -76,6 +77,8 @@ export interface PdfAnnexure {
 }
 
 export interface QuotationPdfData {
+  /** The shop's name (SiteProfile.brandName) for the letterhead and footer. */
+  brandName: string;
   number: string;
   createdAt: Date;
   customer: { name: string; email: string; phone: string; city: string; notes: string };
@@ -129,14 +132,17 @@ const s = StyleSheet.create({
 const fmtDate = (d: Date) =>
   new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
 
-/** Site wordmark, mirroring the web header: printer mark + "print.rish.pw". */
-function Letterhead({ compact = false }: { compact?: boolean }) {
+/** Site wordmark, mirroring the web header: printer mark + the shop's name,
+ *  its first part in the accent colour. */
+function Letterhead({ brandName, compact = false }: { brandName: string; compact?: boolean }) {
+  const brand = splitBrand(brandName);
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
       <PrinterMarkPdf size={compact ? 15 : 22} />
       <View style={{ marginLeft: 6 }}>
         <Text style={compact ? s.wordmarkCompact : s.wordmark}>
-          <Text style={s.accent}>print</Text>.rish.pw
+          <Text style={s.accent}>{brand.accent}</Text>
+          {brand.rest}
         </Text>
         {!compact && <Text style={{ color: MUTED, marginTop: 2 }}>Instant 3D-printing quotation</Text>}
       </View>
@@ -144,7 +150,7 @@ function Letterhead({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function PdfFooter({ number }: { number: string }) {
+function PdfFooter({ number, brandName }: { number: string; brandName: string }) {
   return (
     <View style={s.footer} fixed>
       <Text>
@@ -153,8 +159,8 @@ function PdfFooter({ number }: { number: string }) {
         weight and print time come directly from the slicer. This is not a tax invoice.
       </Text>
       <Text style={{ marginTop: 4 }}>
-        Final confirmation and payment are arranged over WhatsApp. Quotation {number} ·
-        print.rish.pw
+        Final confirmation and payment are arranged over WhatsApp. Quotation {number} ·{" "}
+        {brandName}
       </Text>
     </View>
   );
@@ -180,18 +186,20 @@ function AnnexurePage({
   total,
   number,
   createdAt,
+  brandName,
 }: {
   annexure: PdfAnnexure;
   index: number;
   total: number;
   number: string;
   createdAt: Date;
+  brandName: string;
 }) {
   const { geometry, settings, slicer, pricing } = annexure;
   return (
     <Page size="A4" style={s.page}>
       <View style={s.headerRow}>
-        <Letterhead compact />
+        <Letterhead brandName={brandName} compact />
         <View style={s.metaRight}>
           <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11, color: INK }}>
             Annexure {index + 1} of {total}
@@ -259,17 +267,17 @@ function AnnexurePage({
         </View>
       </View>
 
-      <PdfFooter number={number} />
+      <PdfFooter number={number} brandName={brandName} />
     </Page>
   );
 }
 
 function QuotationDocument({ data }: { data: QuotationPdfData }) {
   return (
-    <Document title={`Quotation ${data.number}`} author="print.rish.pw">
+    <Document title={`Quotation ${data.number}`} author={data.brandName}>
       <Page size="A4" style={s.page}>
         <View style={s.headerRow}>
-          <Letterhead />
+          <Letterhead brandName={data.brandName} />
           <View style={s.metaRight}>
             <Text style={s.docTitle}>Quotation</Text>
             <Text style={{ fontFamily: "Helvetica-Bold", color: INK }}>{data.number}</Text>
@@ -351,7 +359,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           </View>
         ) : null}
 
-        <PdfFooter number={data.number} />
+        <PdfFooter number={data.number} brandName={data.brandName} />
       </Page>
       {data.annexures.map((annexure, i) => (
         <AnnexurePage
@@ -361,6 +369,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           total={data.annexures.length}
           number={data.number}
           createdAt={data.createdAt}
+          brandName={data.brandName}
         />
       ))}
     </Document>

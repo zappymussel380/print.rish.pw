@@ -3,6 +3,7 @@ import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { logger, safeErrorMessage } from "@/lib/logger";
 import { RATE_LIMITS } from "@/lib/security";
+import { getSiteProfile } from "@/lib/site-profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     return jsonError(500, "NOT_CONFIGURED", "Mail service is not configured.");
   }
 
+  const { brandName } = await getSiteProfile();
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -83,8 +85,8 @@ export async function POST(request: NextRequest) {
         from: env.contactFrom,
         to: [mailTo],
         reply_to: email,
-        subject: `[print.rish.pw] ${subject} — from ${name}`,
-        text: `New message from the print.rish.pw contact form.
+        subject: `[${brandName}] ${subject} — from ${name}`,
+        text: `New message from the ${brandName} contact form.
 
 Name:    ${name}
 Email:   ${email}
@@ -94,7 +96,7 @@ Message:
 ${message}
 
 ---
-Sent via print.rish.pw contact form`,
+Sent via ${brandName} contact form`,
       }),
       signal: AbortSignal.timeout(10_000),
     });

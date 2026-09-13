@@ -4,6 +4,8 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { splitBrand } from "@print/shared";
+import { useSite } from "@/lib/site-context";
 import { PrinterMark } from "./printer-mark";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -24,6 +26,7 @@ export function SiteHeader() {
   // rendered with the menu still up.
   const [openFor, setOpenFor] = useState<string | null>(null);
   const open = openFor === pathname;
+  const brand = splitBrand(useSite().brandName);
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] backdrop-blur-[18px]">
@@ -31,8 +34,8 @@ export function SiteHeader() {
         <Link href="/" className="flex items-center gap-2 font-[650] tracking-[0.02em]">
           <PrinterMark className="size-5 shrink-0 text-accent" />
           <span>
-            <span className="text-accent">print</span>
-            <span className="text-text">.rish.pw</span>
+            <span className="text-accent">{brand.accent}</span>
+            {brand.rest ? <span className="text-text">{brand.rest}</span> : null}
           </span>
         </Link>
 

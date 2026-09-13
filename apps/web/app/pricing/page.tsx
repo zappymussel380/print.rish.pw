@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  CATALOG,
   formatPaise,
   isMaterialEnabled,
   MATERIAL_IDS,
@@ -10,11 +9,16 @@ import {
 } from "@print/shared";
 import { PageIntro } from "@/components/shell/page-intro";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getPricing } from "@/lib/pricing-settings";
+import { getSiteProfile } from "@/lib/site-profile";
 
-export const metadata: Metadata = {
-  title: "Pricing",
-  description: "How print.rish.pw quotations are calculated: real slicing data, per-gram rates, one transparent setup fee.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { brandName } = await getSiteProfile();
+  return {
+    title: "Pricing",
+    description: `How ${brandName} quotations are calculated: real slicing data, per-gram rates, one transparent setup fee.`,
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +33,10 @@ const MATERIAL_BLURB: Record<MaterialId, string> = {
 };
 
 export default async function PricingPage() {
+  const [{ catalog }, availability] = await Promise.all([getPricing(), getCatalogAvailability()]);
   const { setupFeePaise, materials, electricityPerKwhPaise, maintenancePerGramPaise, printers } =
-    CATALOG;
-  const printer = printers[CATALOG.defaultPrinterId]!;
-  const availability = await getCatalogAvailability();
+    catalog;
+  const printer = printers[catalog.defaultPrinterId]!;
   const shownMaterials = MATERIAL_IDS.filter((m) => isMaterialEnabled(availability, m));
 
   return (

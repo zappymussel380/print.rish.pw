@@ -44,8 +44,8 @@ to `$$`. The container receives the intended single-dollar value.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `WHATSAPP_NUMBER` | empty | International digits only. Empty disables the pre-filled handoff. Customer/order details are sent to WhatsApp when used. |
-| `CONTACT_EMAIL` | empty | Public address shown on the contact page. |
+| `WHATSAPP_NUMBER` | empty | International digits only. Fallback for the WhatsApp number in admin → Site; empty in both disables the pre-filled handoff. Customer/order details are sent to WhatsApp when used. |
+| `CONTACT_EMAIL` | empty | Unused. The public contact email, phone and address are set in admin → Site. |
 | `GOOGLE_MAPS_EMBED_URL` | empty | Optional exact Google Maps HTTPS embed URL; enables Google in CSP `frame-src`. |
 | `RESEND_API_KEY` / `MAIL_TO` | none | Both are required for contact-form delivery. Messages contain the submitted name, email, subject, and message; the contact form has no phone field. |
 | `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender. |

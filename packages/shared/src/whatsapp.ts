@@ -5,6 +5,8 @@ import { formatPaise } from "./money";
 export interface WhatsAppMessageInput {
   /** International format without '+', e.g. "919876543210". */
   number: string;
+  /** The shop's name as customers know it (SiteProfile.brandName). */
+  brandName: string;
   quotationNumber: string;
   customerName: string;
   /** e.g. "2× PLA (Pitch Black), 1× PETG (Pure White)" */
@@ -23,7 +25,7 @@ const MAX_NOTES_CHARS = 500;
 
 export function buildWhatsAppMessage(input: Omit<WhatsAppMessageInput, "number">): string {
   const lines = [
-    `Hi! I just submitted quotation *${input.quotationNumber}* on print.rish.pw.`,
+    `Hi! I just submitted quotation *${input.quotationNumber}* on ${input.brandName}.`,
     ``,
     `Name: ${input.customerName}`,
     `Items: ${input.materialsSummary}`,

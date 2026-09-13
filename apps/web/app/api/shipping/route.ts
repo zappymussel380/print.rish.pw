@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
 import {
   assertConfigAvailable,
-  CATALOG,
   modelConfigSchema,
   priceQuote,
   type QuoteLineInput,
@@ -11,6 +10,7 @@ import {
 } from "@print/shared";
 import { jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getPricing } from "@/lib/pricing-settings";
 import { env } from "@/lib/env";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { assertSameOrigin, clientIp, rateLimit, RATE_LIMITS } from "@/lib/security";
@@ -118,7 +118,7 @@ async function rebuildTotals(
   }
 
   if (inputs.length === 0) return null;
-  const breakdown = priceQuote(inputs, CATALOG);
+  const breakdown = priceQuote(inputs, (await getPricing()).catalog);
   return { grams: breakdown.totals.grams, totalPaise: breakdown.totalPaise };
 }
 

@@ -13,11 +13,16 @@ import {
 } from "lucide-react";
 import {
   formatPaise,
+  type Catalog,
   type MaterialFamily,
+  type PricingInput,
   type PublicMaterial,
   type RecentPrint,
+  type SiteProfile,
 } from "@print/shared";
 import { CatalogEditor } from "./catalog-editor";
+import { RatesEditor } from "./rates-editor";
+import { SiteEditor } from "./site-editor";
 import { ShowcaseEditor } from "./showcase-editor";
 
 export interface QuotationRow {
@@ -65,11 +70,20 @@ export function AdminDashboard({
   quotations,
   stats,
   catalog,
+  pricing,
+  rates,
+  siteProfile,
   recentPrints,
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
   catalog: { materials: PublicMaterial[] };
+  /** Every rate in storable form, for the rates editor. */
+  pricing: PricingInput;
+  /** The live customer-facing rates, for display elsewhere on the page. */
+  rates: Catalog;
+  /** Null when the stored profile could not be read. */
+  siteProfile: SiteProfile | null;
   recentPrints: RecentPrint[];
 }) {
   const router = useRouter();
@@ -177,7 +191,13 @@ export function AdminDashboard({
       </p>
 
       {/* Catalog availability */}
-      <CatalogEditor catalog={catalog} />
+      <CatalogEditor catalog={catalog} rates={rates} />
+
+      {/* Rates, customer-facing and internal */}
+      <RatesEditor pricing={pricing} />
+
+      {/* Shop name, contact details, materials page */}
+      <SiteEditor profile={siteProfile} />
 
       {/* Public "recent prints" showcase */}
       <ShowcaseEditor prints={recentPrints} />

@@ -40,12 +40,16 @@ printDays = ceil(totalPrintSeconds / 3600 / leadTime.printHoursPerDay)
 ready     = today + max(printDays, 1) + leadTime.bufferDays
 ```
 
-## The catalog
+## The rates
 
-All rates live in [`packages/shared/src/catalog.ts`](../packages/shared/src/catalog.ts)
-as the `CATALOG` constant. Current values:
+The code defaults live in [`packages/shared/src/catalog.ts`](../packages/shared/src/catalog.ts)
+(`CATALOG`) and [`costs.ts`](../packages/shared/src/costs.ts) (`INTERNAL_COST`).
+Every one of them can be changed at runtime in **admin → Rates**, stored as the
+`pricing` app setting and merged over the defaults by `normalizePricing`
+([`pricing-settings.ts`](../packages/shared/src/pricing-settings.ts)). A shop
+that has never saved rates runs on the defaults below.
 
-| Item | Value |
+| Item | Default |
 | --- | --- |
 | Setup fee | ₹150 / order |
 | PLA sell | ₹2.00 / g (cost ₹600/kg, density 1.26) |
@@ -72,17 +76,17 @@ that approximate some of their lines.
 
 ## Changing prices
 
-Edit `CATALOG` and rebuild. Because the catalog is passed into the engine as a
-parameter, nothing else changes. Existing quotations are unaffected — each stores
-its full catalog + breakdown in `pricingSnapshot` at submission time, so a price
-change never rewrites history.
+Edit them in **admin → Rates**. Values are entered in rupees; each is
+range-checked, and a save with any out-of-range value is refused and names the
+field, so a typo is never silently priced. The live rates reach the quote page
+server-rendered (`app/quote/layout.tsx`) and through `/api/catalog`, and the
+checkout re-prices authoritatively with them on the server.
 
-Unit tests in `packages/shared/src/pricing.test.ts` assert rounding, quantity
-multiplication, every material tier, and that the breakdown components sum to the
-total — run `pnpm --filter @print/shared test` after any change.
+Existing quotations are unaffected — each stores its full catalog + breakdown in
+`pricingSnapshot` at submission time, so a price change never rewrites history.
+Admin profit, by contrast, is always recomputed with the current internal costs.
 
-## Future: DB-backed catalog
-
-The engine already takes the catalog as an argument. To make prices editable at
-runtime, load a catalog row from the DB and pass it in — no engine refactor
-needed.
+Unit tests in `packages/shared/src/pricing.test.ts` and
+`pricing-settings.test.ts` assert rounding, quantity multiplication, every
+material tier, the breakdown summing to the total, and that the defaults equal
+the code rates — run `pnpm --filter @print/shared test` after any change.

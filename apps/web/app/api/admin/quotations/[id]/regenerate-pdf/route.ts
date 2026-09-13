@@ -14,6 +14,7 @@ import {
   removeQuietly,
 } from "@/lib/storage";
 import { readThumbPng } from "@/lib/thumbs";
+import { getSiteProfile } from "@/lib/site-profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   try {
     await ensureStorageDirs();
     const pdf = await renderQuotationPdf({
+      brandName: (await getSiteProfile()).brandName,
       number: quotation.number,
       createdAt: quotation.createdAt,
       customer: {
