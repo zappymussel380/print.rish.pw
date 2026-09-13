@@ -186,7 +186,7 @@ ENV_LAYOUT=(
   COMPOSE_FILE
   "# --- Edge / HTTPS ---"
   APP_ORIGIN PROXY_BIND TRUSTED_PROXY_CIDR EDGE_SUBNET EDGE_CADDY_IP
-  TUNNEL_SUBNET TUNNEL_CADDY_IP TUNNEL_CLOUDFLARED_IP CLOUDFLARE_TUNNEL_TOKEN
+  TUNNEL_SUBNET TUNNEL_CADDY_IP TUNNEL_CLOUDFLARED_IP CLOUDFLARE_TUNNEL_TOKEN LOCAL_PORT
   "# --- Database and cache (generated secrets) ---"
   POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
   MIGRATION_DATABASE_URL DATABASE_URL WORKER_DATABASE_URL REDIS_PASSWORD
@@ -353,6 +353,29 @@ EOF
 }
 EOF
       ;;
+    local)
+      cat > "$file" <<EOF
+# Written by install.sh from .env — edits are overwritten on update.
+# Local test mode: plain HTTP on this computer only (published on 127.0.0.1).
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	request_body {
+		max_size ${max_mb}MB
+	}
+	header -Server
+	reverse_proxy proxy:8080 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto http
+		flush_interval -1
+	}
+}
+EOF
+      ;;
     *) rm -f "$file" ;;
   esac
 }
@@ -384,6 +407,7 @@ compose_files_for_mode() {
     caddy)  echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.caddy.yml" ;;
     tunnel) echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.tunnel.yml" ;;
     proxy)  echo "docker-compose.yml:docker/selfhost/compose.base.yml" ;;
+    local)  echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.local.yml" ;;
   esac
 }
 

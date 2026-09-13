@@ -59,6 +59,31 @@ After that, **the admin dashboard is where you change things**:
 If the first run is interrupted (for example the build fails on a network
 blip), just run the command again: it picks up where it stopped.
 
+## Try it locally first
+
+Want to see it working before you put anything online? Choose
+**4) Just try it on this computer first** when the installer asks how people
+will reach the site. You don't need a domain. The site opens at
+`http://localhost:8000` (the port is up to you) and nothing on your network or
+the internet can reach it. It's the complete site: real slicing, admin
+dashboard, quotations.
+
+**Linux:** run the install command as usual.
+
+**Windows 10/11:**
+1. Install **WSL2 with Ubuntu** — in PowerShell as administrator: `wsl --install`, then restart.
+2. Install **Docker Desktop**, and in *Settings → Resources → WSL integration* switch on your Ubuntu.
+3. Open the **Ubuntu** terminal and run the install command there.
+4. Open `http://localhost:8000` in your normal Windows browser.
+
+Give WSL enough memory: slicing big models needs several GB (Docker Desktop →
+Resources, or a `.wslconfig`). Macs aren't supported, because the slicer only
+runs on Intel/AMD Linux.
+
+Happy with it? Run `sudo /opt/print-shop/install.sh`, pick **2) Change the web
+address**, and choose one of the options below. Your settings, rates and
+quotations come along.
+
 ## HTTPS options
 
 **1. Public server (recommended).** Your server has a public IP and ports 80
@@ -165,8 +190,9 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_QUOTE_PREFIX` | Quotation-number initials, 2–5 letters (default: the shop name's initials) |
 | `PS_PRINTER` | Printer: the exact OrcaSlicer preset, e.g. `Prusa MK4 0.4 nozzle` (list: `docker/selfhost/printers.tsv`, 3rd column) |
 | `PS_CONFIRM_MULTI_MATERIAL` | `y` if the printer has an AMS/MMU for automatic multicolour |
-| `PS_DOMAIN` | Domain name |
-| `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy |
+| `PS_DOMAIN` | Domain name (not needed for local test mode) |
+| `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed) |
+| `PS_LOCAL_PORT` | Port for local test mode (default 8000) |
 | `PS_ACME_EMAIL` | Let's Encrypt email (mode 1, optional) |
 | `PS_TUNNEL_TOKEN` | Tunnel token (mode 2) |
 | `PS_PROXY_IP`, `PS_PROXY_BIND` | Proxy source IP, and the address to listen on (mode 3) |
