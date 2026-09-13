@@ -2,10 +2,12 @@ import { Queue } from "bullmq";
 import {
   INGEST_JOB_RETENTION_SECONDS,
   INGEST_QUEUE,
+  SLICER_PROFILE_QUEUE,
   SLICE_QUEUE,
   type IngestJobData,
   type IngestJobResult,
   type SliceJobData,
+  type SlicerProfileJobData,
 } from "@print/shared";
 import { env } from "./env";
 
@@ -17,6 +19,7 @@ import { env } from "./env";
 const globalForQueue = globalThis as unknown as {
   sliceQueue?: Queue<SliceJobData>;
   ingestQueue?: Queue<IngestJobData, IngestJobResult>;
+  slicerProfileQueue?: Queue<SlicerProfileJobData>;
 };
 
 function parseRedis(url: string, maxRetriesPerRequest: number | null = null) {
@@ -70,4 +73,20 @@ export function getSliceQueue(): Queue<SliceJobData> {
     });
   }
   return globalForQueue.sliceQueue;
+}
+
+/** Advanced mode: test slices of the owner's uploaded presets. One attempt —
+ *  a failed test is shown to the owner, who uploads again. */
+export function getSlicerProfileQueue(): Queue<SlicerProfileJobData> {
+  if (!globalForQueue.slicerProfileQueue) {
+    globalForQueue.slicerProfileQueue = new Queue<SlicerProfileJobData>(SLICER_PROFILE_QUEUE, {
+      connection: parseRedis(env.redisUrl, 2),
+      defaultJobOptions: {
+        attempts: 1,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 100 },
+      },
+    });
+  }
+  return globalForQueue.slicerProfileQueue;
 }

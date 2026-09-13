@@ -8,7 +8,7 @@ import {
   sliceArtifactKey,
   settingsKey,
 } from "@print/shared";
-import { getPrinterSpec } from "@/lib/printer";
+import { getPrinterProfile } from "@/lib/printer";
 import { jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
@@ -83,6 +83,8 @@ async function rebuildTotals(
   const inputs: QuoteLineInput[] = [];
   const seen = new Set<string>();
   const availability = await getCatalogAvailability();
+  // Slices are cached per printer (and, in advanced mode, per preset revision).
+  const printerId = (await getPrinterProfile()).id;
   for (const line of lines) {
     const { modelId, ...rawConfig } = line;
     const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
@@ -100,7 +102,7 @@ async function rebuildTotals(
           settingsKey: sliceArtifactKey(
             model.format as "stl" | "3mf" | "obj" | "amf",
             config,
-            getPrinterSpec().id,
+            printerId,
           ),
         },
       },

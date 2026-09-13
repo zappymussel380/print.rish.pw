@@ -24,6 +24,8 @@ import {
 } from "@print/shared";
 import { CatalogEditor } from "./catalog-editor";
 import { FaqEditor } from "./faq-editor";
+import { SlicerProfilesEditor } from "./slicer-profiles-editor";
+import type { SlicerProfilesState } from "@/lib/slicer-profiles";
 import { RatesEditor } from "./rates-editor";
 import { SiteEditor } from "./site-editor";
 import { ShowcaseEditor } from "./showcase-editor";
@@ -78,6 +80,7 @@ export function AdminDashboard({
   siteProfile,
   faq,
   recentPrints,
+  slicerProfiles,
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
@@ -90,6 +93,8 @@ export function AdminDashboard({
   siteProfile: SiteProfile | null;
   faq: { generated: FaqEntry[]; settings: FaqSettings };
   recentPrints: RecentPrint[];
+  /** Advanced mode's uploaded slicer presets; null when the mode is off. */
+  slicerProfiles: SlicerProfilesState | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -209,6 +214,9 @@ export function AdminDashboard({
 
       {/* Public "recent prints" showcase */}
       <ShowcaseEditor prints={recentPrints} />
+
+      {/* Advanced mode: the owner's own OrcaSlicer presets */}
+      {slicerProfiles ? <SlicerProfilesEditor initial={slicerProfiles} /> : null}
 
       {/* Controls */}
       <div className="mt-8 flex flex-wrap items-center gap-3">

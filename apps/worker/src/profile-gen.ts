@@ -6,7 +6,7 @@
  * description for the rest of the app (build volume, plate per material …).
  *
  *   node dist/profile-gen.js list [profilesRoot]
- *   node dist/profile-gen.js generate "<machine preset name>" <outDir> [--multi-material] [profilesRoot]
+ *   node dist/profile-gen.js generate "<machine preset name>" <outDir> [--multi-material] [--name "<shown name>"] [profilesRoot]
  *
  * The Orca CLI does not resolve `inherits`, so every profile is flattened. A
  * preset's parent may live in another vendor's folder (OrcaFilamentLibrary
@@ -17,10 +17,20 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { LAYER_HEIGHTS_UM, MATERIAL_IDS, type MaterialId, type PrinterProfileSpec } from "@print/shared";
+import {
+  LAYER_HEIGHTS_UM,
+  MATERIAL_IDS,
+  bedOf,
+  cleanProfile,
+  firstValue as first,
+  plateFor,
+  type MaterialId,
+  type OrcaProfile as Profile,
+  type PrinterProfileSpec,
+  type ProfileKind as Kind,
+} from "@print/shared";
 
-type Profile = Record<string, unknown>;
-type Kind = "machine" | "process" | "filament";
+export { bedOf, plateFor };
 
 interface IndexEntry {
   vendor: string;
@@ -86,6 +96,27 @@ export class ProfileIndex {
     return Object.assign(merged, profile, { __vendor: vendor });
   }
 
+  /** A preset that isn't in the index — one the owner uploaded — with its
+   *  `inherits` chain resolved: first against presets uploaded with it (a
+   *  bundle), then against the presets this OrcaSlicer ships. */
+  flattenPreset(kind: Kind, preset: Profile, peers: readonly Profile[] = [], seen: string[] = []): Profile {
+    const name = String(preset.name ?? "");
+    if (seen.includes(name)) throw new Error(`inheritance cycle: ${[...seen, name].join(" -> ")}`);
+    const own: Profile = { ...preset };
+    const parent = typeof own.inherits === "string" && own.inherits ? own.inherits : null;
+    delete own.inherits;
+    if (!parent) return own;
+    const peer = peers.find((p) => p !== preset && p.name === parent);
+    if (peer) return Object.assign(this.flattenPreset(kind, peer, peers, [...seen, name]), own);
+    if (!this.raw(kind, parent)) {
+      throw new Error(
+        `"${name}" is based on "${parent}", which isn't one of the presets this OrcaSlicer ships. ` +
+          "Export it together with the preset it's based on (as a bundle), or pick a system preset as its parent.",
+      );
+    }
+    return Object.assign(this.flatten(kind, parent), own);
+  }
+
   /** Every instantiable preset of a kind, flattened. */
   *instantiable(kind: Kind): Generator<Profile & { __vendor: string }> {
     for (const [key, list] of this.entries) {
@@ -103,7 +134,6 @@ export class ProfileIndex {
 }
 
 // ── Compatibility ─────────────────────────────────────────────────────────────
-const first = (v: unknown): string => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? ""));
 const notes = (m: Profile): string => (Array.isArray(m.printer_notes) ? m.printer_notes.join("\n") : String(m.printer_notes ?? ""));
 
 /** Orca's `compatible_printers_condition`, for the forms its bundled presets use:
@@ -147,17 +177,6 @@ export interface PrinterChoice {
   /** Human model name, e.g. "Prusa MK4". */
   model: string;
   bedMm: [number, number, number];
-}
-
-export function bedOf(machine: Profile): [number, number, number] {
-  const pts = (Array.isArray(machine.printable_area) ? machine.printable_area : []).map((p) =>
-    String(p).split("x").map(Number),
-  );
-  const xs = pts.map((p) => p[0] ?? 0);
-  const ys = pts.map((p) => p[1] ?? 0);
-  const width = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
-  const depth = ys.length ? Math.max(...ys) - Math.min(...ys) : 0;
-  return [Math.round(width), Math.round(depth), Math.round(Number(first(machine.printable_height)) || 0)];
 }
 
 /** Single-extruder FFF printers with a 0.4 mm nozzle — the setups our three
@@ -232,36 +251,6 @@ function pickFilament(
   return candidates.sort((a, b) => rank(a) - rank(b) || String(a.name).length - String(b.name).length)[0] ?? null;
 }
 
-// Plates in the order we'd rather print on, with the filament key giving its bed
-// temperature; a filament that leaves a plate at 0 can't be printed on it.
-const PLATES: [string, string][] = [
-  ["Textured PEI Plate", "textured_plate_temp"],
-  ["High Temp Plate", "hot_plate_temp"],
-  ["Cool Plate", "cool_plate_temp"],
-  ["Engineering Plate", "eng_plate_temp"],
-];
-
-export function plateFor(filament: Profile): string {
-  for (const [plate, key] of PLATES) if (Number(first(filament[key])) > 0) return plate;
-  return "Textured PEI Plate";
-}
-
-// Export-side bookkeeping that must not reach the CLI (see overlay-numakers-profiles.py):
-// `filament_notes` as a bare "" aborts Orca 2.4.1 before slicing.
-const DROP = ["inherits", "setting_id", "filament_notes", "__vendor"];
-
-function clean(profile: Profile, kind: Kind, name: string, machineName: string): Profile {
-  const out: Profile = { ...profile };
-  for (const key of DROP) delete out[key];
-  out.type = kind;
-  out.name = name;
-  out.from = "system";
-  out.instantiation = "true";
-  if (kind !== "machine") out.compatible_printers = [machineName];
-  if (kind !== "machine") delete out.compatible_printers_condition;
-  return out;
-}
-
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export interface GeneratedSet {
@@ -270,7 +259,12 @@ export interface GeneratedSet {
 }
 
 /** Build the whole profile set for one printer, without touching the disk. */
-export function generateProfiles(index: ProfileIndex, machineName: string, multiMaterial: boolean): GeneratedSet {
+export function generateProfiles(
+  index: ProfileIndex,
+  machineName: string,
+  multiMaterial: boolean,
+  displayName?: string,
+): GeneratedSet {
   const machine = index.flatten("machine", machineName);
   const choice = listPrinters(index).find((p) => p.machine === machineName);
   if (!choice) throw new Error(`${machineName} is not a single-extruder 0.4 mm printer this shop can quote for`);
@@ -278,7 +272,7 @@ export function generateProfiles(index: ProfileIndex, machineName: string, multi
   const processes = [...index.instantiable("process")];
   const filaments = [...index.instantiable("filament")];
   const files: Record<string, Profile> = {};
-  files["machine.json"] = clean(machine, "machine", machineName, machineName);
+  files["machine.json"] = cleanProfile(machine, "machine", machineName, machineName);
 
   const compatibleProcesses = processes.filter((p) => isCompatible(p, machineName, machine));
   for (const um of LAYER_HEIGHTS_UM) {
@@ -299,7 +293,7 @@ export function generateProfiles(index: ProfileIndex, machineName: string, multi
     }
     if (!preset) throw new Error(`${machineName}: no process preset compatible with this printer`);
     const label = String(preset.name);
-    files[`process.${(um / 1000).toFixed(2)}.json`] = clean(preset, "process", label, machineName);
+    files[`process.${(um / 1000).toFixed(2)}.json`] = cleanProfile(preset, "process", label, machineName);
   }
 
   const plates = {} as Record<MaterialId, string>;
@@ -309,7 +303,7 @@ export function generateProfiles(index: ProfileIndex, machineName: string, multi
     if (!preset) throw new Error(`${machineName}: no filament preset for ${tier}`);
     const density = Number(first(preset.filament_density));
     if (!(density > 0)) throw new Error(`${machineName}: ${String(preset.name)} has no density`);
-    files[`filament.${slug(tier)}.json`] = clean(preset, "filament", `${String(preset.name)} (${tier})`, machineName);
+    files[`filament.${slug(tier)}.json`] = cleanProfile(preset, "filament", `${String(preset.name)} (${tier})`, machineName);
     plates[tier] = plateFor(preset);
     sources[tier] = String(preset.name);
   }
@@ -317,7 +311,7 @@ export function generateProfiles(index: ProfileIndex, machineName: string, multi
   const spec: PrinterProfileSpec = {
     id: slug(machineName),
     machine: machineName,
-    name: choice.model,
+    name: displayName || choice.model,
     vendor: choice.vendor,
     nozzleMm: 0.4,
     bedMm: choice.bedMm,
@@ -351,7 +345,9 @@ export function writeA1Set(committedDir: string, outDir: string, multiMaterial: 
 export async function main(argv: string[]) {
   const [command, ...rest] = argv;
   const multi = rest.includes("--multi-material");
-  const args = rest.filter((a) => a !== "--multi-material");
+  const nameAt = rest.indexOf("--name");
+  const displayName = nameAt >= 0 ? rest[nameAt + 1]?.trim().slice(0, 120) : undefined;
+  const args = rest.filter((a, i) => a !== "--multi-material" && (nameAt < 0 || (i !== nameAt && i !== nameAt + 1)));
   if (command === "list") {
     const index = new ProfileIndex(args[0] ?? DEFAULT_PROFILES_ROOT);
     for (const p of listPrinters(index)) {
@@ -366,11 +362,14 @@ export async function main(argv: string[]) {
       // Never config.profilesDir: the installer runs this with PROFILES_DIR
       // pointing at the shop's own set — the very dir being replaced.
       const { COMMITTED_PROFILES_DIR } = await import("./config.js");
-      writeA1Set(COMMITTED_PROFILES_DIR, outDir, multi, DEFAULT_PRINTER_SPEC);
+      writeA1Set(COMMITTED_PROFILES_DIR, outDir, multi, {
+        ...DEFAULT_PRINTER_SPEC,
+        ...(displayName ? { name: displayName } : {}),
+      });
       process.stdout.write(`Bambu Lab A1: using the committed Numakers profiles\n`);
       return;
     }
-    const set = generateProfiles(new ProfileIndex(root ?? DEFAULT_PROFILES_ROOT), machineName, multi);
+    const set = generateProfiles(new ProfileIndex(root ?? DEFAULT_PROFILES_ROOT), machineName, multi, displayName);
     writeProfileSet(set, outDir);
     process.stdout.write(
       `${set.spec.name}: ${Object.keys(set.files).length} profiles, bed ${set.spec.bedMm.join("×")} mm\n` +
@@ -381,7 +380,7 @@ export async function main(argv: string[]) {
     );
     return;
   }
-  process.stderr.write('usage: profile-gen.js list [root] | generate "<machine>" <outDir> [--multi-material] [root]\n');
+  process.stderr.write('usage: profile-gen.js list [root] | generate "<machine>" <outDir> [--multi-material] [--name "<shown name>"] [root]\n');
   process.exitCode = 64;
 }
 

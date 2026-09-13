@@ -10,9 +10,14 @@ services:
   # and filament profiles plus printer.json) into .selfhost/profiles from the
   # OrcaSlicer presets in the worker image. The worker slices with it; web reads
   # printer.json for the printer's name and build volume.
+  #
+  # Advanced mode (install.sh → "my own printer / profiles"): the owner uploads
+  # OrcaSlicer presets in the admin dashboard; both services layer the live ones
+  # over this set.
   web:
     environment:
       PRINTER_SPEC_FILE: /printer/printer.json
+      ADVANCED_PROFILES: "${PRINTER_ADVANCED:-0}"
     volumes:
       - ./.selfhost/profiles:/printer:ro
     deploy:
@@ -22,6 +27,7 @@ services:
   worker:
     environment:
       PROFILES_DIR: /printer
+      ADVANCED_PROFILES: "${PRINTER_ADVANCED:-0}"
     volumes:
       - ./.selfhost/profiles:/printer:ro
     deploy:

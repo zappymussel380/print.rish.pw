@@ -86,6 +86,7 @@ export async function executeParseChild(params: ParseChildParams): Promise<Parse
     originalName: params.originalName,
     format: params.format,
     sourceSha256: params.sourceSha256,
+    ...(params.bedMm ? { bedMm: params.bedMm } : {}),
   });
 
   const models: ParseChildModel[] = [];

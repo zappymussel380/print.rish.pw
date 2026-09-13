@@ -21,6 +21,8 @@ import { getPricing } from "@/lib/pricing-settings";
 import { getStoredSiteProfile } from "@/lib/site-profile";
 import { getFaqSettings, getGeneratedFaq } from "@/lib/faq";
 import { getRecentPrints } from "@/lib/recent-prints";
+import { advancedProfilesEnabled } from "@/lib/printer";
+import { getSlicerProfilesState } from "@/lib/slicer-profiles";
 import { isAdmin } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -69,7 +71,11 @@ export default async function AdminPage() {
   const catalog = toPublicCatalog(await getCatalogAvailability());
   const recentPrints = await getRecentPrints();
   const siteProfile = await getStoredSiteProfile().catch(() => null);
-  const [faqGenerated, faqSettings] = await Promise.all([getGeneratedFaq(), getFaqSettings()]);
+  const [faqGenerated, faqSettings, slicerProfiles] = await Promise.all([
+    getGeneratedFaq(),
+    getFaqSettings(),
+    advancedProfilesEnabled() ? getSlicerProfilesState() : null,
+  ]);
 
   return (
     <AdminDashboard
@@ -80,6 +86,7 @@ export default async function AdminPage() {
       rates={pricing.catalog}
       siteProfile={siteProfile}
       faq={{ generated: faqGenerated, settings: faqSettings }}
+      slicerProfiles={slicerProfiles}
       recentPrints={recentPrints}
     />
   );

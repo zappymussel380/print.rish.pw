@@ -147,10 +147,63 @@ valid_menu_index() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le "$ME
 # Every single-nozzle, 0.4 mm printer OrcaSlicer ships (docker/selfhost/printers.tsv:
 # vendor, model, Orca machine preset, build volume). Quotes are sliced with the
 # chosen printer's own profiles, generated after the build.
+valid_printer_setup() { [[ "$1" =~ ^(1|2|list|advanced)$ ]]; }
+valid_printer_base() { [[ "$1" =~ ^[1-5]$ ]]; }
+valid_printer_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._+/()-]{0,59}$ ]]; }
+
 sec_printer() {
   head_line "Your printer"
   hint "Every quote is sliced with your printer's own OrcaSlicer profiles, so weight, time and fit match it."
   [ -f "$PRINTERS_FILE" ] || die "Missing $PRINTERS_FILE — the download looks incomplete."
+  say "   1) Pick it from OrcaSlicer's list  (recommended — 300+ printers)"
+  say "   2) Advanced — my own printer, or my own tuned OrcaSlicer profiles"
+  ask PRINTER_SETUP "Choose 1–2" "$([ "${CFG[PRINTER_ADVANCED]:-0}" = 1 ] && echo 2 || echo 1)" valid_printer_setup "Please answer 1 or 2."
+  local machine
+  ANS[PRINTER_ADVANCED]=0
+  ANS[PRINTER_NAME]=""
+  case "${ANS[PRINTER_SETUP]}" in
+    2|advanced)
+      ANS[PRINTER_ADVANCED]=1
+      hint "Quotes start on a generic preset. Then, in the admin dashboard (Slicer profiles), you upload"
+      hint "the presets you use in OrcaSlicer — each one is test-sliced before quotes use it."
+      if [ -n "${PS_PRINTER:-}" ]; then
+        pick_listed_printer; machine=$PICKED_MACHINE
+      else
+        say "   1) Generic Klipper printer"
+        say "   2) Generic Marlin printer"
+        say "   3) Generic RepRapFirmware printer"
+        say "   4) Generic Repetier printer"
+        say "   5) A printer from OrcaSlicer's list, fine-tuned with my own presets"
+        ask PRINTER_BASE "Start from (number)" 1 valid_printer_base "Pick a number from 1 to 5."
+        case "${ANS[PRINTER_BASE]}" in
+          1) machine="MyKlipper 0.4 nozzle" ;;
+          2) machine="MyMarlin 0.4 nozzle" ;;
+          3) machine="MyRRF 0.4 nozzle" ;;
+          4) machine="MyRepetier 0.4 nozzle" ;;
+          5) pick_listed_printer; machine=$PICKED_MACHINE ;;
+        esac
+      fi
+      ask PRINTER_NAME "Printer name customers see (e.g. Voron 2.4 300)" "${CFG[PRINTER_DISPLAY_NAME]:-}" valid_printer_name \
+        "Use 1–60 letters, numbers, spaces and . _ + / ( ) -" ;;
+    *) pick_listed_printer; machine=$PICKED_MACHINE ;;
+  esac
+  ANS[PRINTER_MACHINE]=$machine
+  ANS[PRINTER_MULTI]=0
+  if confirm "Does it have an AMS, MMU or tool changer for automatic multicolour?" N MULTI_MATERIAL; then
+    ANS[PRINTER_MULTI]=1
+  fi
+  if [ "${ANS[PRINTER_ADVANCED]}" = 1 ]; then
+    ok "Printer: ${ANS[PRINTER_NAME]} (advanced mode, starting from ${machine% 0.4 nozzle})"
+  else
+    ok "Printer: $(awk -F'\t' -v m="$machine" '$3==m {print $2; exit}' "$PRINTERS_FILE")"
+  fi
+}
+
+# Brand, then model, from OrcaSlicer's list, into PICKED_MACHINE (the machine
+# preset name). Not a $(…) helper: the menus print to stdout, and a die in a
+# subshell would not end the installer.
+PICKED_MACHINE=""
+pick_listed_printer() {
   local machine="" i=1 vendor row def
   if [ -n "${PS_PRINTER:-}" ]; then
     machine=$(awk -F'\t' -v p="$PS_PRINTER" '$3==p || $2==p {print $3; exit}' "$PRINTERS_FILE")
@@ -182,12 +235,7 @@ sec_printer() {
     ask PRINTER_MODEL "Which $(vendor_label "$vendor") printer (number)" "$def" valid_menu_index "Pick a number from the list."
     machine=$(cut -f3 <<<"${models[$((ANS[PRINTER_MODEL] - 1))]}")
   fi
-  ANS[PRINTER_MACHINE]=$machine
-  ANS[PRINTER_MULTI]=0
-  if confirm "Does it have an AMS, MMU or tool changer for automatic multicolour?" N MULTI_MATERIAL; then
-    ANS[PRINTER_MULTI]=1
-  fi
-  ok "Printer: $(awk -F'\t' -v m="$machine" '$3==m {print $2; exit}' "$PRINTERS_FILE")"
+  PICKED_MACHINE=$machine
 }
 
 # Where the finished site lives: https://<domain>, or http://localhost:<port>
@@ -393,7 +441,11 @@ summary() {
   for m in "${OFFERED[@]}"; do rates+="${rates:+, }$m ₹$(from_paise "$(to_paise "${ANS[RATE_$m]}")")/g"; done
   say "  Shop:        ${ANS[BRAND]}${ANS[CITY]:+ · ${ANS[CITY]}}  (quotes numbered ${ANS[QUOTE_PREFIX]:-RSP}-$(date +%Y)-0001)"
   say "  Address:     $(site_url)  (${ANS[MODE]})"
-  say "  Printer:     ${ANS[PRINTER_MACHINE]% 0.4 nozzle}$([ "${ANS[PRINTER_MULTI]:-0}" = 1 ] && echo " (automatic multicolour)")"
+  if [ "${ANS[PRINTER_ADVANCED]:-0}" = 1 ]; then
+    say "  Printer:     ${ANS[PRINTER_NAME]} — advanced mode, starting from ${ANS[PRINTER_MACHINE]% 0.4 nozzle}"
+  else
+    say "  Printer:     ${ANS[PRINTER_MACHINE]% 0.4 nozzle}$([ "${ANS[PRINTER_MULTI]:-0}" = 1 ] && echo " (automatic multicolour)")"
+  fi
   say "  Materials:   $rates"
   say "  Setup fee:   ₹$(from_paise "$(to_paise "${ANS[SETUP_FEE]}")") per order"
   say "  Materials page: $(material_ids "${ANS[MATERIALS_PAGE]}" | paste -sd, - | sed 's/,/, /g')"
@@ -470,6 +522,10 @@ configure_env() {
   CFG[COMPOSE_FILE]=$(compose_files_for_mode "$mode")
   [ -n "${ANS[PRINTER_MACHINE]:-}" ] && CFG[PRINTER_MACHINE]=${ANS[PRINTER_MACHINE]}
   [ -n "${ANS[PRINTER_MULTI]:-}" ] && CFG[PRINTER_MULTI_MATERIAL]=${ANS[PRINTER_MULTI]}
+  if [ -n "${ANS[PRINTER_ADVANCED]:-}" ]; then
+    CFG[PRINTER_ADVANCED]=${ANS[PRINTER_ADVANCED]}
+    CFG[PRINTER_DISPLAY_NAME]=${ANS[PRINTER_NAME]:-}
+  fi
   # Menu 2 asks no printer questions: the tests above then fail, and that
   # status must not become the function's, or set -e ends the installer.
   return 0
@@ -706,13 +762,16 @@ main() {
          sec_integrations; configure_integrations; write_env; dc up -d --force-recreate web; wait_healthy 180; ok "Saved" ;;
       5) sec_printer
          local old_machine=${CFG[PRINTER_MACHINE]:-} old_multi=${CFG[PRINTER_MULTI_MATERIAL]:-0}
+         local old_advanced=${CFG[PRINTER_ADVANCED]:-0} old_name=${CFG[PRINTER_DISPLAY_NAME]:-}
          CFG[PRINTER_MACHINE]=${ANS[PRINTER_MACHINE]}; CFG[PRINTER_MULTI_MATERIAL]=${ANS[PRINTER_MULTI]}
+         CFG[PRINTER_ADVANCED]=${ANS[PRINTER_ADVANCED]}; CFG[PRINTER_DISPLAY_NAME]=${ANS[PRINTER_NAME]}
          if ! generate_printer_profiles; then
            CFG[PRINTER_MACHINE]=$old_machine; CFG[PRINTER_MULTI_MATERIAL]=$old_multi
+           CFG[PRINTER_ADVANCED]=$old_advanced; CFG[PRINTER_DISPLAY_NAME]=$old_name
            die "Kept the previous printer."
          fi
          write_env
-         dc up -d --force-recreate web worker; wait_healthy 240; ok "Now quoting for ${CFG[PRINTER_MACHINE]% 0.4 nozzle}" ;;
+         dc up -d --force-recreate web worker; wait_healthy 240; ok "Now quoting for ${CFG[PRINTER_DISPLAY_NAME]:-${CFG[PRINTER_MACHINE]% 0.4 nozzle}}" ;;
       6) ANS[DOMAIN]=${CFG[SELFHOST_DOMAIN]}; sec_shop; sec_materials; sec_contact
          confirm "Replace the shop settings in the admin dashboard with these?" N RESET || die "Nothing was changed."
          seed_shop_settings ;;

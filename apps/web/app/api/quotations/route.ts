@@ -13,7 +13,7 @@ import {
   resolveColourName,
   summariseItems,
 } from "@print/shared";
-import { getPrinterSpec } from "@/lib/printer";
+import { getPrinterProfile } from "@/lib/printer";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
@@ -104,6 +104,8 @@ async function postQuotation(request: NextRequest) {
   // becomes a financial document, so the server must never reinterpret what
   // the customer submitted. The legit client can't produce duplicates.
   const seenModels = new Set<string>();
+  // Slices are cached per printer (and, in advanced mode, per preset revision).
+  const printerId = (await getPrinterProfile()).id;
   const availability = await getCatalogAvailability();
   // Custom colours can be deleted later, so every record of this quotation
   // carries the colour's name as it was at submission.
@@ -140,7 +142,7 @@ async function postQuotation(request: NextRequest) {
           settingsKey: sliceArtifactKey(
             model.format as "stl" | "3mf" | "obj" | "amf",
             normalizedConfig,
-            getPrinterSpec().id,
+            printerId,
           ),
         },
       },
@@ -386,6 +388,7 @@ async function postQuotation(request: NextRequest) {
     ).filter((annexure) => annexure !== null);
     const pdf = await renderQuotationPdf({
       brandName: (await getSiteProfile()).brandName,
+      printer: await getPrinterProfile(),
       number: created.number,
       createdAt: created.createdAt,
       customer: {

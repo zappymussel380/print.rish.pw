@@ -6,6 +6,7 @@ import pino from "pino";
 import { Prisma, prisma } from "@print/db";
 import {
   INGEST_QUEUE,
+  SLICER_PROFILE_QUEUE,
   SLICE_QUEUE,
   SLICE_PIPELINE_VERSION,
   UUID_RE,
@@ -15,11 +16,15 @@ import {
   type IngestJobResult,
   type SliceJobData,
   type SliceProgressStage,
+  type SlicerProfileJobData,
 } from "@print/shared";
-import { config, printerSpec } from "./config.js";
+import { config } from "./config.js";
 import { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } from "./ingest.js";
 import { renderThumbnailIsolated } from "./parse-runner.js";
-import { runSlice, type SlicerIdentity } from "./orca.js";
+import { runSlice } from "./orca.js";
+import { activeProfileSet } from "./profile-set.js";
+import { markBatchFailed, orcaIndex, processProfileBatch } from "./profile-test.js";
+import { slicerPool } from "./slicer-pool.js";
 import { runRetention } from "./retention.js";
 import {
   claimSliceAttempt,
@@ -93,21 +98,6 @@ function redisOptions(maxRetriesPerRequest: number | null = null) {
   };
 }
 
-const availableSlicerIdentities: SlicerIdentity[] = Array.from(
-  { length: config.concurrency },
-  (_, index) => ({ uid: config.slicerUid + index, gid: config.slicerGid + index }),
-);
-
-function acquireSlicerIdentity(): SlicerIdentity {
-  const identity = availableSlicerIdentities.pop();
-  if (!identity) throw new Error("No isolated slicer identity is available");
-  return identity;
-}
-
-function releaseSlicerIdentity(identity: SlicerIdentity): void {
-  availableSlicerIdentities.push(identity);
-}
-
 async function processJob(job: Job<SliceJobData>): Promise<void> {
   const { sliceResultId, attemptId, modelId, fileHash, settingsKey: queuedSettingsKey } = job.data;
   if (!UUID_RE.test(sliceResultId) || !UUID_RE.test(attemptId) || !UUID_RE.test(modelId)) {
@@ -141,13 +131,16 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
   if (storedPath !== expectedPath || !["stl", "3mf", "obj", "amf"].includes(model.format)) {
     throw new Error("Queue job resolved outside the model storage root");
   }
+  // The owner's live presets in advanced mode, the installer's set otherwise.
+  const profileSet = await activeProfileSet();
   if (
-    // The key names the printer too: a job keyed for another printer than the
-    // one these profiles describe must not be sliced (or cached) with them.
+    // The key names the printer — and in advanced mode the revision of the
+    // owner's presets: a job keyed for other profiles than these must not be
+    // sliced (or cached) with them.
     sliceArtifactKey(
       model.format as "stl" | "3mf" | "obj" | "amf",
       parsedSettings.data,
-      printerSpec.id,
+      profileSet.spec.id,
     ) !== queuedSettingsKey
   ) {
     throw new Error("Queue job cache identity does not match the model format/settings");
@@ -220,7 +213,7 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
     scheduleProgressWrite();
   };
 
-  const identity = acquireSlicerIdentity();
+  const identity = await slicerPool.acquire();
   try {
     const outcome = await runSlice(
       {
@@ -233,6 +226,7 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
       workDir,
       identity,
       reportProgress,
+      profileSet,
     );
     while (progressWriter) await progressWriter;
 
@@ -292,7 +286,7 @@ async function processJob(job: Job<SliceJobData>): Promise<void> {
     try {
       await rm(workDir, { recursive: true, force: true });
     } finally {
-      releaseSlicerIdentity(identity);
+      slicerPool.release(identity);
     }
   }
 }
@@ -417,6 +411,27 @@ await maintenanceQueue.add("retention", {}, {
   removeOnComplete: true,
   removeOnFail: 20,
 });
+// Advanced mode: test-slice the owner's uploaded presets before they go live.
+// One at a time; each test slice waits its turn for a slicer identity.
+const profileWorker = config.advancedProfiles
+  ? new Worker<SlicerProfileJobData>(
+      SLICER_PROFILE_QUEUE,
+      async (job) => {
+        if (!UUID_RE.test(job.data.batchId)) throw new Error("Profile job has an invalid batch id");
+        await processProfileBatch(job.data.batchId, { index: orcaIndex });
+      },
+      { connection: redisOptions(), concurrency: 1 },
+    )
+  : null;
+profileWorker?.on("failed", (job, err) => {
+  log.error({ jobId: job?.id, err: err.message }, "profile test errored");
+  if (job && UUID_RE.test(job.data.batchId)) {
+    void markBatchFailed(job.data.batchId, `The test couldn't finish (${err.message}). Upload it again.`).catch(
+      (error: unknown) => log.error({ err: String(error) }, "could not record the profile test failure"),
+    );
+  }
+});
+
 const maintenanceWorker = new Worker(
   MAINTENANCE_QUEUE,
   async () => {
@@ -439,7 +454,7 @@ async function shutdown(signal: string) {
   clearInterval(beat);
   // Start every consumer close together so one long slice cannot leave another
   // queue accepting fresh work during shutdown.
-  await Promise.all([worker.close(), ingestWorker.close(), maintenanceWorker.close()]);
+  await Promise.all([worker.close(), ingestWorker.close(), maintenanceWorker.close(), profileWorker?.close()]);
   await Promise.all([
     ingestQueue.close(),
     maintenanceQueue.close(),

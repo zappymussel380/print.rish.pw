@@ -198,7 +198,7 @@ ENV_LAYOUT=(
   "# --- Sizing ---"
   MAX_UPLOAD_MB WORKER_CONCURRENCY SELFHOST_WEB_CPUS SELFHOST_WORKER_CPUS SELFHOST_DB_CPUS
   "# --- Printer (profiles generated into .selfhost/profiles) ---"
-  PRINTER_MACHINE PRINTER_MULTI_MATERIAL
+  PRINTER_MACHINE PRINTER_MULTI_MATERIAL PRINTER_ADVANCED PRINTER_DISPLAY_NAME
 )
 
 write_env() {
@@ -389,6 +389,8 @@ A1_MACHINE="Bambu Lab A1 0.4 nozzle"
 generate_printer_profiles() {
   local machine="${CFG[PRINTER_MACHINE]:-$A1_MACHINE}" out="$ROOT_DIR/.selfhost/profiles" tmp flags=()
   [ "${CFG[PRINTER_MULTI_MATERIAL]:-0}" = "1" ] && flags+=(--multi-material)
+  # Advanced mode names the printer itself (it may be starting from a generic preset).
+  [ -n "${CFG[PRINTER_DISPLAY_NAME]:-}" ] && flags+=(--name "${CFG[PRINTER_DISPLAY_NAME]}")
   tmp="$ROOT_DIR/.selfhost/profiles.new"
   rm -rf "$tmp"; mkdir -p "$tmp"; chmod 755 "$ROOT_DIR/.selfhost" "$tmp"
   if ! dc run --rm --no-deps -T -v "$tmp:/out" --entrypoint node worker \
@@ -399,7 +401,7 @@ generate_printer_profiles() {
   fi
   chmod -R a+rX "$tmp"
   rm -rf "$out"; mv "$tmp" "$out"
-  ok "Slicing profiles ready for ${machine% 0.4 nozzle}"
+  ok "Slicing profiles ready for ${CFG[PRINTER_DISPLAY_NAME]:-${machine% 0.4 nozzle}}"
 }
 
 compose_files_for_mode() {

@@ -158,6 +158,15 @@ GRANT UPDATE (
   "attemptId", "status", "progressPct", "progressStage", "progressMessage",
   "progressUpdatedAt", "errorCode", "errorMessage", "completedAt"
 ) ON TABLE "SliceResult" TO ${webRole};
+-- Advanced mode's uploaded slicer presets. The web stores what the owner
+-- uploaded and can retire a live one; only the worker, after a passing test
+-- slice, writes the resolved preset and marks it live.
+GRANT SELECT ON TABLE "SlicerProfileUpload" TO ${webRole};
+GRANT INSERT (
+  "id", "batchId", "slot", "originalName", "presetName", "raw", "status", "createdAt"
+) ON TABLE "SlicerProfileUpload" TO ${webRole};
+GRANT UPDATE ("status", "error", "checkedAt") ON TABLE "SlicerProfileUpload" TO ${webRole};
+GRANT SELECT, UPDATE ON TABLE "SlicerProfileUpload" TO ${workerRole};
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "UploadedModel" TO ${workerRole};
 GRANT SELECT, UPDATE ON TABLE "SliceResult" TO ${workerRole};
 -- Quotation DELETE powers the retention sweep. Cascading foreign keys remove

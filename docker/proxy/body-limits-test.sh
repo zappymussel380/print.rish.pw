@@ -107,6 +107,12 @@ check /api/admin/showcase 200 pass
 check /api/admin/showcase 4096 pass
 # ...but not without limit.
 check /api/admin/showcase 20480 reject
+# Advanced mode's slicer preset uploads: the app caps them at 2 MiB.
+check /api/admin/slicer-profiles 200 pass
+check /api/admin/slicer-profiles 2048 pass
+check /api/admin/slicer-profiles 4096 reject
+# The exact match must not widen the admin endpoints beside it.
+check /api/admin/slicer-profiles-x 200 reject
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures body-limit expectation(s) failed" >&2

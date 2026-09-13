@@ -10,6 +10,7 @@ export * from "./ingest-job";
 export * from "./parse-child-contract";
 export * from "./material-guide";
 export * from "./money";
+export * from "./orca-profile";
 export * from "./order-summary";
 export * from "./pricing";
 export * from "./pricing-settings";
