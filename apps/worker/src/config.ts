@@ -30,12 +30,17 @@ export function stubSlicerEnabled(
 
 const MAX_QUOTATION_RETENTION_DAYS = 90;
 
+/** The hand-tuned Bambu Lab A1 set committed with the worker. Distinct from
+ *  `profilesDir` once a self-hosted shop points PROFILES_DIR at its generated
+ *  set — and the installer's own profile-gen run sees that (still empty) dir. */
+export const COMMITTED_PROFILES_DIR = fileURLToPath(new URL("../profiles", import.meta.url));
+
 export const config = {
   redisUrl: str("REDIS_URL", "redis://localhost:6379"),
   /** OrcaSlicer AppRun entrypoint inside the worker image. */
   orcaBin: str("ORCA_BIN", "/opt/orca/AppRun"),
   /** Committed, inheritance-flattened Bambu A1 profiles. */
-  profilesDir: str("PROFILES_DIR", fileURLToPath(new URL("../profiles", import.meta.url))),
+  profilesDir: str("PROFILES_DIR", COMMITTED_PROFILES_DIR),
   /** Shared uploads volume — same path the web container mounts. */
   uploadDir: str("UPLOAD_DIR", "./data/uploads"),
   pdfDir: str("PDF_DIR", "./data/pdfs"),

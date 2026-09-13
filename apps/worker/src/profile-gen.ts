@@ -348,7 +348,7 @@ export function writeA1Set(committedDir: string, outDir: string, multiMaterial: 
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
-async function main(argv: string[]) {
+export async function main(argv: string[]) {
   const [command, ...rest] = argv;
   const multi = rest.includes("--multi-material");
   const args = rest.filter((a) => a !== "--multi-material");
@@ -363,8 +363,10 @@ async function main(argv: string[]) {
     const [machineName, outDir, root] = args as [string, string, string?];
     if (machineName === A1_MACHINE) {
       const { DEFAULT_PRINTER_SPEC } = await import("@print/shared");
-      const { config } = await import("./config.js");
-      writeA1Set(config.profilesDir, outDir, multi, DEFAULT_PRINTER_SPEC);
+      // Never config.profilesDir: the installer runs this with PROFILES_DIR
+      // pointing at the shop's own set — the very dir being replaced.
+      const { COMMITTED_PROFILES_DIR } = await import("./config.js");
+      writeA1Set(COMMITTED_PROFILES_DIR, outDir, multi, DEFAULT_PRINTER_SPEC);
       process.stdout.write(`Bambu Lab A1: using the committed Numakers profiles\n`);
       return;
     }
