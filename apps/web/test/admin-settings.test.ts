@@ -19,6 +19,7 @@ vi.mock("@/lib/security", () => ({ assertSameOrigin: () => sameOrigin.ok }));
 
 const pricingRoute = await import("@/app/api/admin/pricing/route");
 const siteRoute = await import("@/app/api/admin/site/route");
+const faqRoute = await import("@/app/api/admin/faq/route");
 
 const fakeReq = () => ({}) as unknown as NextRequest;
 const body = (value: unknown) => apiUtil.readJsonBody.mockResolvedValue({ ok: true, value });
@@ -106,5 +107,31 @@ describe("PUT /api/admin/site", () => {
     expect(json.brandName).toBe("Acme Prints");
     expect(json.contact.whatsappNumber).toBe("");
     vi.unstubAllEnvs();
+  });
+});
+
+describe("PUT /api/admin/faq", () => {
+  it("stores the shop's own entries and hidden generated ones", async () => {
+    body({ custom: [{ id: "custom-colours", q: "Custom colours?", a: "Ask for 800 g+ jobs." }], hidden: ["payment"] });
+    const res = await faqRoute.PUT(fakeReq());
+    expect(res.status).toBe(200);
+    const saved = stored();
+    expect(saved.key).toBe("faq");
+    expect(saved.value).toEqual({
+      custom: [{ id: "custom-colours", q: "Custom colours?", a: "Ask for 800 g+ jobs." }],
+      hidden: ["payment"],
+    });
+  });
+
+  it("refuses an entry with no answer", async () => {
+    body({ custom: [{ id: "custom-x", q: "Question?", a: "  " }], hidden: [] });
+    expect((await faqRoute.PUT(fakeReq())).status).toBe(422);
+    expect(db.upsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-origin saves", async () => {
+    sameOrigin.ok = false;
+    body({ custom: [], hidden: [] });
+    expect((await faqRoute.PUT(fakeReq())).status).toBe(403);
   });
 });

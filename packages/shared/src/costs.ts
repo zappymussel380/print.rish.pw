@@ -215,15 +215,15 @@ export function estimateOrderCostPaise(
 }
 
 /**
- * Estimated profit for an order: everything the customer is charged
- * (`revenuePaise`, which already includes the ₹150 setup fee as pure margin)
- * minus our production cost. The setup fee carries no cost of its own, so it
- * flows entirely into profit.
+ * Estimated profit for an order: what the customer pays for printing minus our
+ * production cost. Prepaid courier shipping is collected on the courier's
+ * behalf and passed straight on, so it is never profit. The setup fee carries
+ * no cost of its own and flows entirely into profit.
  */
 export function estimateOrderProfitPaise(
-  revenuePaise: number,
+  order: { totalPaise: number; shippingPaise: number },
   items: CostItem[],
   basis: InternalCostBasis = INTERNAL_COST,
 ): number {
-  return revenuePaise - estimateOrderCostPaise(items, basis);
+  return order.totalPaise - order.shippingPaise - estimateOrderCostPaise(items, basis);
 }

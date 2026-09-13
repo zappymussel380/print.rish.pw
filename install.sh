@@ -132,6 +132,8 @@ sec_shop() {
   head_line "Your shop"
   hint "This is how customers see you: in the header, page titles, PDFs and WhatsApp messages."
   ask BRAND "Shop name (e.g. Acme Prints)" "" valid_brand "Use 1–40 plain characters (no quotes or backslashes)."
+  ask QUOTE_PREFIX "Initials for quotation numbers (e.g. $(initials_for "${ANS[BRAND]}")-2026-0001)" "$(initials_for "${ANS[BRAND]}")" valid_quote_prefix "Use 2 to 5 capital letters, like AP."
+  ANS[QUOTE_PREFIX]=${ANS[QUOTE_PREFIX]^^}
   ask TAGLINE "One-line tagline" "instant 3D printing quotes" valid_tagline "Up to 80 plain characters, please."
   ask CITY "City you print from (shown as '3D printing · City')" "" valid_city "Up to 60 plain characters, please."
 }
@@ -177,6 +179,17 @@ sec_address() {
 # Lengths match the site profile's own limits (packages/shared/src/site-profile.ts),
 # or the app would quietly replace an over-long value with its default.
 valid_brand()   { valid_text "$1" && [ ${#1} -le 40 ]; }
+valid_quote_prefix() { [[ "${1^^}" =~ ^[A-Z]{2,5}$ ]]; }
+# "Acme Prints" → AP, "Printery" → PRI (matches initialsFor in packages/shared).
+initials_for() {
+  local w out=""
+  for w in $(printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9\n' ' '); do
+    w=${w//[^A-Z]/}; [ -n "$w" ] && out+=${w:0:1}
+  done
+  if [ ${#out} -lt 2 ]; then out=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -cd 'A-Z' | cut -c1-3); fi
+  out=${out:0:5}
+  [[ "$out" =~ ^[A-Z]{2,5}$ ]] && echo "$out" || echo RSP
+}
 valid_tagline() { valid_text_or_empty "$1" && [ ${#1} -le 80 ]; }
 valid_city()    { valid_text_or_empty "$1" && [ ${#1} -le 60 ]; }
 valid_mode_choice() { [[ "$1" =~ ^(1|2|3|caddy|tunnel|proxy)$ ]]; }
@@ -295,7 +308,7 @@ summary() {
   head_line "Summary"
   local m rates=""
   for m in "${OFFERED[@]}"; do rates+="${rates:+, }$m ₹$(from_paise "$(to_paise "${ANS[RATE_$m]}")")/g"; done
-  say "  Shop:        ${ANS[BRAND]}${ANS[CITY]:+ · ${ANS[CITY]}}"
+  say "  Shop:        ${ANS[BRAND]}${ANS[CITY]:+ · ${ANS[CITY]}}  (quotes numbered ${ANS[QUOTE_PREFIX]:-RSP}-$(date +%Y)-0001)"
   say "  Address:     https://${ANS[DOMAIN]}  (${ANS[MODE]})"
   say "  Materials:   $rates"
   say "  Setup fee:   ₹$(from_paise "$(to_paise "${ANS[SETUP_FEE]}")") per order"
@@ -457,6 +470,7 @@ settings_json() {
       "address": $(json_str "${ANS[ADDRESS]}")
     },
     "footerNote": "",
+    "quotationPrefix": $(json_str "${ANS[QUOTE_PREFIX]:-RSP}"),
     "materialsPage": [$json_page]
   },
   "pricing": {

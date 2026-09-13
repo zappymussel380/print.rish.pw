@@ -26,6 +26,8 @@ export interface PrinterSpec {
   bedMm: readonly [number, number, number];
   /** Average power draw while printing, in kWh per hour of print time. */
   kwhPerHour: number;
+  /** Can switch filaments mid-print (AMS/MMU/toolchanger). Absent = single filament. */
+  multiMaterial?: boolean;
 }
 
 export interface Catalog {

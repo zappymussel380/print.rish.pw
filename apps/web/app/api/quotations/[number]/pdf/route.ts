@@ -6,11 +6,12 @@ import { getQuotationAccessCookie, quotationAccessMatches } from "@/lib/quotatio
 import { RATE_LIMITS, clientIp, rateLimit } from "@/lib/security";
 import { isAdmin } from "@/lib/session";
 import { openPrivateFile, pdfPath } from "@/lib/storage";
+import { QUOTATION_NUMBER_RE } from "@print/shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NUMBER_RE = /^RSP-\d{4}-\d{4,}$/;
+const NUMBER_RE = QUOTATION_NUMBER_RE;
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const DUMMY_EXPIRY = new Date("2000-01-01T00:00:00.000Z");
 const DUMMY_VERIFIER = `sha256:${"0".repeat(64)}`;

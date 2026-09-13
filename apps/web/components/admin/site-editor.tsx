@@ -12,12 +12,27 @@ import {
   type SiteProfile,
 } from "@print/shared";
 
-type TextKey = "brandName" | "tagline" | "city" | "whatsappNumber" | "email" | "phone" | "address" | "footerNote";
+type TextKey =
+  | "brandName"
+  | "tagline"
+  | "city"
+  | "quotationPrefix"
+  | "whatsappNumber"
+  | "email"
+  | "phone"
+  | "address"
+  | "footerNote";
 
 const FIELDS: { key: TextKey; label: string; hint?: string; max: number; multiline?: boolean }[] = [
   { key: "brandName", label: "Shop name", hint: "Header, page titles, PDFs and messages.", max: SITE_PROFILE_LIMITS.brandName },
   { key: "tagline", label: "Tagline", hint: "Shown after the name in browser tabs.", max: SITE_PROFILE_LIMITS.tagline },
   { key: "city", label: "City", hint: "“3D printing · City”, pickup and shipping copy.", max: SITE_PROFILE_LIMITS.city },
+  {
+    key: "quotationPrefix",
+    label: "Quotation initials",
+    hint: "2–5 capital letters: AP-2026-0001. Earlier numbers keep working.",
+    max: 5,
+  },
   { key: "whatsappNumber", label: "WhatsApp number", hint: "With country code, e.g. 919876543210. Quotes hand off here.", max: 20 },
   { key: "email", label: "Contact email", max: SITE_PROFILE_LIMITS.email },
   { key: "phone", label: "Phone", max: SITE_PROFILE_LIMITS.phone },
@@ -30,6 +45,7 @@ function toForm(p: SiteProfile): Record<TextKey, string> {
     brandName: p.brandName,
     tagline: p.tagline,
     city: p.city,
+    quotationPrefix: p.quotationPrefix,
     whatsappNumber: p.contact.whatsappNumber,
     email: p.contact.email,
     phone: p.contact.phone,
@@ -85,6 +101,7 @@ export function SiteEditor({ profile }: { profile: SiteProfile | null }) {
             address: form.address,
           },
           footerNote: form.footerNote,
+          quotationPrefix: form.quotationPrefix.trim().toUpperCase(),
           materialsPage: materials,
         }),
       });
