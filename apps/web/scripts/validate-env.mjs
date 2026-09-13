@@ -18,9 +18,15 @@ const checkedUrl = (name, protocols) => {
   return url;
 };
 
-const origin = checkedUrl("APP_ORIGIN", ["https:"]);
+// Plain HTTP only for a loopback origin: the self-host installer's local test
+// mode (http://localhost:<port>), which nothing outside this computer can reach.
+// Browsers treat loopback as a secure context; every public origin needs HTTPS.
+const origin = checkedUrl("APP_ORIGIN", ["https:", "http:"]);
+if (origin.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname)) {
+  throw new Error("APP_ORIGIN must use HTTPS (plain HTTP is only allowed for localhost)");
+}
 if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash) {
-  throw new Error("APP_ORIGIN must contain only https scheme, host, and optional port");
+  throw new Error("APP_ORIGIN must contain only scheme, host, and optional port");
 }
 
 const sessionSecret = required("SESSION_SECRET");

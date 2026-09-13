@@ -190,18 +190,36 @@ sec_printer() {
   ok "Printer: $(awk -F'\t' -v m="$machine" '$3==m {print $2; exit}' "$PRINTERS_FILE")"
 }
 
+# Where the finished site lives: https://<domain>, or http://localhost:<port>
+# in local test mode.
+site_url() {
+  local mode=${ANS[MODE]:-${CFG[SELFHOST_MODE]:-}}
+  if [ "$mode" = local ]; then
+    echo "http://localhost:${ANS[LOCAL_PORT]:-${CFG[LOCAL_PORT]:-8000}}"
+  else
+    echo "https://${ANS[DOMAIN]:-${CFG[SELFHOST_DOMAIN]:-}}"
+  fi
+}
+
 sec_address() {
-  head_line "Web address and HTTPS"
-  hint "You need a domain (e.g. print.example.com) — the site only runs over HTTPS."
-  ask DOMAIN "Domain name" "${CFG[SELFHOST_DOMAIN]:-}" valid_domain "Enter just the domain, like print.example.com (no https://)."
-  say ""
-  say "  How will visitors reach this server?"
+  head_line "Web address"
+  say "  How will people reach the site?"
   say "   1) This server has a public IP and ports 80/443 are free  ${C_DIM}(recommended — automatic HTTPS)${C_OFF}"
   say "   2) It's at home / behind a router — use a free Cloudflare Tunnel  ${C_DIM}(no port forwarding)${C_OFF}"
   say "   3) I already run my own reverse proxy (nginx, Nginx Proxy Manager, Traefik…)"
+  say "   4) Just try it on this computer first  ${C_DIM}(http://localhost — nothing is exposed; go live later)${C_OFF}"
   local current=1
-  case "${CFG[SELFHOST_MODE]:-}" in tunnel) current=2 ;; proxy) current=3 ;; esac
-  ask MODE_CHOICE "Choose 1, 2 or 3" "$current" valid_mode_choice "Please answer 1, 2 or 3."
+  case "${CFG[SELFHOST_MODE]:-}" in tunnel) current=2 ;; proxy) current=3 ;; local) current=4 ;; esac
+  ask MODE_CHOICE "Choose 1–4" "$current" valid_mode_choice "Please answer 1, 2, 3 or 4."
+  case "${ANS[MODE_CHOICE]}" in
+    4|local) ;;
+    *)
+      hint "You need a domain (e.g. print.example.com) — a public site only runs over HTTPS."
+      # Coming from local test mode the stored "domain" is localhost — no default then.
+      local domain_default=${CFG[SELFHOST_DOMAIN]:-}
+      [ "${CFG[SELFHOST_MODE]:-}" = local ] && domain_default=""
+      ask DOMAIN "Domain name" "$domain_default" valid_domain "Enter just the domain, like print.example.com (no https://)." ;;
+  esac
   case "${ANS[MODE_CHOICE]}" in
     1|caddy)
       ANS[MODE]=caddy
@@ -226,7 +244,20 @@ sec_address() {
       hint "Your proxy must terminate HTTPS for ${ANS[DOMAIN]} and forward to this server's port 8080."
       ask PROXY_IP "IP address your proxy connects FROM (exactly one host)" "${CFG[TRUSTED_PROXY_CIDR]:-}" valid_ipv4 "Enter one IPv4 address, like 192.168.1.20."
       ask PROXY_BIND "Address on THIS server to listen on for it (never 0.0.0.0)" "${CFG[PROXY_BIND]:-127.0.0.1}" valid_bind_address "Enter one IPv4 address of this server (not 0.0.0.0)." ;;
+    4|local)
+      ANS[MODE]=local
+      ANS[DOMAIN]=localhost
+      hint "Only this computer can open it. On Windows (WSL2), open the address in your Windows browser."
+      ask LOCAL_PORT "Port to open it on" "${CFG[LOCAL_PORT]:-8000}" valid_local_port "Pick a free port between 1024 and 65535 (8080 is taken by the site itself)."
+      check_local_port_free "${ANS[LOCAL_PORT]}" ;;
   esac
+}
+valid_local_port() { [[ "$1" =~ ^[0-9]{4,5}$ ]] && [ "$1" -ge 1024 ] && [ "$1" -le 65535 ] && [ "$1" != 8080 ]; }
+check_local_port_free() {
+  if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "(^|:)$1\$" && ! docker ps --format '{{.Names}}' | grep -q '^print-caddy-'; then
+    die "Port $1 is already in use on this computer. Run again and pick another port."
+  fi
+  ok "Port $1 is free"
 }
 # Lengths match the site profile's own limits (packages/shared/src/site-profile.ts),
 # or the app would quietly replace an over-long value with its default.
@@ -244,7 +275,7 @@ initials_for() {
 }
 valid_tagline() { valid_text_or_empty "$1" && [ ${#1} -le 80 ]; }
 valid_city()    { valid_text_or_empty "$1" && [ ${#1} -le 60 ]; }
-valid_mode_choice() { [[ "$1" =~ ^(1|2|3|caddy|tunnel|proxy)$ ]]; }
+valid_mode_choice() { [[ "$1" =~ ^(1|2|3|4|caddy|tunnel|proxy|local)$ ]]; }
 valid_tunnel_token() { [[ "$1" =~ ^[A-Za-z0-9+/=_-]{60,}$ ]]; }
 valid_bind_address() { valid_ipv4 "$1" && [ "$1" != "0.0.0.0" ]; }
 
@@ -276,7 +307,7 @@ check_dns() {
 
 sec_admin() {
   head_line "Admin password"
-  hint "You'll use this at https://${ANS[DOMAIN]}/admin to manage quotes, rates and colours."
+  hint "You'll use this at $(site_url)/admin to manage quotes, rates and colours."
   local again
   while true; do
     ask_secret ADMIN_PASSWORD "Choose an admin password (12+ characters, hidden)" valid_password "Use 12 to 72 characters."
@@ -361,7 +392,7 @@ summary() {
   local m rates=""
   for m in "${OFFERED[@]}"; do rates+="${rates:+, }$m ₹$(from_paise "$(to_paise "${ANS[RATE_$m]}")")/g"; done
   say "  Shop:        ${ANS[BRAND]}${ANS[CITY]:+ · ${ANS[CITY]}}  (quotes numbered ${ANS[QUOTE_PREFIX]:-RSP}-$(date +%Y)-0001)"
-  say "  Address:     https://${ANS[DOMAIN]}  (${ANS[MODE]})"
+  say "  Address:     $(site_url)  (${ANS[MODE]})"
   say "  Printer:     ${ANS[PRINTER_MACHINE]% 0.4 nozzle}$([ "${ANS[PRINTER_MULTI]:-0}" = 1 ] && echo " (automatic multicolour)")"
   say "  Materials:   $rates"
   say "  Setup fee:   ₹$(from_paise "$(to_paise "${ANS[SETUP_FEE]}")") per order"
@@ -411,13 +442,14 @@ configure_env() {
   # update.sh follows the branch this checkout was installed from.
   local branch; branch=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
   [ "$branch" = HEAD ] || CFG[SELFHOST_BRANCH]=$branch
-  CFG[APP_ORIGIN]="https://${ANS[DOMAIN]}"
+  CFG[APP_ORIGIN]=$(site_url)
+  if [ "$mode" = local ]; then CFG[LOCAL_PORT]=${ANS[LOCAL_PORT]}; else unset 'CFG[LOCAL_PORT]'; fi
   [ -n "${PS_TLS_INTERNAL:-}" ] && CFG[SELFHOST_TLS_INTERNAL]=$PS_TLS_INTERNAL
   apply_env_defaults || true
 
   unset 'CFG[EDGE_SUBNET]' 'CFG[EDGE_CADDY_IP]' 'CFG[TUNNEL_SUBNET]' 'CFG[TUNNEL_CADDY_IP]' 'CFG[TUNNEL_CLOUDFLARED_IP]' 'CFG[CLOUDFLARE_TUNNEL_TOKEN]'
   case "$mode" in
-    caddy|tunnel)
+    caddy|tunnel|local)
       CFG[EDGE_SUBNET]=${PREV_EDGE_SUBNET:-$(pick_subnet)}
       CFG[EDGE_CADDY_IP]=$(subnet_host "${CFG[EDGE_SUBNET]}" 10)
       CFG[PROXY_BIND]=127.0.0.1
@@ -571,7 +603,7 @@ seed_shop_settings() {
 
 finish() {
   head_line "Done"
-  local url="https://${CFG[SELFHOST_DOMAIN]}"
+  local url; url=$(site_url)
   say "  Your site:  ${C_BOLD}$url${C_OFF}"
   say "  Admin:      ${C_BOLD}$url/admin${C_OFF}  (the password you chose)"
   case "${CFG[SELFHOST_MODE]}" in
@@ -579,6 +611,10 @@ finish() {
       if curl -fsS --max-time 15 "$url/api/health" >/dev/null 2>&1; then ok "Reachable over HTTPS"
       else warn "Not reachable over HTTPS yet — usually DNS still propagating. Caddy keeps retrying the certificate."; fi ;;
     tunnel) hint "Make sure the tunnel's public hostname points ${CFG[SELFHOST_DOMAIN]} at http://caddy:80." ;;
+    local)
+      if curl -fsS --max-time 15 "$url/api/health" >/dev/null 2>&1; then ok "Open $url in your browser"
+      else warn "The site isn't answering on $url yet — give it a minute, then check: docker compose ps"; fi
+      hint "Only this computer can open it. Happy with it? Put it online with: sudo $ROOT_DIR/install.sh (option 2)" ;;
     proxy)
       say ""
       say "  Point your reverse proxy at http://${CFG[PROXY_BIND]}:8080 (from ${CFG[TRUSTED_PROXY_CIDR]} only)."

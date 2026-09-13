@@ -18,6 +18,10 @@ function secret(name: string, minBytes = 32): string {
   return value;
 }
 
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+
 function appOrigin(): string {
   const raw = process.env.APP_ORIGIN;
   if (!raw && isProduction) throw new Error("Missing required environment variable APP_ORIGIN");
@@ -30,8 +34,10 @@ function appOrigin(): string {
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
     throw new Error("APP_ORIGIN must contain only scheme, host, and optional port");
   }
-  if (isProduction && url.protocol !== "https:") {
-    throw new Error("APP_ORIGIN must use HTTPS in production");
+  // Loopback may stay plain HTTP (the installer's local test mode); anything
+  // reachable from elsewhere must be HTTPS in production.
+  if (isProduction && url.protocol !== "https:" && !isLoopbackHost(url.hostname)) {
+    throw new Error("APP_ORIGIN must use HTTPS in production (plain HTTP only for localhost)");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("APP_ORIGIN must use HTTP or HTTPS");
