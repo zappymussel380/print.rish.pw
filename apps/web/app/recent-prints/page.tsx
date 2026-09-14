@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getPrinterSpec } from "@/lib/printer";
 import { PageIntro } from "@/components/shell/page-intro";
 import { RecentPrintsGrid } from "@/components/showcase/recent-prints-grid";
+import { getStoredCatalogAvailability } from "@/lib/catalog-availability";
 import { getRecentPrints } from "@/lib/recent-prints";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export function generateMetadata(): Metadata {
 }
 
 export default async function RecentPrintsPage() {
-  const prints = await getRecentPrints();
+  const [prints, { customMaterials }] = await Promise.all([getRecentPrints(), getStoredCatalogAvailability()]);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
@@ -27,7 +28,7 @@ export default async function RecentPrintsPage() {
 
       <div className="mt-10">
         {prints.length > 0 ? (
-          <RecentPrintsGrid prints={prints} />
+          <RecentPrintsGrid prints={prints} materialNames={customMaterials} />
         ) : (
           <p className="text-sm text-muted">
             Nothing here yet — photos of recent jobs go up as they come off the printer.

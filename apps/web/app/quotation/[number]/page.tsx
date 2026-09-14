@@ -64,6 +64,7 @@ export default async function ConfirmationPage({
       material: i.material,
       colour: i.colour,
       colourName: i.colourName,
+      materialName: i.materialName,
       quantity: i.quantity,
     })),
   );
@@ -112,7 +113,7 @@ export default async function ConfirmationPage({
               <div className="min-w-0">
                 <p className="font-[600]">
                   {i.quantity > 1 ? `${i.quantity}× ` : ""}
-                  {materialName(i.material)} · {i.colourName ?? colourName(i.colour)}
+                  {i.materialName ?? materialName(i.material)} · {i.colourName ?? colourName(i.colour)}
                 </p>
                 <p className="text-xs text-faint">
                   {(i.layerHeightUm / 1000).toFixed(2)}mm · {i.infillPct}% ·{" "}

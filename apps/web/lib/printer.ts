@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { cache } from "react";
 import { prisma } from "@print/db";
-import { DEFAULT_PRINTER_SPEC, applyActiveProfiles, parsePrinterSpec, type PrinterProfileSpec } from "@print/shared";
+import {
+  CUSTOM_FILAMENT_SLOTS,
+  DEFAULT_PRINTER_SPEC,
+  applyActiveProfiles,
+  parsePrinterSpec,
+  slotInScope,
+  type PrinterProfileSpec,
+} from "@print/shared";
 
 let cached: PrinterProfileSpec | null = null;
 
@@ -29,15 +36,18 @@ export function advancedProfilesEnabled(): boolean {
 }
 
 /** The printer as slices see it: the installed one with the owner's live
- *  uploads applied in advanced mode — their build volume, the plates their
- *  filaments print on, and the upload revision in the id that every slice
- *  cache key carries. The worker derives the same from the same rows. */
+ *  uploads applied — every slot in advanced mode, the shop's own materials'
+ *  filament slots on any install (slotInScope): their build volume, the plates
+ *  their filaments print on, and the upload revision in the id that every slice
+ *  cache key carries. The worker derives the same from the same rows
+ *  (activeProfileSet), so the two must filter alike. */
 export const getPrinterProfile = cache(async (): Promise<PrinterProfileSpec> => {
   const base = getPrinterSpec();
-  if (!advancedProfilesEnabled()) return base;
+  const advanced = advancedProfilesEnabled();
   const rows = await prisma.slicerProfileUpload.findMany({
-    where: { status: "ACTIVE" },
+    where: advanced ? { status: "ACTIVE" } : { status: "ACTIVE", slot: { in: [...CUSTOM_FILAMENT_SLOTS] } },
     select: { id: true, slot: true, meta: true },
   });
-  return applyActiveProfiles(base, rows.flatMap((r) => (r.slot ? [{ ...r, slot: r.slot }] : [])));
+  const live = rows.filter((r) => r.slot && slotInScope(r.slot, advanced));
+  return applyActiveProfiles(base, live.map((r) => ({ ...r, slot: r.slot! })));
 });

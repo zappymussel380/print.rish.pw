@@ -148,7 +148,8 @@ export function CatalogEditor({
         }),
       });
       if (!res.ok) {
-        alert("Saving catalog changes failed.");
+        const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        alert(data.error?.message ?? "Saving catalog changes failed.");
         return;
       }
       setDirty(false);
@@ -177,6 +178,8 @@ export function CatalogEditor({
           />
         </label>
         {catalog.materials.map((m) => {
+          // The shop's own materials appear here once named (Your own materials).
+          if (m.setup && !m.setup.named) return null;
           const all = editorColours(m, state.customColours);
           const enabledCount = all.filter((c) => state.colours[m.id]?.[c.id]).length;
           const materialOn = state.materials[m.id];
@@ -202,8 +205,10 @@ export function CatalogEditor({
                     <input
                       type="checkbox"
                       checked={materialOn}
+                      // One of the shop's own materials can't go on sale before it has a profile.
+                      disabled={Boolean(m.setup?.problem) && !materialOn}
                       onChange={(e) => mutate((d) => (d.materials[m.id] = e.target.checked))}
-                      className="size-4 accent-[var(--accent)]"
+                      className="size-4 accent-[var(--accent)] disabled:opacity-40"
                     />
                     {m.name}
                     <span className="text-xs font-[450] text-faint">
@@ -221,6 +226,12 @@ export function CatalogEditor({
                   </button>
                 </div>
               </div>
+              {m.setup?.problem ? (
+                <p className="mt-1 pl-8 text-xs text-faint">
+                  {materialOn ? "Not on sale yet: " : ""}
+                  {m.setup.problem} See Your own materials below.
+                </p>
+              ) : null}
               {open ? (
                 <div className="mt-3 space-y-3">
                   <div className={`space-y-3 ${materialOn ? "" : "pointer-events-none opacity-40"}`}>

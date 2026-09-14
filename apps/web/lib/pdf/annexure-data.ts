@@ -29,6 +29,7 @@ export interface AnnexureInput {
     material: MaterialId;
     colour: string;
     colourName?: string | null;
+    materialName?: string | null;
     layerHeightUm: number;
     infillPct: number;
     supports: SupportMode;

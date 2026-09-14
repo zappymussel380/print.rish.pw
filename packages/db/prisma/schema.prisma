@@ -193,6 +193,9 @@ model QuotationItem {
   /// Display name captured at submission. Admin-defined colours can be deleted
   /// later; palette ids still resolve from code when this is null (older rows).
   colourName    String?
+  /// Material name captured at submission: the shop's own materials (OTHER_*)
+  /// can be renamed later. Null on older rows; stock names resolve from code.
+  materialName  String?
   layerHeightUm Int
   infillPct     Int
   supports      SupportMode

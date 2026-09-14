@@ -69,5 +69,7 @@ export function normalizeCustomMaterialNames(raw: unknown): CustomMaterialNames 
  *  empty string clears a name. Loose here; normalizeCustomMaterialNames and
  *  the route decide what is usable. */
 export const customMaterialNamesInputSchema = z.object({
-  names: z.record(z.enum(CUSTOM_MATERIAL_IDS), z.string().max(200)),
+  // Partial: the editor saves one slot at a time (a zod 4 enum-keyed record
+  // would demand every slot).
+  names: z.partialRecord(z.enum(CUSTOM_MATERIAL_IDS), z.string().max(200)),
 });

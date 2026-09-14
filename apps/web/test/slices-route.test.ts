@@ -26,6 +26,8 @@ vi.mock("@print/db", () => ({
       updateMany: mocks.updateMany,
       create: mocks.create,
     },
+    // No live presets for the shop's own materials: the printer as installed.
+    slicerProfileUpload: { findMany: vi.fn(async () => []) },
   },
 }));
 

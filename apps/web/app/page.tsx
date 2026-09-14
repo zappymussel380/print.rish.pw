@@ -1,6 +1,14 @@
 import { ArrowRight, ExternalLink, FileUp, IndianRupee, ScanEye, Send } from "lucide-react";
 import Link from "next/link";
-import { formatPaise, listJoin, materialFamily, materialName, MATERIAL_IDS } from "@print/shared";
+import {
+  formatPaise,
+  listJoin,
+  materialFamily,
+  materialName,
+  MATERIAL_IDS,
+  isCustomMaterial,
+  type MaterialId,
+} from "@print/shared";
 import { RecentPrintsGrid } from "@/components/showcase/recent-prints-grid";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
@@ -46,7 +54,9 @@ export default async function HomePage() {
   ]);
   const recentPrints = allPrints.slice(0, HOMEPAGE_PRINT_COUNT);
   const offered = MATERIAL_IDS.filter((m) => availability.materials[m]);
-  const families = [...new Set(offered.map(materialFamily))];
+  const nameOf = (m: MaterialId) => materialName(m, availability.customMaterials);
+  // Stock tiers by family ("PLA", "PETG"); the shop's own materials by name.
+  const families = [...new Set(offered.map((m) => (isCustomMaterial(m) ? nameOf(m) : materialFamily(m))))];
   // The headline rate is the cheapest material actually on sale.
   const cheapest = [...offered].sort(
     (a, b) => catalog.materials[a].sellPerGramPaise - catalog.materials[b].sellPerGramPaise,
@@ -70,7 +80,7 @@ export default async function HomePage() {
           {formatPaise(catalog.setupFeePaise)}
           {cheapest ? (
             <>
-              , {materialName(cheapest)} from {formatPaise(catalog.materials[cheapest].sellPerGramPaise)}/g
+              , {nameOf(cheapest)} from {formatPaise(catalog.materials[cheapest].sellPerGramPaise)}/g
             </>
           ) : null}
           .
@@ -123,7 +133,7 @@ export default async function HomePage() {
             Real parts, photographed as they finished. Not renders.
           </p>
           <div className="mt-10">
-            <RecentPrintsGrid prints={recentPrints} />
+            <RecentPrintsGrid prints={recentPrints} materialNames={availability.customMaterials} />
           </div>
           <div className="mt-8">
             <Link href="/recent-prints" className="btn-ghost">
@@ -193,7 +203,7 @@ export default async function HomePage() {
             <div className="flex flex-wrap gap-2">
               {offered.map((m) => (
                 <span key={m} className="chip chip-accent">
-                  {materialName(m)} {formatPaise(catalog.materials[m].sellPerGramPaise)}/g
+                  {nameOf(m)} {formatPaise(catalog.materials[m].sellPerGramPaise)}/g
                 </span>
               ))}
               {colourCount > 0 ? (

@@ -47,7 +47,7 @@ export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
   const printer = catalog.printers[catalog.defaultPrinterId]!;
   const offered = MATERIAL_IDS.filter((m) => availability.materials[m]);
   return buildFaq({
-    materials: offered.map((m) => ({ id: m, name: materialName(m) })),
+    materials: offered.map((m) => ({ id: m, name: materialName(m, availability.customMaterials) })),
     colourCount: new Set(offered.flatMap((m) => availability.colours[m] ?? [])).size,
     printer: { name: printer.name, bedMm: printer.bedMm, multiMaterial: printer.multiMaterial ?? false },
     city: profile.city,

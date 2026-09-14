@@ -21,9 +21,11 @@ import {
   type PublicMaterial,
   type RecentPrint,
   type SiteProfile,
+  type CustomMaterialNames,
 } from "@print/shared";
 import { CatalogEditor } from "./catalog-editor";
 import { FaqEditor } from "./faq-editor";
+import { CustomMaterialsEditor } from "./custom-materials-editor";
 import { SlicerProfilesEditor } from "./slicer-profiles-editor";
 import type { SlicerProfilesState } from "@/lib/slicer-profiles";
 import { RatesEditor } from "./rates-editor";
@@ -81,6 +83,8 @@ export function AdminDashboard({
   faq,
   recentPrints,
   slicerProfiles,
+  advancedProfiles,
+  materialNames,
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
@@ -93,8 +97,13 @@ export function AdminDashboard({
   siteProfile: SiteProfile | null;
   faq: { generated: FaqEntry[]; settings: FaqSettings };
   recentPrints: RecentPrint[];
-  /** Advanced mode's uploaded slicer presets; null when the mode is off. */
-  slicerProfiles: SlicerProfilesState | null;
+  /** Uploaded slicer presets: every open slot (the shop's own materials on any
+   *  install, all of them in advanced mode). */
+  slicerProfiles: SlicerProfilesState;
+  /** Advanced mode: the owner's own printer and presets. */
+  advancedProfiles: boolean;
+  /** The shop's names for its own materials. */
+  materialNames: CustomMaterialNames;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -203,8 +212,11 @@ export function AdminDashboard({
       {/* Catalog availability */}
       <CatalogEditor catalog={catalog} rates={rates} />
 
+      {/* The shop's own materials: names and OrcaSlicer profiles */}
+      <CustomMaterialsEditor catalog={catalog} initial={slicerProfiles} />
+
       {/* Rates, customer-facing and internal */}
-      <RatesEditor pricing={pricing} />
+      <RatesEditor pricing={pricing} materialNames={materialNames} />
 
       {/* Shop name, contact details, materials page */}
       <SiteEditor profile={siteProfile} />
@@ -213,10 +225,10 @@ export function AdminDashboard({
       <FaqEditor generated={faq.generated} settings={faq.settings} />
 
       {/* Public "recent prints" showcase */}
-      <ShowcaseEditor prints={recentPrints} />
+      <ShowcaseEditor prints={recentPrints} materialNames={materialNames} />
 
       {/* Advanced mode: the owner's own OrcaSlicer presets */}
-      {slicerProfiles ? <SlicerProfilesEditor initial={slicerProfiles} /> : null}
+      {advancedProfiles ? <SlicerProfilesEditor initial={slicerProfiles} /> : null}
 
       {/* Controls */}
       <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -355,11 +367,13 @@ const FAMILY_SHADE: Record<MaterialFamily, string> = {
   PETG: "color-mix(in srgb, var(--accent) 45%, transparent)",
   ABS: "color-mix(in srgb, var(--accent) 70%, var(--text))",
   ASA: "color-mix(in srgb, var(--accent) 25%, transparent)",
+  // The shop's own materials, together.
+  Other: "color-mix(in srgb, var(--text) 35%, transparent)",
 };
 
 function MaterialSplit({ grams }: { grams: Record<MaterialFamily, number> }) {
   const total = Object.values(grams).reduce((a, b) => a + b, 0);
-  // PLA and PETG always show; ABS/ASA only once something has been quoted in them.
+  // PLA and PETG always show; the rest only once something has been quoted in them.
   const families = (Object.keys(FAMILY_SHADE) as MaterialFamily[]).filter(
     (f) => f === "PLA" || f === "PETG" || grams[f] > 0,
   );

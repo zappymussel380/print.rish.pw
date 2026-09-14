@@ -382,6 +382,8 @@ sec_materials() {
     hint "They start with black and white; add more colours by hex code in admin → Catalog."
   fi
   hint "Colours, internal costs and lead time are managed in the admin dashboard later."
+  hint "Printing something else (ABS-CF, PC, PA…)? Add up to 4 of your own materials, each with its own"
+  hint "OrcaSlicer profile, in admin → Your own materials after setup."
 
   say ""
   say "  The Materials page compares materials side by side for customers."
