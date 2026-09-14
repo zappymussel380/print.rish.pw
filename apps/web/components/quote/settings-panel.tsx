@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 import {
+  defaultLayerHeight,
   groupColours,
   INFILL_MAX_PCT,
   INFILL_MIN_PCT,
-  LAYER_HEIGHTS_UM,
+  layerHeightLabel,
+  type LayerHeightUm,
   type MaterialId,
   materialName,
   MAX_QUANTITY,
@@ -29,6 +31,19 @@ const PREMIUM_TIERS: readonly MaterialId[] = ["PLA_AESTHETIC", "PLA_CF", "PETG_P
 const ENGINEERING_INFO =
   " ABS and ASA handle heat best (around 95–100 °C) and are tough enough for functional parts; ASA also resists sun and weather, so it is the pick for outdoor parts that must last.";
 const ENGINEERING_TIERS: readonly MaterialId[] = ["ABS", "ASA"];
+
+const LAYER_HEIGHT_INFO: Record<LayerHeightUm, string> = {
+  120: "0.12 mm gives the finest detail but prints slowest",
+  160: "0.16 mm balances detail and print time",
+  200: "0.20 mm is the fastest and most economical, with more visible layer lines",
+};
+
+/** What the layer-height tip says about the heights this shop offers. */
+function layerHeightInfo(offered: readonly LayerHeightUm[], fallback: LayerHeightUm): string {
+  if (offered.length === 1) return `The thickness of each printed layer. Every part is printed at ${layerHeightLabel(offered[0]!)}.`;
+  const parts = offered.map((um) => (um === fallback ? `${LAYER_HEIGHT_INFO[um]} (the default)` : LAYER_HEIGHT_INFO[um]));
+  return `The thickness of each printed layer. ${parts.join("; ")}.`;
+}
 
 const SUPPORT_LABEL: Record<(typeof SUPPORT_MODES)[number], string> = {
   auto: "Auto",
@@ -55,6 +70,8 @@ export function SettingsPanel({
   const enabledMaterials = catalog.materials.filter((m) => m.enabled);
   const currentMaterial = catalog.materials.find((m) => m.id === config.material);
   const enabledColours = (currentMaterial?.colours ?? []).filter((c) => c.enabled);
+  const layerHeights = catalog.layerHeights;
+  const fallbackLayer = defaultLayerHeight(layerHeights);
   const anyEnabled = (ids: readonly MaterialId[]) => enabledMaterials.some((m) => ids.includes(m.id));
   const materialInfo =
     MATERIAL_INFO +
@@ -81,6 +98,10 @@ export function SettingsPanel({
       set({ material: enabledMaterials[0]!.id });
     }
   }, [catalog, config.material]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!layerHeights.includes(config.layerHeightUm)) set({ layerHeightUm: fallbackLayer });
+  }, [catalog, config.layerHeightUm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (enabledColours.length === 0) return;
@@ -134,14 +155,19 @@ export function SettingsPanel({
 
       <Field
         label="Layer height"
-        info="The thickness of each printed layer. 0.12 mm gives the finest detail but prints slowest; 0.20 mm (the default) is the fastest and most economical, with more visible layer lines; 0.16 mm sits in between."
-        notice={sourceNotice("layerHeightUm", config, sourceConfig)}
+        info={layerHeightInfo(layerHeights, fallbackLayer)}
+        notice={layerHeights.length > 1 ? sourceNotice("layerHeightUm", config, sourceConfig) : undefined}
       >
-        <Segmented
-          value={config.layerHeightUm}
-          options={LAYER_HEIGHTS_UM.map((um) => ({ value: um, label: `${(um / 1000).toFixed(2)}mm` }))}
-          onChange={(v) => set({ layerHeightUm: v })}
-        />
+        {layerHeights.length > 1 ? (
+          <Segmented
+            value={config.layerHeightUm}
+            options={layerHeights.map((um) => ({ value: um, label: `${(um / 1000).toFixed(2)}mm` }))}
+            onChange={(v) => set({ layerHeightUm: v })}
+          />
+        ) : (
+          // Nothing to choose: say what every part is printed at.
+          <span className="block text-sm text-muted">{layerHeightLabel(layerHeights[0]!)}</span>
+        )}
       </Field>
 
       <Field

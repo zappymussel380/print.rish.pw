@@ -1,21 +1,25 @@
+import { createHash } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
 import { logger, safeErrorMessage } from "./logger";
 import { redis } from "./redis";
 import { sendOperatorAlert } from "./telegram";
 import { readBoundedJson } from "./upstream-response";
+import type { ShippingConfig } from "./shipping-settings";
 
 /**
  * Shared Shiprocket rate estimator. Both the interactive estimate endpoint
  * (app/api/shipping) and quotation submission (app/api/quotations) use this so
  * the two agree exactly. Callers are responsible for authorising the request
  * and for supplying an authoritative (server-rebuilt) weight + declared value —
- * this module never sees client-supplied totals.
+ * this module never sees client-supplied totals — and for passing the shop's
+ * settings (`getShippingConfig`), which keeps this module free of the database.
  */
 
 const LOGIN_URL = "https://apiv2.shiprocket.in/v1/external/auth/login";
 const RATE_URL = "https://apiv2.shiprocket.in/v1/external/courier/serviceability";
-const TOKEN_KEY = "sr:token";
+// Per API user, so a changed account in admin never reuses the old one's token.
+const tokenKey = (email: string) => `sr:token:${createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 24)}`;
 const TOKEN_TTL_SECONDS = 8 * 24 * 60 * 60; // Shiprocket tokens live ~10 days.
 const RESULT_TTL_SECONDS = 24 * 60 * 60; // Rates barely move; cache aggressively.
 const DAILY_CALL_CAP = 400; // Global backstop on upstream calls per day.
@@ -63,16 +67,18 @@ export function shippingBinding(weightGrams: number, declaredValuePaise: number)
   };
 }
 
-function derive(input: EstimateInput) {
+/** What the estimator needs from the shop's settings. */
+export type EstimatorConfig = Pick<ShippingConfig, "live" | "email" | "password" | "pickupPincode">;
+
+function derive(input: EstimateInput, pickup: string) {
   const { weightKg, declaredValue } = shippingBinding(input.weightGrams, input.declaredValuePaise);
   // Cache by EVERY rate-affecting dimension so a changed quote never reuses a
   // stale rate. The pickup pincode is one of them — rates depend on the origin —
-  // so it's in the key too: changing SHIPROCKET_PICKUP_PINCODE (or sharing this
-  // Redis across environments with different pickups) must not serve a rate
-  // computed for a different origin. (rate5: key now includes pickup; the
-  // version bump makes old rate4 entries miss and refetch. Payload is the
-  // ShippingEstimate directly.)
-  const pickup = env.shiprocketPickupPincode;
+  // so it's in the key too: changing the pickup pincode (or sharing this Redis
+  // across environments with different pickups) must not serve a rate computed
+  // for a different origin. (rate5: key now includes pickup; the version bump
+  // makes old rate4 entries miss and refetch. Payload is the ShippingEstimate
+  // directly.)
   const cacheKey = `sr:rate5:${pickup}:${input.deliveryPincode}:${weightKg}:${declaredValue}`;
   return { weightKg, declaredValue, cacheKey };
 }
@@ -165,22 +171,44 @@ export async function verifyEstimateToken(
  *  recover from an expired/revoked token. */
 async function getToken(email: string, password: string, force = false): Promise<string> {
   if (!force) {
-    const cached = await redis.get(TOKEN_KEY);
+    const cached = await redis.get(tokenKey(email));
     if (cached) return cached;
   }
-  const res = await fetch(LOGIN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-    signal: AbortSignal.timeout(10_000),
-  });
+  const res = await login(email, password);
   if (!res.ok) throw new UpstreamError(`login failed (${res.status})`);
   const data = (await readBoundedJson(res, 32 * 1024)) as { token?: string };
   if (typeof data.token !== "string" || data.token.length === 0 || data.token.length > 4096) {
     throw new UpstreamError("login returned no valid token");
   }
-  await redis.set(TOKEN_KEY, data.token, "EX", TOKEN_TTL_SECONDS);
+  await redis.set(tokenKey(email), data.token, "EX", TOKEN_TTL_SECONDS);
   return data.token;
+}
+
+function login(email: string, password: string): Promise<Response> {
+  return fetch(LOGIN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
+/** Check an API user before admin saves it: "rejected" when Shiprocket says
+ *  the email or password is wrong, "unreachable" when it couldn't be asked. */
+export async function checkShiprocketLogin(email: string, password: string): Promise<"ok" | "rejected" | "unreachable"> {
+  try {
+    const res = await login(email, password);
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) return "rejected";
+    if (!res.ok) return "unreachable";
+    const data = (await readBoundedJson(res, 32 * 1024)) as { token?: string };
+    if (typeof data.token !== "string" || data.token.length === 0) return "rejected";
+    // Good for the estimates that follow.
+    if (data.token.length <= 4096) await redis.set(tokenKey(email), data.token, "EX", TOKEN_TTL_SECONDS);
+    return "ok";
+  } catch (err) {
+    logger.warn({ error: safeErrorMessage(err) }, "Shiprocket login check failed");
+    return "unreachable";
+  }
 }
 
 function rateUrl(pickup: string, delivery: string, weightKg: number, declaredValue: number): string {
@@ -199,8 +227,8 @@ function rateUrl(pickup: string, delivery: string, weightKg: number, declaredVal
 /** Serve a previously cached estimate without touching the upstream. Returns
  *  null on a miss. The interactive route uses this so cache hits don't consume
  *  the per-client upstream rate-limit budget. */
-export async function getCachedShipping(input: EstimateInput): Promise<ShippingEstimate | null> {
-  const { cacheKey } = derive(input);
+export async function getCachedShipping(input: EstimateInput, pickup: string): Promise<ShippingEstimate | null> {
+  const { cacheKey } = derive(input, pickup);
   const cached = await redis.get(cacheKey);
   return cached ? (JSON.parse(cached) as ShippingEstimate) : null;
 }
@@ -208,9 +236,11 @@ export async function getCachedShipping(input: EstimateInput): Promise<ShippingE
 /** Perform the paid rate lookup (assumes the cache already missed): global daily
  *  cap → Shiprocket login/serviceability → cheapest rate rounded up to ₹10 →
  *  cache + return. */
-export async function fetchShipping(input: EstimateInput): Promise<ShippingResult> {
-  const { weightKg, declaredValue, cacheKey } = derive(input);
+export async function fetchShipping(input: EstimateInput, config: EstimatorConfig): Promise<ShippingResult> {
+  const { weightKg, declaredValue, cacheKey } = derive(input, config.pickupPincode);
   if (weightKg > MAX_WEIGHT_KG) return { ok: false, reason: "TOO_HEAVY" };
+  // Before the daily counter: an estimator that's off spends nothing.
+  if (!config.live) return { ok: false, reason: "NOT_CONFIGURED" };
 
   // Global daily circuit breaker across all clients.
   const dayKey = `sr:calls:${new Date().toISOString().slice(0, 10)}`;
@@ -225,16 +255,7 @@ export async function fetchShipping(input: EstimateInput): Promise<ShippingResul
     return { ok: false, reason: "BUSY" };
   }
 
-  let email: string;
-  let password: string;
-  try {
-    email = env.shiprocketEmail;
-    password = env.shiprocketPassword;
-  } catch {
-    logger.error("Shipping estimate: SHIPROCKET_EMAIL / SHIPROCKET_PASSWORD not configured");
-    return { ok: false, reason: "NOT_CONFIGURED" };
-  }
-  const pickup = env.shiprocketPickupPincode;
+  const { email, password, pickupPincode: pickup } = config;
 
   try {
     let token = await getToken(email, password);

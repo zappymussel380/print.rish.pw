@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   queueGetJob: vi.fn(),
   modelCount: vi.fn(),
   rateLimit: vi.fn(),
+  // The stored catalog availability (null = defaults).
+  availability: vi.fn(async (): Promise<{ value: unknown } | null> => null),
 }));
 
 vi.mock("@print/db", () => ({
@@ -28,6 +30,7 @@ vi.mock("@print/db", () => ({
     },
     // No live presets for the shop's own materials: the printer as installed.
     slicerProfileUpload: { findMany: vi.fn(async () => []) },
+    appSetting: { findUnique: mocks.availability },
   },
 }));
 
@@ -305,5 +308,63 @@ describe("POST /api/slices", () => {
     expect(mocks.findUnique).toHaveBeenCalledTimes(2);
     expect(mocks.queueRemove).not.toHaveBeenCalled();
     expect(mocks.queueAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/slices — layer heights the shop offers", () => {
+  const modelId = "33333333-3333-4333-8333-333333333333";
+  const post = (layerHeightUm: number) =>
+    POST(
+      new Request("http://localhost/api/slices", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ modelId, settings: { material: "PLA", layerHeightUm, infillPct: 15, supports: "auto" } }),
+      }) as never,
+    );
+  const model = (locked: boolean) => ({
+    id: modelId,
+    fileHash: "a".repeat(64),
+    storedPath: `/data/uploads/${modelId}.3mf`,
+    format: "3mf",
+    defaultConfig: locked ? { layerHeightUm: 120 } : null,
+    lockedConfig: locked ? { layerHeightUm: true } : null,
+  });
+
+  beforeEach(() => {
+    mocks.availability.mockResolvedValue({ value: { materials: { PLA: true }, layerHeights: [160] } });
+    mocks.findUnique.mockResolvedValue(null);
+    mocks.create.mockImplementation(async ({ data }: { data: object }) => ({
+      ...data,
+      status: "QUEUED",
+      progressPct: 0,
+      progressStage: "queued",
+      progressMessage: "Waiting for a slicer",
+      progressUpdatedAt: new Date(),
+      errorCode: null,
+      errorMessage: null,
+    }));
+  });
+
+  it("refuses one it doesn't, before the worker sees it", async () => {
+    mocks.findFirst.mockResolvedValueOnce(model(false));
+    const res = await post(200);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: { code: "LAYER_HEIGHT_UNAVAILABLE", message: "0.20 mm layers are not offered — pick 0.16 mm." } });
+    expect(mocks.queueAdd).not.toHaveBeenCalled();
+  });
+
+  it("lets a 3MF that locked a height the shop no longer offers slice at the customer's", async () => {
+    mocks.findFirst.mockResolvedValueOnce(model(true));
+    const res = await post(160);
+    expect(res.status).toBe(202);
+    expect(mocks.queueAdd).toHaveBeenCalledWith("slice", expect.objectContaining({ settings: expect.objectContaining({ layerHeightUm: 160 }) }), expect.any(Object));
+  });
+
+  it("still honours the lock when its height is offered", async () => {
+    mocks.availability.mockResolvedValue({ value: { materials: { PLA: true }, layerHeights: [120, 160] } });
+    mocks.findFirst.mockResolvedValueOnce(model(true));
+    const res = await post(160);
+    expect(res.status).toBe(202);
+    expect(mocks.queueAdd).toHaveBeenCalledWith("slice", expect.objectContaining({ settings: expect.objectContaining({ layerHeightUm: 120 }) }), expect.any(Object));
   });
 });

@@ -1,4 +1,13 @@
-import { CUSTOM_MATERIAL_IDS, MATERIAL_IDS, isCustomMaterial, type ColourId, type CustomMaterialId, type MaterialId } from "./quote-types";
+import {
+  CUSTOM_MATERIAL_IDS,
+  LAYER_HEIGHTS_UM,
+  MATERIAL_IDS,
+  isCustomMaterial,
+  type ColourId,
+  type CustomMaterialId,
+  type LayerHeightUm,
+  type MaterialId,
+} from "./quote-types";
 import { materialName, type CustomMaterialNames } from "./catalog";
 import {
   MASTER_COLOURS,
@@ -25,6 +34,9 @@ export interface Availability {
   customColours: CustomColour[];
   /** The shop's names for its own materials (OTHER_*). Only named slots appear. */
   customMaterials: CustomMaterialNames;
+  /** Layer heights customers may pick, in `LAYER_HEIGHTS_UM` order; never
+   *  empty. A shop that prints at one height offers just that one. */
+  layerHeights: LayerHeightUm[];
 }
 
 /** Legacy colour ids resolve to their modern equivalent for availability checks
@@ -44,7 +56,22 @@ export function defaultAvailability(): Availability {
     materials[m] = DEFAULT_ENABLED_MATERIALS[m];
     colours[m] = [...DEFAULT_ENABLED_COLOURS[m]];
   }
-  return { materials, colours, customColours: [], customMaterials: {} };
+  return { materials, colours, customColours: [], customMaterials: {}, layerHeights: [...LAYER_HEIGHTS_UM] };
+}
+
+export function isLayerHeightEnabled(avail: Availability, um: number): boolean {
+  return (avail.layerHeights as readonly number[]).includes(um);
+}
+
+/** The layer height a new model starts at: 0.20 mm (fastest, cheapest) when
+ *  it's offered, else the coarsest one that is. */
+export function defaultLayerHeight(layerHeights: readonly LayerHeightUm[]): LayerHeightUm {
+  return layerHeights.includes(200) ? 200 : (layerHeights.at(-1) ?? 200);
+}
+
+/** "0.16 mm". */
+export function layerHeightLabel(um: number): string {
+  return `${(um / 1000).toFixed(2)} mm`;
 }
 
 /** Why one of the shop's own materials can't be offered yet, or null when it
@@ -86,11 +113,12 @@ export function isColourEnabled(
 
 export type AvailabilityViolation =
   | { ok: true }
-  | { ok: false; code: "MATERIAL_UNAVAILABLE" | "COLOUR_UNAVAILABLE"; message: string };
+  | { ok: false; code: "MATERIAL_UNAVAILABLE" | "COLOUR_UNAVAILABLE" | "LAYER_HEIGHT_UNAVAILABLE"; message: string };
 
-/** Gate a chosen material (+optional colour) against current availability. */
+/** Gate a chosen material (+optional colour and layer height) against current
+ *  availability. */
 export function assertConfigAvailable(
-  config: { material: MaterialId; colour?: string },
+  config: { material: MaterialId; colour?: string; layerHeightUm?: number },
   avail: Availability,
 ): AvailabilityViolation {
   if (!isMaterialEnabled(avail, config.material)) {
@@ -105,6 +133,13 @@ export function assertConfigAvailable(
       ok: false,
       code: "COLOUR_UNAVAILABLE",
       message: `The selected colour is not available in ${materialName(config.material)}.`,
+    };
+  }
+  if (config.layerHeightUm !== undefined && !isLayerHeightEnabled(avail, config.layerHeightUm)) {
+    return {
+      ok: false,
+      code: "LAYER_HEIGHT_UNAVAILABLE",
+      message: `${layerHeightLabel(config.layerHeightUm)} layers are not offered — pick ${avail.layerHeights.map(layerHeightLabel).join(" or ")}.`,
     };
   }
   return { ok: true };
@@ -138,7 +173,7 @@ export interface PublicMaterial {
 export function toPublicCatalog(
   avail: Availability,
   ready?: ReadonlySet<CustomMaterialId>,
-): { materials: PublicMaterial[] } {
+): { materials: PublicMaterial[]; layerHeights: LayerHeightUm[] } {
   const materials = MATERIAL_IDS.map((m) => ({
     id: m,
     name: materialName(m, avail.customMaterials),
@@ -179,7 +214,7 @@ export function toPublicCatalog(
         ),
     ],
   }));
-  return { materials };
+  return { materials, layerHeights: [...avail.layerHeights] };
 }
 
 /** Display name for any colour id, custom colours included. Palette and legacy

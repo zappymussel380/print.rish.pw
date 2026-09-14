@@ -31,6 +31,8 @@ export interface FaqContext {
   retention: { uploadHours: number; fileDays: number };
   /** How customers reach the shop, e.g. "WhatsApp" or "the contact page". */
   contactChannel: string;
+  /** Layer heights on offer (µm), finest first. */
+  layerHeights: readonly number[];
 }
 
 const HEAT: Record<MaterialFamily, string> = {
@@ -42,6 +44,18 @@ const HEAT: Record<MaterialFamily, string> = {
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+const mm = (um: number) => `${(um / 1000).toFixed(2)} mm`;
+
+function layerLinesAnswer(heights: readonly number[]): string {
+  const lead = "Yes — every FDM print has them; they're the nature of the process.";
+  const finest = heights[0] ?? 120;
+  const coarsest = heights.at(-1) ?? 200;
+  if (finest === coarsest) {
+    return `${lead} Every part is printed at ${mm(finest)} layers${finest <= 120 ? ", where they're subtle and mostly disappear at arm's length" : ""}. If a smooth finish matters, say so in the notes.`;
+  }
+  return `${lead} At ${mm(finest)} layer height they're subtle and mostly disappear at arm's length. Choose ${mm(finest)} for display pieces and ${mm(coarsest)} for functional parts where speed and price matter more.`;
+}
 
 export function buildFaq(ctx: FaqContext): FaqEntry[] {
   const [x, y, z] = ctx.printer.bedMm;
@@ -116,7 +130,7 @@ export function buildFaq(ctx: FaqContext): FaqEntry[] {
     {
       id: "layer-lines",
       q: "Will I see layer lines?",
-      a: "Yes — every FDM print has them; they're the nature of the process. At 0.12 mm layer height they're subtle and mostly disappear at arm's length. Choose 0.12 mm for display pieces and 0.20 mm for functional parts where speed and price matter more.",
+      a: layerLinesAnswer(ctx.layerHeights),
     },
     {
       id: "durability",

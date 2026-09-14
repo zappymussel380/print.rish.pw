@@ -192,14 +192,8 @@ export const env = {
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   },
-  // Shiprocket rate calculator. Credentials are secrets (no defaults) so a
-  // misconfigured deploy returns NOT_CONFIGURED instead of silently failing.
-  get shiprocketEmail() {
-    return required("SHIPROCKET_EMAIL");
-  },
-  get shiprocketPassword() {
-    return required("SHIPROCKET_PASSWORD");
-  },
+  // Shiprocket rate calculator, when admin → Shipping hasn't been saved (see
+  // lib/shipping-settings.ts, which reads SHIPROCKET_EMAIL/PASSWORD itself).
   get shiprocketPickupPincode() {
     return process.env.SHIPROCKET_PICKUP_PINCODE ?? "781001";
   },

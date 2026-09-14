@@ -133,7 +133,7 @@ async function postQuotation(request: NextRequest) {
       return jsonError(409, "MODEL_ALREADY_SUBMITTED", "A model in this quote was already submitted");
     }
 
-    const normalizedConfig = normalizeModelConfigLocks(config.data, model);
+    const normalizedConfig = normalizeModelConfigLocks(config.data, model, availability.layerHeights);
 
     const available = assertConfigAvailable(normalizedConfig, availability);
     if (!available.ok) {

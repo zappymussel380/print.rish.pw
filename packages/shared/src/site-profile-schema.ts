@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { STOCK_MATERIAL_IDS } from "./quote-types";
+import { MATERIAL_IDS } from "./quote-types";
 import { QUOTATION_PREFIX_RE } from "./quotation-number";
 import { ACCENT_IDS, type AccentId } from "./accents";
 import { DEFAULT_SITE_PROFILE, SITE_PROFILE_LIMITS, type SiteProfile } from "./site-profile";
@@ -23,7 +23,7 @@ export const siteProfileFieldSchemas = {
   phone: z.union([z.literal(""), text(L.phone).regex(/^\+?[0-9][0-9 ()-]{5,22}$/)]),
   address: text(L.address),
   footerNote: text(L.footerNote),
-  materialsPage: z.array(z.enum(STOCK_MATERIAL_IDS)).min(1).max(STOCK_MATERIAL_IDS.length),
+  materialsPage: z.array(z.enum(MATERIAL_IDS)).min(1).max(MATERIAL_IDS.length),
   quotationPrefix: z.string().trim().toUpperCase().pipe(z.string().regex(QUOTATION_PREFIX_RE)),
   accent: z.enum(ACCENT_IDS as [AccentId, ...AccentId[]]),
 };

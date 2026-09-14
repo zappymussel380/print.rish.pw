@@ -1,26 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FILAMENT_LINE_LABELS,
-  MATERIAL_IDS,
-  PRICING_BOUNDS,
-  materialName,
-  type FilamentLine,
-  type PricingInput,
   CUSTOM_MATERIAL_IDS,
   CUSTOM_MATERIAL_LINE,
+  FILAMENT_LINE_LABELS,
+  INTERNAL_COST,
+  MATERIAL_IDS,
+  MATERIAL_LINES,
+  PRICING_BOUNDS,
+  isCustomMaterial,
+  materialName,
+  spoolCostPerKgPaise,
   type CustomMaterialNames,
+  type FilamentLine,
   type MaterialId,
+  type PricingInput,
 } from "@print/shared";
 
 /**
- * Every rate the site uses, in rupees rather than paise. Grouped the way they
- * are used: what customers pay, what the pricing page says the rate covers,
- * lead time, and what filament and running the printer really cost (admin
- * profit only). Saves the whole set at once; the server refuses a save with
- * any out-of-range value and names it.
+ * Every rate the site uses, in rupees rather than paise, laid out so what
+ * customers see sits beside what it really costs the shop: one row per
+ * material (its per-gram price, the filament figure the pricing page quotes,
+ * the spool it's bought as and what a gram of that lands at), then the running
+ * costs the same way. Saves the whole set at once; the server refuses a save
+ * with any out-of-range value and names it.
  */
 
 type Unit = "rupees" | "percent" | "plain";
@@ -46,65 +51,37 @@ function lineLabel(line: FilamentLine, nameOf: NameOf): string {
   return own ? nameOf(own) : FILAMENT_LINE_LABELS[line];
 }
 
-function sections(nameOf: NameOf): { title: string; hint: string; fields: FieldDef[] }[] {
-  return [
-    {
-      title: "Customer prices",
-      hint: "What every quote is built from: grams × the material's rate, plus one setup fee per order.",
-      fields: [
-        { key: "setupFeePaise", label: "Setup fee per order", unit: "rupees", bound: B.setupFeePaise },
-        ...MATERIAL_IDS.map((m) => ({
-          key: `materials.${m}.sellPerGramPaise`,
-          label: `${nameOf(m)} — per gram`,
-          unit: "rupees" as const,
-          suffix: "/ g",
-          bound: B.sellPerGramPaise,
-        })),
-      ],
-    },
-    {
-      title: "What the rate covers (shown to customers)",
-      hint: "Informational lines on the pricing page and each quote — already inside the per-gram rate, never added on top.",
-      fields: [
-        ...MATERIAL_IDS.map((m) => ({
-          key: `materials.${m}.costPerKgPaise`,
-          label: `${nameOf(m)} filament`,
-          unit: "rupees" as const,
-          suffix: "/ kg",
-          bound: B.costPerKgPaise,
-        })),
-        { key: "electricityPerKwhPaise", label: "Electricity", unit: "rupees", suffix: "/ kWh", bound: B.electricityPerKwhPaise },
-        { key: "kwhPerHour", label: "Printer power draw", unit: "plain", suffix: "kWh / print-hour", bound: B.kwhPerHour },
-        { key: "maintenancePerGramPaise", label: "Maintenance", unit: "rupees", suffix: "/ g", bound: B.maintenancePerGramPaise },
-      ],
-    },
-    {
-      title: "Lead time",
-      hint: "Drives the “ready by” date on every quote.",
-      fields: [
-        { key: "leadTime.printHoursPerDay", label: "Printing hours per day", unit: "plain", suffix: "h", bound: B.printHoursPerDay },
-        { key: "leadTime.bufferDays", label: "Extra days (prep, QC, packing)", unit: "plain", suffix: "days", bound: B.bufferDays },
-      ],
-    },
-    {
-      title: "Your real costs (profit estimate only)",
-      hint: "Never shown to customers. Filament is costed per spool line at list price + GST + shipping.",
-      fields: [
-        ...LINES.map((line) => ({
-          key: `internal.spoolListPriceInr.${line}`,
-          label: `${lineLabel(line, nameOf)} spool`,
-          unit: "plain" as const,
-          suffix: "₹ / kg list",
-          bound: B.spoolListPriceInr,
-        })),
-        { key: "internal.gstRate", label: "GST on filament", unit: "percent", suffix: "%", bound: B.gstRate },
-        { key: "internal.spoolShippingPaise", label: "Shipping per spool", unit: "rupees", bound: B.spoolShippingPaise },
-        { key: "internal.electricityPerKwhPaise", label: "Electricity", unit: "rupees", suffix: "/ kWh", bound: B.electricityPerKwhPaise },
-        { key: "internal.electricityKwhPerHour", label: "Printer power draw", unit: "plain", suffix: "kWh / print-hour", bound: B.electricityKwhPerHour },
-        { key: "internal.maintenancePerHourPaise", label: "Maintenance", unit: "rupees", suffix: "/ print-hour", bound: B.maintenancePerHourPaise },
-      ],
-    },
+const sellKey = (m: MaterialId) => `materials.${m}.sellPerGramPaise`;
+const shownKey = (m: MaterialId) => `materials.${m}.costPerKgPaise`;
+const spoolKey = (line: FilamentLine) => `internal.spoolListPriceInr.${line}`;
+
+/** Every field, keyed by its path in the pricing input. */
+function fieldDefs(nameOf: NameOf): Record<string, FieldDef> {
+  const list: FieldDef[] = [
+    { key: "setupFeePaise", label: "Setup fee per order", unit: "rupees", bound: B.setupFeePaise },
+    ...MATERIAL_IDS.flatMap((m): FieldDef[] => [
+      { key: sellKey(m), label: `${nameOf(m)}: customers pay`, unit: "rupees", suffix: "/ g", bound: B.sellPerGramPaise },
+      { key: shownKey(m), label: `${nameOf(m)}: shown as filament`, unit: "rupees", suffix: "/ kg", bound: B.costPerKgPaise },
+    ]),
+    ...LINES.map((line): FieldDef => ({
+      key: spoolKey(line),
+      label: `${lineLabel(line, nameOf)}: your spool`,
+      unit: "plain",
+      suffix: "₹ / kg list",
+      bound: B.spoolListPriceInr,
+    })),
+    { key: "electricityPerKwhPaise", label: "Electricity (shown)", unit: "rupees", suffix: "/ kWh", bound: B.electricityPerKwhPaise },
+    { key: "internal.electricityPerKwhPaise", label: "Electricity (yours)", unit: "rupees", suffix: "/ kWh", bound: B.electricityPerKwhPaise },
+    { key: "kwhPerHour", label: "Power draw (shown)", unit: "plain", suffix: "kWh / print-h", bound: B.kwhPerHour },
+    { key: "internal.electricityKwhPerHour", label: "Power draw (yours)", unit: "plain", suffix: "kWh / print-h", bound: B.electricityKwhPerHour },
+    { key: "maintenancePerGramPaise", label: "Maintenance (shown)", unit: "rupees", suffix: "/ g", bound: B.maintenancePerGramPaise },
+    { key: "internal.maintenancePerHourPaise", label: "Maintenance (yours)", unit: "rupees", suffix: "/ print-h", bound: B.maintenancePerHourPaise },
+    { key: "internal.gstRate", label: "GST on filament", unit: "percent", suffix: "%", bound: B.gstRate },
+    { key: "internal.spoolShippingPaise", label: "Shipping per spool", unit: "rupees", bound: B.spoolShippingPaise },
+    { key: "leadTime.printHoursPerDay", label: "Printing hours per day", unit: "plain", suffix: "h", bound: B.printHoursPerDay },
+    { key: "leadTime.bufferDays", label: "Extra days (prep, QC, packing)", unit: "plain", suffix: "days", bound: B.bufferDays },
   ];
+  return Object.fromEntries(list.map((f) => [f.key, f]));
 }
 
 function getPath(obj: unknown, path: string): unknown {
@@ -136,6 +113,9 @@ function fromText(text: string, unit: Unit): number | undefined {
   return n;
 }
 
+const TH = "px-2 pb-2 text-left align-bottom text-[0.68rem] font-[650] uppercase tracking-[0.08em] text-faint";
+const TD = "px-2 py-1.5 align-middle";
+
 export function RatesEditor({
   pricing,
   materialNames,
@@ -145,27 +125,111 @@ export function RatesEditor({
   materialNames?: CustomMaterialNames;
 }) {
   const router = useRouter();
-  const defs = useMemo(() => sections((m) => materialName(m, materialNames)), [materialNames]);
+  const nameOf: NameOf = (m) => materialName(m, materialNames);
+  const defs = useMemo(() => fieldDefs((m) => materialName(m, materialNames)), [materialNames]);
   const initial = useMemo(() => {
     const out: Record<string, string> = {};
-    for (const s of defs) for (const f of s.fields) out[f.key] = toText(getPath(pricing, f.key), f.unit);
+    for (const f of Object.values(defs)) out[f.key] = toText(getPath(pricing, f.key), f.unit);
     return out;
   }, [defs, pricing]);
   const [values, setValues] = useState(initial);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUnnamed, setShowUnnamed] = useState(false);
 
+  const stored = (key: string) => fromText(values[key] ?? "", defs[key]!.unit);
   const invalid = new Set(
-    defs.flatMap((s) =>
-      s.fields
-        .filter((f) => {
-          const v = fromText(values[f.key] ?? "", f.unit);
-          return v === undefined || !f.bound.safeParse(v).success;
-        })
-        .map((f) => f.key),
-    ),
+    Object.values(defs)
+      .filter((f) => {
+        const v = stored(f.key);
+        return v === undefined || !f.bound.safeParse(v).success;
+      })
+      .map((f) => f.key),
   );
+
+  // Unnamed custom slots are off sale; tucked away unless one needs fixing.
+  const named = MATERIAL_IDS.filter((m) => !isCustomMaterial(m) || materialNames?.[m]?.name);
+  const unnamed = MATERIAL_IDS.filter((m) => !named.includes(m));
+  const unnamedBad = unnamed.some((m) => [sellKey(m), shownKey(m), ...MATERIAL_LINES[m].map(spoolKey)].some((k) => invalid.has(k)));
+  const unnamedOpen = showUnnamed || unnamedBad;
+
+  // What a gram of a spool line lands at, from the form as it stands.
+  const gstRate = stored("internal.gstRate");
+  const spoolShippingPaise = stored("internal.spoolShippingPaise");
+  const costPerGramPaise = (line: FilamentLine): number | null => {
+    const list = stored(spoolKey(line));
+    if (list === undefined || gstRate === undefined || spoolShippingPaise === undefined) return null;
+    return spoolCostPerKgPaise(list, { ...INTERNAL_COST, gstRate, spoolShippingPaise }) / 1000;
+  };
+
+  const input = (key: string, width = "w-20") => {
+    const f = defs[key]!;
+    const bad = invalid.has(key);
+    return (
+      <span className="flex items-center gap-1">
+        {f.unit === "rupees" ? <span className="text-faint">₹</span> : null}
+        <input
+          inputMode="decimal"
+          value={values[key] ?? ""}
+          aria-invalid={bad}
+          aria-label={f.label}
+          onChange={(e) => {
+            setValues((v) => ({ ...v, [key]: e.target.value }));
+            setDirty(true);
+          }}
+          className={`input-base ${width} px-2 py-1.5 text-right text-sm tabular-nums ${bad ? "border-[var(--danger)]" : ""}`}
+        />
+        {f.suffix ? <span className="whitespace-nowrap text-xs text-faint">{f.suffix}</span> : null}
+      </span>
+    );
+  };
+
+  /** Your cost per gram for a line, flagged when it isn't below the price. */
+  const costCell = (line: FilamentLine, m: MaterialId): ReactNode => {
+    const cost = costPerGramPaise(line);
+    if (cost === null) return <span className="text-faint">—</span>;
+    const sell = stored(sellKey(m));
+    const under = sell !== undefined && cost >= sell;
+    return (
+      <span className={`tabular-nums ${under ? "text-danger" : "text-muted"}`} title={under ? "At or above what customers pay per gram" : undefined}>
+        ₹{(cost / 100).toFixed(2)}
+        <span className="text-xs text-faint"> / g</span>
+        {under ? <span className="text-xs"> · not covered</span> : null}
+      </span>
+    );
+  };
+
+  const materialRows = (m: MaterialId) => {
+    const lines = MATERIAL_LINES[m];
+    const single = lines.length === 1 ? lines[0]! : null;
+    return (
+      <Fragment key={m}>
+        <tr className="border-t border-line">
+          <th scope="row" className={`${TD} text-left font-[600]`}>
+            {nameOf(m)}
+          </th>
+          <td className={TD}>{input(sellKey(m))}</td>
+          <td className={TD}>{input(shownKey(m), "w-24")}</td>
+          <td className={`${TD} border-l border-line`}>{single ? input(spoolKey(single), "w-24") : null}</td>
+          <td className={TD}>{single ? costCell(single, m) : null}</td>
+        </tr>
+        {single
+          ? null
+          : lines.map((line) => (
+              <tr key={line}>
+                <th scope="row" className={`${TD} pl-5 text-left text-xs font-[450] text-muted`}>
+                  {lineLabel(line, nameOf)}
+                </th>
+                <td className={TD} />
+                <td className={TD} />
+                <td className={`${TD} border-l border-line`}>{input(spoolKey(line), "w-24")}</td>
+                <td className={TD}>{costCell(line, m)}</td>
+              </tr>
+            ))}
+      </Fragment>
+    );
+  };
 
   const save = async () => {
     if (invalid.size > 0) return;
@@ -173,7 +237,7 @@ export function RatesEditor({
     setError(null);
     try {
       const body: Record<string, unknown> = {};
-      for (const s of defs) for (const f of s.fields) setPath(body, f.key, fromText(values[f.key]!, f.unit));
+      for (const f of Object.values(defs)) setPath(body, f.key, fromText(values[f.key]!, f.unit));
       const res = await fetch("/api/admin/pricing", {
         method: "PUT",
         headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
@@ -198,39 +262,126 @@ export function RatesEditor({
         <span className="text-faint">edit</span>
       </summary>
       <div className="space-y-7 border-t border-line p-4">
-        {defs.map((s) => (
-          <fieldset key={s.title}>
-            <legend className="text-sm font-[650]">{s.title}</legend>
-            <p className="mt-0.5 text-xs text-faint">{s.hint}</p>
-            <div className="mt-3 grid gap-x-5 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {s.fields.map((f) => {
-                const bad = invalid.has(f.key);
-                return (
-                  <label key={f.key} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 text-muted">{f.label}</span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {f.unit === "rupees" ? <span className="text-faint">₹</span> : null}
-                      <input
-                        inputMode="decimal"
-                        value={values[f.key] ?? ""}
-                        aria-invalid={bad}
-                        aria-label={`${s.title}: ${f.label}`}
-                        onChange={(e) => {
-                          setValues((v) => ({ ...v, [f.key]: e.target.value }));
-                          setDirty(true);
-                        }}
-                        className={`input-base w-24 px-2 py-1.5 text-right text-sm tabular-nums ${
-                          bad ? "border-[var(--danger)]" : ""
-                        }`}
-                      />
-                      {f.suffix ? <span className="w-24 text-xs text-faint">{f.suffix}</span> : <span className="w-24" />}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-        ))}
+        {/* A fieldset is min-content wide by default; min-w-0 lets the tables scroll inside it at phone widths. */}
+        <fieldset className="min-w-0">
+          <legend className="text-sm font-[650]">Materials</legend>
+          <p className="mt-0.5 text-xs text-faint">
+            Every quote is grams × the material&apos;s rate, plus one setup fee per order. &ldquo;Shown as
+            filament&rdquo; is only a line on the pricing page and each quote, already inside the rate. Your spool
+            prices and costs are never shown to customers: a gram costs you the list price + GST + shipping, ÷ 1000.
+          </p>
+          <label className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <span className="text-muted">Setup fee per order</span>
+            {input("setupFeePaise")}
+          </label>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[40rem] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th className={TH} scope="col">
+                    Material
+                  </th>
+                  <th className={TH} scope="col" colSpan={2}>
+                    Customers see
+                  </th>
+                  <th className={`${TH} border-l border-line`} scope="col" colSpan={2}>
+                    Your real cost
+                  </th>
+                </tr>
+                <tr>
+                  <th className={TH} />
+                  <th className={TH} scope="col">
+                    Price per gram
+                  </th>
+                  <th className={TH} scope="col">
+                    Shown as filament
+                  </th>
+                  <th className={`${TH} border-l border-line`} scope="col">
+                    Spool (list)
+                  </th>
+                  <th className={TH} scope="col">
+                    Filament per gram
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {named.map(materialRows)}
+                {unnamed.length > 0 ? (
+                  <tr className="border-t border-line">
+                    <td colSpan={5} className={TD}>
+                      <button
+                        type="button"
+                        className="text-xs text-faint underline decoration-dotted underline-offset-2"
+                        aria-expanded={unnamedOpen}
+                        onClick={() => setShowUnnamed((v) => !v)}
+                        disabled={unnamedBad}
+                      >
+                        {unnamedOpen ? "Hide" : "Show"} {unnamed.length} unnamed material slot{unnamed.length === 1 ? "" : "s"} (name
+                        them in Your own materials)
+                      </button>
+                    </td>
+                  </tr>
+                ) : null}
+                {unnamedOpen ? unnamed.map(materialRows) : null}
+              </tbody>
+            </table>
+          </div>
+        </fieldset>
+
+        <fieldset className="min-w-0">
+          <legend className="text-sm font-[650]">Running costs</legend>
+          <p className="mt-0.5 text-xs text-faint">
+            The pricing page explains the rate with the left column; the profit estimate uses the right.
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[34rem] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th className={TH} />
+                  <th className={TH} scope="col">
+                    Customers see
+                  </th>
+                  <th className={`${TH} border-l border-line`} scope="col">
+                    Your real cost
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    ["Electricity", "electricityPerKwhPaise", "internal.electricityPerKwhPaise"],
+                    ["Printer power draw", "kwhPerHour", "internal.electricityKwhPerHour"],
+                    ["Maintenance", "maintenancePerGramPaise", "internal.maintenancePerHourPaise"],
+                    ["GST on filament", null, "internal.gstRate"],
+                    ["Shipping per spool", null, "internal.spoolShippingPaise"],
+                  ] as const
+                ).map(([label, shown, yours]) => (
+                  <tr key={label} className="border-t border-line">
+                    <th scope="row" className={`${TD} text-left font-[600]`}>
+                      {label}
+                    </th>
+                    <td className={TD}>{shown ? input(shown) : <span className="text-faint">—</span>}</td>
+                    <td className={`${TD} border-l border-line`}>{input(yours)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </fieldset>
+
+        <fieldset className="min-w-0">
+          <legend className="text-sm font-[650]">Lead time</legend>
+          <p className="mt-0.5 text-xs text-faint">Drives the &ldquo;ready by&rdquo; date on every quote.</p>
+          <div className="mt-3 grid gap-x-5 gap-y-2.5 sm:grid-cols-2">
+            {(["leadTime.printHoursPerDay", "leadTime.bufferDays"] as const).map((key) => (
+              <label key={key} className="flex items-center justify-between gap-3 text-sm">
+                <span className="min-w-0 text-muted">{defs[key]!.label}</span>
+                {input(key)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"

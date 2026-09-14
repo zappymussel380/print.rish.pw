@@ -93,6 +93,21 @@ describe("PUT /api/admin/catalog", () => {
     expect(arg.create.value.colours.PLA_AESTHETIC).toEqual(["silk-copper", "dual-red-gold"]);
   });
 
+  it("round-trips the layer heights on offer, and never saves none", async () => {
+    apiUtil.readJsonBody.mockResolvedValue({ ok: true, value: { materials: { PLA: true }, layerHeights: [200, 160] } });
+    const res = await PUT(fakeReq());
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { layerHeights: number[] }).layerHeights).toEqual([160, 200]);
+    const arg = db.upsert.mock.calls[0]![0] as { create: { value: { layerHeights: number[] } } };
+    expect(arg.create.value.layerHeights).toEqual([160, 200]);
+
+    db.upsert.mockClear();
+    apiUtil.readJsonBody.mockResolvedValue({ ok: true, value: { materials: { PLA: true }, layerHeights: [] } });
+    expect((await PUT(fakeReq())).status).toBe(200);
+    const none = db.upsert.mock.calls[0]![0] as { create: { value: { layerHeights: number[] } } };
+    expect(none.create.value.layerHeights).toEqual([120, 160, 200]);
+  });
+
   it("saves a hex colour for ABS together with its enabled flag", async () => {
     apiUtil.readJsonBody.mockResolvedValue({
       ok: true,

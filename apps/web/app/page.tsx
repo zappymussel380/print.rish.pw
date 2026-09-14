@@ -2,6 +2,7 @@ import { ArrowRight, ExternalLink, FileUp, IndianRupee, ScanEye, Send } from "lu
 import Link from "next/link";
 import {
   formatPaise,
+  layerHeightLabel,
   listJoin,
   materialFamily,
   materialName,
@@ -196,8 +197,11 @@ export default async function HomePage() {
                 {printer.name} · {printer.nozzleMm} mm nozzle
               </h2>
               <p className="mt-2 max-w-md text-sm leading-6 text-muted">
-                Up to {printer.bedMm.join(" × ")} mm builds. Layer heights of 0.12, 0.16 and 0.20 mm; infill
-                from 10 to 60%; automatic supports when your part needs them.
+                Up to {printer.bedMm.join(" × ")} mm builds.{" "}
+                {availability.layerHeights.length === 1
+                  ? `Every part at ${layerHeightLabel(availability.layerHeights[0]!)} layers`
+                  : `Layer heights of ${listJoin(availability.layerHeights.map((um) => (um / 1000).toFixed(2)))} mm`}
+                ; infill from 10 to 60%; automatic supports when your part needs them.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

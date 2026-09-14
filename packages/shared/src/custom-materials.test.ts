@@ -3,6 +3,7 @@ import {
   CUSTOM_MATERIAL_NAME_MAX,
   ORCA_GENERIC_FILAMENTS,
   cleanCustomMaterialName,
+  filamentPresetFacts,
   slotInScope,
   startingPreset,
 } from "./custom-materials";
@@ -112,6 +113,18 @@ describe("OrcaSlicer profiles for the shop's own materials", () => {
     });
     expect(startingPreset("ABS-CF", "Generic ABS @System")).not.toHaveProperty("filament_density");
     expect(() => startingPreset("X", "Generic ABS @System", 9)).toThrow(RangeError);
+  });
+
+  it("reads back the density and generic a stored preset was made with", () => {
+    const sent = startingPreset("PC-PBT-GF", "Generic PC @System", 1.4);
+    expect(filamentPresetFacts(sent)).toEqual({ densityGcm3: 1.4, startedFrom: "Generic PC @System" });
+    // Once the worker has resolved it, the resolved density is what slices use.
+    expect(filamentPresetFacts(sent, { filament_density: ["1.42"] })).toEqual({ densityGcm3: 1.42, startedFrom: "Generic PC @System" });
+    // An exported preset inherits from a vendor preset, maybe without a density of its own.
+    expect(filamentPresetFacts({ inherits: "Numakers PLA+", name: "Mine" })).toEqual({});
+    expect(filamentPresetFacts({ inherits: "Numakers PLA+" }, { filament_density: "1.24" })).toEqual({ densityGcm3: 1.24 });
+    expect(filamentPresetFacts({ filament_density: ["0"] })).toEqual({});
+    expect(filamentPresetFacts(null, "nonsense")).toEqual({});
   });
 
   it("lists each generic once", () => {

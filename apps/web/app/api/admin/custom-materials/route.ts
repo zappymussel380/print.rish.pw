@@ -1,16 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { CUSTOM_MATERIAL_NAME_MAX, customMaterialNamesInputSchema, materialName, toPublicCatalog } from "@print/shared";
+import {
+  CUSTOM_GUIDE_LIMITS,
+  CUSTOM_MATERIAL_NAME_MAX,
+  customMaterialNamesInputSchema,
+  materialName,
+  toPublicCatalog,
+} from "@print/shared";
 import { jsonError, readJsonBody, requireAdminApi } from "@/lib/api-util";
 import { assertSameOrigin } from "@/lib/security";
-import { getReadyCustomMaterials, saveCustomMaterialNames } from "@/lib/catalog-availability";
+import { getReadyCustomMaterials, saveCustomMaterials } from "@/lib/catalog-availability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_BODY_BYTES = 8 * 1024;
+const MAX_BODY_BYTES = 16 * 1024;
 
-/** Admin: name (or clear) the shop's own materials. Only the names change —
- *  availability and colours are the Catalog editor's. */
+/** Admin: name (or clear) the shop's own materials, and write their copy for
+ *  /materials. Only names and copy change — availability and colours are the
+ *  Catalog editor's. */
 export async function PUT(request: NextRequest) {
   const auth = await requireAdminApi();
   if (auth) return auth;
@@ -21,9 +28,16 @@ export async function PUT(request: NextRequest) {
   const parsed = customMaterialNamesInputSchema.safeParse(body.value);
   if (!parsed.success) return jsonError(422, "BAD_REQUEST", "Invalid material names payload");
 
-  const saved = await saveCustomMaterialNames(parsed.data.names);
+  const saved = await saveCustomMaterials(parsed.data);
   if ("invalid" in saved) {
     const which = saved.invalid.map((id) => materialName(id)).join(", ");
+    if (!parsed.data.names) {
+      return jsonError(
+        422,
+        "BAD_GUIDE",
+        `${which}: name it first, and keep the subtitle to ${CUSTOM_GUIDE_LIMITS.subtitle} and each row to ${CUSTOM_GUIDE_LIMITS.row} characters.`,
+      );
+    }
     return jsonError(
       422,
       "BAD_NAME",

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import numakers from "../../../docs/numakers/catalogue-2026-09-12.json";
 import {
+  FILAMENT_LINE_LABELS,
   INTERNAL_COST,
+  MATERIAL_LINES,
   estimateItemCostPaise,
   estimateOrderCostPaise,
   estimateOrderProfitPaise,
@@ -75,6 +77,22 @@ describe("spool cost", () => {
         expect(expected.has(key) || elsewhere.has(key), key).toBe(true);
       }
     }
+  });
+});
+
+describe("MATERIAL_LINES", () => {
+  it("lists every line a material's colours are costed as", () => {
+    for (const m of MATERIAL_IDS) {
+      for (const colour of [...MATERIAL_COLOURS[m], `custom-${m.toLowerCase()}-x`]) {
+        expect(MATERIAL_LINES[m], `${m} ${colour}`).toContain(filamentLine(m, colour));
+      }
+    }
+  });
+
+  it("puts every line under exactly one material", () => {
+    const listed = MATERIAL_IDS.flatMap((m) => [...MATERIAL_LINES[m]]);
+    expect(new Set(listed).size).toBe(listed.length);
+    expect([...listed].sort()).toEqual(Object.keys(FILAMENT_LINE_LABELS).sort());
   });
 });
 

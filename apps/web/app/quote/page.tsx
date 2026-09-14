@@ -3,6 +3,7 @@ import { PageIntro } from "@/components/shell/page-intro";
 import { QuoteBuilder } from "@/components/quote/quote-builder";
 import { env } from "@/lib/env";
 import { getPrinterSpec } from "@/lib/printer";
+import { getShippingConfig } from "@/lib/shipping-settings";
 
 export const metadata: Metadata = {
   title: "Get a quote",
@@ -10,7 +11,8 @@ export const metadata: Metadata = {
     "Upload your STL, 3MF, OBJ or AMF models and get an instant quote built from real OrcaSlicer slicing — no guesswork.",
 };
 
-export default function QuotePage() {
+export default async function QuotePage() {
+  const shipping = await getShippingConfig();
   return (
     <div className="mx-auto max-w-6xl px-5 py-16 sm:py-20">
       <PageIntro
@@ -18,7 +20,7 @@ export default function QuotePage() {
         title="Upload. Slice. Price."
         lede={`Drop in your models and we'll slice every one with a real ${getPrinterSpec().name} profile. You'll see exact filament, print time and price — then tweak settings and watch the quote update.`}
       />
-      <QuoteBuilder maxModels={env.maxModelsPerSession} maxUploadMb={env.maxUploadMb} />
+      <QuoteBuilder maxModels={env.maxModelsPerSession} maxUploadMb={env.maxUploadMb} shipping={shipping.live} />
     </div>
   );
 }
