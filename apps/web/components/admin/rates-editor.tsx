@@ -28,13 +28,17 @@ import {
  * with any out-of-range value and names it.
  */
 
-type Unit = "rupees" | "percent" | "plain";
+/** How a field is typed: rupees for a paise value, ₹/kg for a per-gram paise
+ *  value (the customer price), percent for a ratio, or as stored. */
+type Unit = "rupees" | "rupeesPerKg" | "percent" | "plain";
 
 interface FieldDef {
   key: string;
   label: string;
   unit: Unit;
   suffix?: string;
+  /** Kept and sent back unchanged, but not shown. */
+  hidden?: true;
   /** Bound checked before sending, on the stored (paise/ratio) value. */
   bound: { safeParse: (v: unknown) => { success: boolean } };
 }
@@ -60,8 +64,9 @@ function fieldDefs(nameOf: NameOf): Record<string, FieldDef> {
   const list: FieldDef[] = [
     { key: "setupFeePaise", label: "Setup fee per order", unit: "rupees", bound: B.setupFeePaise },
     ...MATERIAL_IDS.flatMap((m): FieldDef[] => [
-      { key: sellKey(m), label: `${nameOf(m)}: customers pay`, unit: "rupees", suffix: "/ g", bound: B.sellPerGramPaise },
-      { key: shownKey(m), label: `${nameOf(m)}: shown as filament`, unit: "rupees", suffix: "/ kg", bound: B.costPerKgPaise },
+      { key: sellKey(m), label: `${nameOf(m)}: customers pay per kg`, unit: "rupeesPerKg", suffix: "/ kg", bound: B.sellPerGramPaise },
+      // Nothing shows this to customers any more; it's kept so a save doesn't reset it.
+      { key: shownKey(m), label: `${nameOf(m)}: filament cost`, unit: "rupees", bound: B.costPerKgPaise, hidden: true },
     ]),
     ...LINES.map((line): FieldDef => ({
       key: spoolKey(line),
@@ -99,6 +104,8 @@ function setPath(obj: Record<string, unknown>, path: string, value: unknown) {
 function toText(value: unknown, unit: Unit): string {
   if (typeof value !== "number") return "";
   if (unit === "rupees") return String(value / 100);
+  // paise per gram → rupees per kg (×1000 g ÷100 paise)
+  if (unit === "rupeesPerKg") return String(Math.round(value * 1000) / 100);
   if (unit === "percent") return String(Math.round(value * 10000) / 100);
   return String(value);
 }
@@ -109,6 +116,8 @@ function fromText(text: string, unit: Unit): number | undefined {
   if (!/^\d+(\.\d+)?$/.test(t)) return undefined;
   const n = Number(t);
   if (unit === "rupees") return Math.round(n * 100);
+  // rupees per kg → paise per gram; the bound refuses anything finer than 0.1 paise
+  if (unit === "rupeesPerKg") return Math.round(n * 100) / 1000;
   if (unit === "percent") return Math.round(n * 100) / 10000;
   return n;
 }
@@ -168,7 +177,7 @@ export function RatesEditor({
     const bad = invalid.has(key);
     return (
       <span className="flex items-center gap-1">
-        {f.unit === "rupees" ? <span className="text-faint">₹</span> : null}
+        {f.unit === "rupees" || f.unit === "rupeesPerKg" ? <span className="text-faint">₹</span> : null}
         <input
           inputMode="decimal"
           value={values[key] ?? ""}
@@ -200,6 +209,20 @@ export function RatesEditor({
     );
   };
 
+  /** The customer price per gram the typed ₹/kg works out to. */
+  const perGramCell = (m: MaterialId): ReactNode => {
+    const perGram = stored(sellKey(m));
+    if (perGram === undefined || invalid.has(sellKey(m))) return <span className="text-faint">—</span>;
+    // A tenth of a paisa shows as a third decimal (₹3,499/kg → ₹3.499/g).
+    const rupees = perGram / 100;
+    return (
+      <span className="tabular-nums text-muted">
+        ₹{Number.isInteger(Math.round(perGram * 10) / 10) ? rupees.toFixed(2) : rupees.toFixed(3)}
+        <span className="text-xs text-faint"> / g</span>
+      </span>
+    );
+  };
+
   const materialRows = (m: MaterialId) => {
     const lines = MATERIAL_LINES[m];
     const single = lines.length === 1 ? lines[0]! : null;
@@ -209,8 +232,8 @@ export function RatesEditor({
           <th scope="row" className={`${TD} text-left font-[600]`}>
             {nameOf(m)}
           </th>
-          <td className={TD}>{input(sellKey(m))}</td>
-          <td className={TD}>{input(shownKey(m), "w-24")}</td>
+          <td className={TD}>{input(sellKey(m), "w-24")}</td>
+          <td className={TD}>{perGramCell(m)}</td>
           <td className={`${TD} border-l border-line`}>{single ? input(spoolKey(single), "w-24") : null}</td>
           <td className={TD}>{single ? costCell(single, m) : null}</td>
         </tr>
@@ -266,9 +289,9 @@ export function RatesEditor({
         <fieldset className="min-w-0">
           <legend className="text-sm font-[650]">Materials</legend>
           <p className="mt-0.5 text-xs text-faint">
-            Every quote is grams × the material&apos;s rate, plus one setup fee per order. &ldquo;Shown as
-            filament&rdquo; is only a line on the pricing page and each quote, already inside the rate. Your spool
-            prices and costs are never shown to customers: a gram costs you the list price + GST + shipping, ÷ 1000.
+            Type what customers pay per kg; every quote is grams × that rate (shown per gram beside it), plus one
+            setup fee per order. Your spool prices and costs are never shown to customers: a gram costs you the list
+            price + GST + shipping, ÷ 1000.
           </p>
           <label className="mt-3 flex flex-wrap items-center gap-3 text-sm">
             <span className="text-muted">Setup fee per order</span>
@@ -291,10 +314,10 @@ export function RatesEditor({
                 <tr>
                   <th className={TH} />
                   <th className={TH} scope="col">
-                    Price per gram
+                    Price per kg
                   </th>
                   <th className={TH} scope="col">
-                    Shown as filament
+                    Per gram
                   </th>
                   <th className={`${TH} border-l border-line`} scope="col">
                     Spool (list)
