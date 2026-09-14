@@ -64,11 +64,25 @@ blip), just run the command again: it picks up where it stopped.
 ## Try it locally first
 
 Want to see it working before you put anything online? Choose
-**4) Just try it on this computer first** when the installer asks how people
-will reach the site. You don't need a domain. The site opens at
-`http://localhost:8000` (the port is up to you) and nothing on your network or
-the internet can reach it. It's the complete site: real slicing, admin
-dashboard, quotations.
+**4) Try it on this computer or your home network first** when the installer
+asks how people will reach the site. You don't need a domain. It's the complete
+site: real slicing, admin dashboard, quotations. The installer then asks who
+should be able to open it, and which port to use (press Enter for 8000):
+
+- **Only this computer:** `http://localhost:8000`.
+- **Devices on my home network:** `http://<this computer's address>:8000`, for
+  example `http://192.168.1.50:8000`. Pick this when the server has no screen
+  and you want to open the site on your laptop. The installer finds the
+  computer's home-network address (10.x, 172.16–31.x or 192.168.x) and listens
+  on that address alone.
+
+Either way nothing on the internet can reach it. The site is plain http,
+though, so on the network option anyone on your network can open it and the
+admin password travels unencrypted. Use a network you trust.
+
+Already installed on "this computer only"? Update, then switch:
+`sudo /opt/print-shop/update.sh`, then `sudo /opt/print-shop/install.sh` →
+**2) Change the web address** → **4** → **2) Devices on my home network**.
 
 **Linux:** run the install command as usual.
 
@@ -229,6 +243,8 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_DOMAIN` | Domain name (not needed for local test mode) |
 | `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed) |
 | `PS_LOCAL_PORT` | Port for local test mode (default 8000) |
+| `PS_LOCAL_ACCESS` | Local test mode: `computer` (default when unattended) or `network` for the devices on your home network |
+| `PS_LOCAL_ADDRESS` | With `PS_LOCAL_ACCESS=network`, optional: which of this computer's private addresses to use (default: the one its default route uses) |
 | `PS_ACME_EMAIL` | Let's Encrypt email (mode 1, optional) |
 | `PS_TUNNEL_TOKEN` | Tunnel token (mode 2) |
 | `PS_PROXY_IP`, `PS_PROXY_BIND` | Proxy source IP, and the address to listen on (mode 3) |

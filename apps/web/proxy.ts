@@ -63,7 +63,11 @@ function withSecurityHeaders(
   response.headers.set("Content-Security-Policy", contentSecurityPolicy(nonce));
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  // Browsers ignore COOP on a plain-http origin other than localhost (the
+  // installer's home-network test mode) and log an error on every page for it.
+  if (!/^http:\/\/(?!(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$)/.test(process.env.APP_ORIGIN ?? "")) {
+    response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  }
   if (process.env.APP_ORIGIN?.startsWith("https://")) {
     response.headers.set("Strict-Transport-Security", "max-age=31536000");
   }

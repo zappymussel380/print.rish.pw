@@ -12,12 +12,34 @@ const originIn = async (origin: string) => {
 
 afterEach(() => vi.unstubAllEnvs());
 
+/** Reachable from the internet (or not an address at all): must be HTTPS. */
+const PUBLIC_HTTP = [
+  "http://print.example.com",
+  "http://localhost.evil.com",
+  "http://192.168.1.7.nip.io",
+  "http://172.32.0.1:8000",
+  "http://172.15.0.1:8000",
+  "http://8.8.8.8:8000",
+  "http://100.64.0.1:8000",
+  "http://11.0.0.1:8000",
+];
+
 describe("APP_ORIGIN in production", () => {
-  it("allows plain HTTP only on loopback (the installer's local test mode)", async () => {
-    expect((await originIn("http://localhost:8000"))()).toBe("http://localhost:8000");
-    expect((await originIn("http://127.0.0.1:8000"))()).toBe("http://127.0.0.1:8000");
-    expect((await originIn("https://print.example.com"))()).toBe("https://print.example.com");
-    for (const bad of ["http://print.example.com", "http://192.168.1.7:8080", "http://localhost.evil.com"]) {
+  it("allows plain HTTP only on loopback or a home-network address (the installer's local test mode)", async () => {
+    for (const ok of [
+      "http://localhost:8000",
+      "http://127.0.0.1:8000",
+      "http://192.168.1.7:8080",
+      "http://10.0.0.5:8000",
+      "http://172.16.0.9:8000",
+      "http://172.31.255.1:8000",
+      "https://print.example.com",
+    ]) {
+      expect((await originIn(ok))(), ok).toBe(ok);
+    }
+    // URL normalises other IPv4 spellings before the check.
+    expect((await originIn("http://0xC0A80107:8000"))()).toBe("http://192.168.1.7:8000");
+    for (const bad of PUBLIC_HTTP) {
       expect(await originIn(bad), bad).toThrow(/HTTPS/);
     }
   });
@@ -39,9 +61,12 @@ describe("validate-env.mjs (container startup gate)", () => {
       encoding: "utf8",
     });
 
-  it("agrees with the app: loopback HTTP passes, public HTTP is refused", () => {
-    expect(run("http://localhost:8000").stderr).not.toMatch(/APP_ORIGIN/);
-    expect(run("https://print.example.com").stderr).not.toMatch(/APP_ORIGIN/);
-    expect(run("http://print.example.com").stderr).toMatch(/APP_ORIGIN must use HTTPS/);
+  it("agrees with the app: loopback and home-network HTTP pass, public HTTP is refused", () => {
+    for (const ok of ["http://localhost:8000", "http://192.168.1.7:8000", "http://10.0.0.5:8000", "https://print.example.com"]) {
+      expect(run(ok).stderr, ok).not.toMatch(/APP_ORIGIN/);
+    }
+    for (const bad of PUBLIC_HTTP) {
+      expect(run(bad).stderr, bad).toMatch(/APP_ORIGIN must use HTTPS/);
+    }
   });
 });

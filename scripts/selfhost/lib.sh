@@ -186,7 +186,7 @@ ENV_LAYOUT=(
   COMPOSE_FILE
   "# --- Edge / HTTPS ---"
   APP_ORIGIN PROXY_BIND TRUSTED_PROXY_CIDR EDGE_SUBNET EDGE_CADDY_IP
-  TUNNEL_SUBNET TUNNEL_CADDY_IP TUNNEL_CLOUDFLARED_IP CLOUDFLARE_TUNNEL_TOKEN LOCAL_PORT
+  TUNNEL_SUBNET TUNNEL_CADDY_IP TUNNEL_CLOUDFLARED_IP CLOUDFLARE_TUNNEL_TOKEN LOCAL_PORT LOCAL_BIND
   "# --- Database and cache (generated secrets) ---"
   POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
   MIGRATION_DATABASE_URL DATABASE_URL WORKER_DATABASE_URL REDIS_PASSWORD
@@ -356,7 +356,8 @@ EOF
     local)
       cat > "$file" <<EOF
 # Written by install.sh from .env — edits are overwritten on update.
-# Local test mode: plain HTTP on this computer only (published on 127.0.0.1).
+# Local test mode: plain HTTP on this computer, or its home network too
+# (published on LOCAL_BIND alone: 127.0.0.1 or one private address).
 {
 	admin off
 	auto_https off
