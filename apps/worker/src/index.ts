@@ -411,19 +411,18 @@ await maintenanceQueue.add("retention", {}, {
   removeOnComplete: true,
   removeOnFail: 20,
 });
-// Advanced mode: test-slice the owner's uploaded presets before they go live.
+// Test-slice the owner's uploaded presets before they go live: every slot in
+// advanced mode, the shop's own materials' filament slots on any install.
 // One at a time; each test slice waits its turn for a slicer identity.
-const profileWorker = config.advancedProfiles
-  ? new Worker<SlicerProfileJobData>(
-      SLICER_PROFILE_QUEUE,
-      async (job) => {
-        if (!UUID_RE.test(job.data.batchId)) throw new Error("Profile job has an invalid batch id");
-        await processProfileBatch(job.data.batchId, { index: orcaIndex });
-      },
-      { connection: redisOptions(), concurrency: 1 },
-    )
-  : null;
-profileWorker?.on("failed", (job, err) => {
+const profileWorker = new Worker<SlicerProfileJobData>(
+  SLICER_PROFILE_QUEUE,
+  async (job) => {
+    if (!UUID_RE.test(job.data.batchId)) throw new Error("Profile job has an invalid batch id");
+    await processProfileBatch(job.data.batchId, { index: orcaIndex, advanced: config.advancedProfiles });
+  },
+  { connection: redisOptions(), concurrency: 1 },
+);
+profileWorker.on("failed", (job, err) => {
   log.error({ jobId: job?.id, err: err.message }, "profile test errored");
   if (job && UUID_RE.test(job.data.batchId)) {
     void markBatchFailed(job.data.batchId, `The test couldn't finish (${err.message}). Upload it again.`).catch(
@@ -454,7 +453,7 @@ async function shutdown(signal: string) {
   clearInterval(beat);
   // Start every consumer close together so one long slice cannot leave another
   // queue accepting fresh work during shutdown.
-  await Promise.all([worker.close(), ingestWorker.close(), maintenanceWorker.close(), profileWorker?.close()]);
+  await Promise.all([worker.close(), ingestWorker.close(), maintenanceWorker.close(), profileWorker.close()]);
   await Promise.all([
     ingestQueue.close(),
     maintenanceQueue.close(),

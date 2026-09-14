@@ -27,6 +27,10 @@ enum MaterialId {
   PETG_PREMIUM
   ABS
   ASA
+  OTHER_1
+  OTHER_2
+  OTHER_3
+  OTHER_4
 }
 
 enum SupportMode {

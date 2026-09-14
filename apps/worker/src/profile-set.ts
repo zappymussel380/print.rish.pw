@@ -3,11 +3,13 @@ import { chmod, copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile 
 import { join } from "node:path";
 import { prisma } from "@print/db";
 import {
+  CUSTOM_FILAMENT_SLOTS,
   applyActiveProfiles,
   cleanProfile,
   isProfileSlot,
   profileRevision,
   slotFileName,
+  slotInScope,
   slotKind,
   type OrcaProfile,
   type PrinterProfileSpec,
@@ -26,27 +28,38 @@ export interface SetUpload {
 export const profileSetsRoot = () => join(config.workRoot, "profile-sets");
 const OLD_SET_GRACE_MS = 60 * 60 * 1000;
 
-/** The printer as the owner's live uploads describe it (build volume, plates,
- *  the revision in its id) — without writing any files. */
-export async function activeSpec(): Promise<PrinterProfileSpec> {
-  if (!config.advancedProfiles) return printerSpec;
+/** Live uploads that apply on this install: every slot in advanced mode, the
+ *  shop's own materials' filament slots otherwise (slotInScope). Anything else
+ *  — say, rows left from an install that was in advanced mode — is ignored. */
+function liveWhere() {
+  return config.advancedProfiles
+    ? { status: "ACTIVE" as const }
+    : { status: "ACTIVE" as const, slot: { in: [...CUSTOM_FILAMENT_SLOTS] } };
+}
+
+/** The build volume models are packed onto and judged against: the owner's
+ *  uploaded printer in advanced mode, the installer's otherwise. Outside
+ *  advanced mode only filament presets can be live, and those never change the
+ *  build volume, so no query is needed. */
+export async function activeBedMm(): Promise<PrinterProfileSpec["bedMm"]> {
+  if (!config.advancedProfiles) return printerSpec.bedMm;
   const rows = await prisma.slicerProfileUpload.findMany({
-    where: { status: "ACTIVE" },
+    where: liveWhere(),
     select: { id: true, slot: true, meta: true },
   });
-  return applyActiveProfiles(printerSpec, rows.flatMap((r) => (r.slot ? [{ ...r, slot: r.slot }] : [])));
+  const live = rows.filter((r) => r.slot && slotInScope(r.slot, true));
+  return applyActiveProfiles(printerSpec, live.map((r) => ({ ...r, slot: r.slot! }))).bedMm;
 }
 
 /** The set slices use right now: the base set, or — once the owner has live
  *  uploads — the base with those presets swapped in, written once per revision
  *  to a slicer-readable directory under the work root. */
 export async function activeProfileSet(): Promise<ProfileSet> {
-  if (!config.advancedProfiles) return BASE_PROFILE_SET;
   const ids = await prisma.slicerProfileUpload.findMany({
-    where: { status: "ACTIVE" },
+    where: liveWhere(),
     select: { id: true, slot: true },
   });
-  const live = ids.filter((r) => isProfileSlot(r.slot));
+  const live = ids.filter((r) => isProfileSlot(r.slot) && slotInScope(r.slot, config.advancedProfiles));
   if (live.length === 0) return BASE_PROFILE_SET;
   const dir = join(profileSetsRoot(), `r-${profileRevision(live.map((r) => r.id))}`);
   // Written already: only the small metadata is needed to describe it.

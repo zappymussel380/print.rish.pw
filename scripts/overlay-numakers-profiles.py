@@ -31,6 +31,12 @@ TARGETS = [
     ("filament.petg-premium.json", "generic-petg.json", "petg-cf.json"),
     ("filament.abs.json", "generic-abs.json", None),
     ("filament.asa.json", "generic-asa.json", None),
+    # The shop's own materials (OTHER_*): a placeholder until the owner gives
+    # each one an OrcaSlicer profile in admin. Never quoted with.
+    ("filament.other-1.json", "generic-petg.json", None),
+    ("filament.other-2.json", "generic-petg.json", None),
+    ("filament.other-3.json", "generic-petg.json", None),
+    ("filament.other-4.json", "generic-petg.json", None),
 ]
 
 # Export-side bookkeeping that must not reach the CLI: an empty `inherits` is

@@ -42,7 +42,9 @@ export function slotInScope(slot: string, advanced: boolean): boolean {
 /** OrcaSlicer's universal generic filament presets (OrcaFilamentLibrary), which
  *  fit any printer. A custom material can start from one of these and be tuned
  *  later by uploading the shop's own preset. The worker's test checks the list
- *  against the OrcaSlicer it ships. */
+ *  against the OrcaSlicer it ships (Generic EVA is left out: it has no density).
+ *  Many carry a placeholder density (PC and PA say 1.04), so starting from one
+ *  always takes the filament's real density — see startingPreset. */
 export const ORCA_GENERIC_FILAMENTS = [
   "Generic ABS @System",
   "Generic ASA @System",
@@ -71,7 +73,6 @@ export const ORCA_GENERIC_FILAMENTS = [
   "Generic BVOH @System",
   "Generic SBS @System",
   "Generic PHA @System",
-  "Generic EVA @System",
   "Generic CoPE @System",
 ] as const;
 export type OrcaGenericFilament = (typeof ORCA_GENERIC_FILAMENTS)[number];
@@ -88,10 +89,12 @@ export function genericLabel(name: OrcaGenericFilament): string {
 export const DENSITY_MIN = 0.5;
 export const DENSITY_MAX = 3;
 
-/** A filament preset that starts from an OrcaSlicer generic, optionally with
- *  the real density of the shop's filament (grams are density × volume). It
- *  goes through the same upload → flatten → test slice as a preset the owner
- *  exported, so nothing about it is special once it's live. */
+/** A filament preset that starts from an OrcaSlicer generic with the real
+ *  density of the shop's filament (grams are density × volume, and the
+ *  generics' own densities are often placeholders). It goes through the same
+ *  upload → flatten → test slice as a preset the owner exported, so nothing
+ *  about it is special once it's live. Density is optional only for callers
+ *  that know better (tests, a preset uploaded on top). */
 export function startingPreset(
   materialName: string,
   generic: OrcaGenericFilament,
