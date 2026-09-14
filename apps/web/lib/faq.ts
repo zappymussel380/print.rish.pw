@@ -57,6 +57,7 @@ export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
     courierQuotes: shipping.live,
     retention: { uploadHours: env.uploadRetentionHours, fileDays: env.fileRetentionDays },
     contactChannel: profile.contact.whatsappNumber ? "WhatsApp" : "the contact page",
+    layerHeights: availability.layerHeights,
   });
 });
 

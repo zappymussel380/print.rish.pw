@@ -193,6 +193,23 @@ export const CUSTOM_MATERIAL_LINE = {
   OTHER_4: "other4",
 } as const satisfies Record<CustomMaterialId, FilamentLine>;
 
+/** The spool lines each material is bought as, in the order the admin lists
+ *  them: every line `filamentLine` can return for the material's colours, and
+ *  each line under exactly one material. */
+export const MATERIAL_LINES: Record<MaterialId, readonly FilamentLine[]> = {
+  PLA: ["plaPlus", "pla"],
+  PLA_AESTHETIC: ["silk", "silkClearance", "matte", "dualTriSilk", "metallic", "stone", "starlight", "glow", "wood"],
+  PLA_CF: ["plaCf"],
+  PETG: ["petgHs"],
+  PETG_PREMIUM: ["translucent", "translucentGlitter", "petgCf"],
+  ABS: ["abs"],
+  ASA: ["asa"],
+  OTHER_1: ["other1"],
+  OTHER_2: ["other2"],
+  OTHER_3: ["other3"],
+  OTHER_4: ["other4"],
+};
+
 /** What a kilogram of this material+colour actually costs us. */
 export function filamentCostPerKgPaise(
   material: MaterialId,

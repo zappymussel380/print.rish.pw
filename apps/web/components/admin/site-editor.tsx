@@ -6,8 +6,11 @@ import {
   DEFAULT_SITE_PROFILE,
   MATERIAL_IDS,
   SITE_PROFILE_LIMITS,
+  hasCustomGuide,
+  isCustomMaterial,
   materialName,
   siteProfileFieldSchemas,
+  type CustomMaterialNames,
   type MaterialId,
   type SiteProfile,
 } from "@print/shared";
@@ -55,13 +58,25 @@ function toForm(p: SiteProfile): Record<TextKey, string> {
 }
 
 /** The shop's identity: name, contact details, and which materials the public
- *  /materials page explains. Empty WhatsApp/email fall back to the server's
- *  environment settings. */
-export function SiteEditor({ profile }: { profile: SiteProfile | null }) {
+ *  /materials page explains — the shop's own among them once they're named and
+ *  have copy. Empty WhatsApp/email fall back to the server's environment
+ *  settings. */
+export function SiteEditor({
+  profile,
+  materialNames,
+}: {
+  profile: SiteProfile | null;
+  /** As stored: the shop's names for its own materials, and their copy. */
+  materialNames: CustomMaterialNames;
+}) {
   const router = useRouter();
   const start = profile ?? DEFAULT_SITE_PROFILE;
   const [form, setForm] = useState(() => toForm(start));
-  const [materials, setMaterials] = useState<MaterialId[]>(start.materialsPage);
+  // One of the shop's own materials that has lost its name or copy isn't on the
+  // page any more (materialsPageEntries); the next save drops it.
+  const [materials, setMaterials] = useState<MaterialId[]>(() =>
+    start.materialsPage.filter((m) => !isCustomMaterial(m) || hasCustomGuide(materialNames, m)),
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,17 +172,23 @@ export function SiteEditor({ profile }: { profile: SiteProfile | null }) {
             Which materials /materials compares, side by side. Independent of what is on sale.
           </p>
           <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-2">
-            {MATERIAL_IDS.map((m) => (
-              <label key={m} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={materials.includes(m)}
-                  onChange={(e) => toggleMaterial(m, e.target.checked)}
-                  className="size-4 accent-[var(--accent)]"
-                />
-                {materialName(m)}
-              </label>
-            ))}
+            {MATERIAL_IDS.filter((m) => !isCustomMaterial(m) || materialNames[m]?.name).map((m) => {
+              // One of the shop's own materials needs copy before the page can explain it.
+              const noCopy = isCustomMaterial(m) && !hasCustomGuide(materialNames, m);
+              return (
+                <label key={m} className={`flex items-center gap-2 text-sm ${noCopy ? "text-faint" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={materials.includes(m)}
+                    disabled={noCopy}
+                    onChange={(e) => toggleMaterial(m, e.target.checked)}
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  {materialName(m, materialNames)}
+                  {noCopy ? <span className="text-xs text-faint">(write its text in Your own materials)</span> : null}
+                </label>
+              );
+            })}
           </div>
         </fieldset>
         <div className="flex flex-wrap items-center gap-3">

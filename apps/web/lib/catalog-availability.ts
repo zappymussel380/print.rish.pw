@@ -3,12 +3,14 @@ import { Prisma, prisma } from "@print/db";
 import {
   CUSTOM_FILAMENT_SLOTS,
   CUSTOM_MATERIAL_IDS,
+  cleanCustomGuide,
   cleanCustomMaterialName,
   effectiveAvailability,
   normalizeAvailability,
   slotMaterial,
   type Availability,
   type AvailabilityInput,
+  type CustomMaterialGuide,
   type CustomMaterialId,
   type ProfileSlot,
 } from "@print/shared";
@@ -70,17 +72,21 @@ export async function saveCatalogAvailability(input: AvailabilityInput): Promise
   return writeAvailability({ ...normalized, customMaterials: stored.customMaterials });
 }
 
-/** Rename the shop's own materials (admin only). An empty name clears one,
- *  which also takes it off sale. When a name isn't usable nothing is saved and
- *  the offending slots come back as `invalid`. */
-export async function saveCustomMaterialNames(
-  names: Partial<Record<CustomMaterialId, string>>,
-): Promise<Availability | { invalid: CustomMaterialId[] }> {
+/** Rename the shop's own materials, or change the copy /materials shows for
+ *  them (admin only). An empty name clears one, which also takes it off sale
+ *  and drops its copy; a guide of blanks clears the copy. When a name or guide
+ *  isn't usable nothing is saved and the offending slots come back as
+ *  `invalid` (a guide needs its material named first). Both land in one write:
+ *  the stored read is cached per request, so two saves would lose the first. */
+export async function saveCustomMaterials(input: {
+  names?: Partial<Record<CustomMaterialId, string>>;
+  guides?: Partial<Record<CustomMaterialId, CustomMaterialGuide>>;
+}): Promise<Availability | { invalid: CustomMaterialId[] }> {
   const stored = await getStoredCatalogAvailability();
   const next: Availability = { ...stored, materials: { ...stored.materials }, customMaterials: { ...stored.customMaterials } };
   const invalid: CustomMaterialId[] = [];
   for (const id of CUSTOM_MATERIAL_IDS) {
-    const raw = names[id];
+    const raw = input.names?.[id];
     if (raw === undefined) continue;
     if (raw.trim() === "") {
       delete next.customMaterials[id];
@@ -89,8 +95,21 @@ export async function saveCustomMaterialNames(
     }
     const name = cleanCustomMaterialName(raw);
     if (!name) invalid.push(id);
-    else next.customMaterials[id] = { name };
+    else next.customMaterials[id] = { ...next.customMaterials[id], name };
   }
-  if (invalid.length) return { invalid };
+  for (const id of CUSTOM_MATERIAL_IDS) {
+    const raw = input.guides?.[id];
+    if (raw === undefined) continue;
+    const current = next.customMaterials[id];
+    const blank = Object.values(raw).every((v) => typeof v !== "string" || v.trim() === "");
+    if (blank) {
+      if (current) next.customMaterials[id] = { name: current.name };
+      continue;
+    }
+    const guide = cleanCustomGuide(raw);
+    if (!current || !guide) invalid.push(id);
+    else next.customMaterials[id] = { name: current.name, guide };
+  }
+  if (invalid.length) return { invalid: [...new Set(invalid)] };
   return writeAvailability(next);
 }

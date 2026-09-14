@@ -8,11 +8,14 @@ import {
   materialName,
   toPublicCatalog,
   type Catalog,
+  type LayerHeightUm,
   type PublicMaterial,
 } from "@print/shared";
 
 export interface PublicCatalog {
   materials: PublicMaterial[];
+  /** Layer heights the shop offers (µm), never empty. */
+  layerHeights: LayerHeightUm[];
   /** The live customer-facing rates (admin-editable) the quote is priced with. */
   pricing: Catalog;
 }
@@ -30,7 +33,7 @@ async function fetchCatalog(): Promise<PublicCatalog> {
   const res = await fetch("/api/catalog", { headers: { accept: "application/json" } });
   if (!res.ok) throw new Error(`catalog ${res.status}`);
   const data = (await res.json()) as PublicCatalog;
-  if (!data || !Array.isArray(data.materials) || !data.pricing) throw new Error("bad catalog");
+  if (!data || !Array.isArray(data.materials) || !Array.isArray(data.layerHeights) || !data.pricing) throw new Error("bad catalog");
   return data;
 }
 

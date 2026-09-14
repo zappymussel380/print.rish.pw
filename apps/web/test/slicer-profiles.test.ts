@@ -151,6 +151,42 @@ describe("/api/admin/slicer-profiles", () => {
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) }));
   });
 
+  it("reports the density and generic a filament preset was made with, so a reload shows them", async () => {
+    vi.stubEnv("ADVANCED_PROFILES", "");
+    const at = (s: number) => new Date(Date.UTC(2026, 8, 14, 0, 0, s));
+    const row = (id: string, status: string, s: number) => ({
+      id,
+      batchId: `b-${id}`,
+      slot: "filament:OTHER_1",
+      originalName: "x.json",
+      presetName: "PC (from Generic PC)",
+      status,
+      error: null,
+      testGrams: status === "ACTIVE" ? 3.1 : null,
+      createdAt: at(s),
+      checkedAt: null,
+    });
+    const presets: Record<string, { raw: object; flattened: object | null }> = {
+      live: { raw: { inherits: "Generic PC @System", filament_density: ["1.20"] }, flattened: { filament_density: ["1.20"] } },
+      next: { raw: { inherits: "Generic PC @System", filament_density: ["1.40"] }, flattened: null },
+    };
+    const rows = [row("next", "PENDING", 2), row("live", "ACTIVE", 1)];
+    db.findMany.mockImplementation(
+      async ({ select, where }: { select: Record<string, boolean>; where: { id?: { in: string[] }; batchId?: { in: string[] } } }) => {
+        if (select.raw) return where.id!.in.map((id) => ({ id, ...presets[id] }));
+        if (where.batchId) return rows.filter((r) => where.batchId!.in.includes(r.batchId));
+        return rows;
+      },
+    );
+    const state = await (await GET()).json();
+    const slot = state.slots.find((s: { slot: string }) => s.slot === "filament:OTHER_1");
+    expect(slot.live).toMatchObject({ densityGcm3: 1.2, startedFrom: "Generic PC @System", testGrams: 3.1 });
+    expect(slot.testing).toBe(true);
+    expect(slot.pending).toEqual({ densityGcm3: 1.4, startedFrom: "Generic PC @System" });
+    // Never the presets themselves.
+    expect(JSON.stringify(state)).not.toContain("filament_density");
+  });
+
   it("puts a slot back on the installed preset", async () => {
     expect((await DELETE(req("?slot=process:160"))).status).toBe(200);
     expect(db.updateMany).toHaveBeenCalledWith({

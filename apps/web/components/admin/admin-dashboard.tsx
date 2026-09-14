@@ -16,6 +16,7 @@ import {
   type Catalog,
   type FaqEntry,
   type FaqSettings,
+  type LayerHeightUm,
   type MaterialFamily,
   type PricingInput,
   type PublicMaterial,
@@ -91,7 +92,7 @@ export function AdminDashboard({
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
-  catalog: { materials: PublicMaterial[] };
+  catalog: { materials: PublicMaterial[]; layerHeights: LayerHeightUm[] };
   /** Every rate in storable form, for the rates editor. */
   pricing: PricingInput;
   /** The live customer-facing rates, for display elsewhere on the page. */
@@ -217,13 +218,13 @@ export function AdminDashboard({
       <CatalogEditor catalog={catalog} rates={rates} />
 
       {/* The shop's own materials: names and OrcaSlicer profiles */}
-      <CustomMaterialsEditor catalog={catalog} initial={slicerProfiles} />
+      <CustomMaterialsEditor catalog={catalog} initial={slicerProfiles} materialNames={materialNames} />
 
       {/* Rates, customer-facing and internal */}
       <RatesEditor pricing={pricing} materialNames={materialNames} />
 
       {/* Shop name, contact details, materials page */}
-      <SiteEditor profile={siteProfile} />
+      <SiteEditor profile={siteProfile} materialNames={materialNames} />
 
       {/* Courier estimates on the quote page */}
       <ShippingEditor initial={shipping} />

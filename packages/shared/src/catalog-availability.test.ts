@@ -12,6 +12,7 @@ import {
 import {
   assertConfigAvailable,
   defaultAvailability,
+  defaultLayerHeight,
   firstEnabledColour,
   isColourEnabled,
   toPublicCatalog,
@@ -202,6 +203,30 @@ describe("assertConfigAvailable", () => {
 
   it("skips the colour check when no colour is supplied (slice settings)", () => {
     expect(assertConfigAvailable({ material: "PLA" }, avail).ok).toBe(true);
+  });
+});
+
+describe("layer heights", () => {
+  it("offers all three unless the shop narrows them, and never none", () => {
+    expect(defaultAvailability().layerHeights).toEqual([120, 160, 200]);
+    expect(normalizeAvailability({}).layerHeights).toEqual([120, 160, 200]);
+    expect(normalizeAvailability({ layerHeights: [200, 160, 160, 240, "120"] }).layerHeights).toEqual([160, 200]);
+    expect(normalizeAvailability({ layerHeights: [] }).layerHeights).toEqual([120, 160, 200]);
+    expect(normalizeAvailability({ layerHeights: [999] }).layerHeights).toEqual([120, 160, 200]);
+    expect(toPublicCatalog(normalizeAvailability({ layerHeights: [160] })).layerHeights).toEqual([160]);
+  });
+
+  it("start new models at 0.20 mm when offered, else the coarsest offered", () => {
+    expect(defaultLayerHeight([120, 160, 200])).toBe(200);
+    expect(defaultLayerHeight([120, 160])).toBe(160);
+    expect(defaultLayerHeight([120])).toBe(120);
+  });
+
+  it("refuses a layer height the shop doesn't offer", () => {
+    const avail = normalizeAvailability({ materials: { PLA: true }, layerHeights: [160] });
+    expect(assertConfigAvailable({ material: "PLA", layerHeightUm: 160 }, avail).ok).toBe(true);
+    const r = assertConfigAvailable({ material: "PLA", layerHeightUm: 200 }, avail);
+    expect(r).toEqual({ ok: false, code: "LAYER_HEIGHT_UNAVAILABLE", message: "0.20 mm layers are not offered — pick 0.16 mm." });
   });
 });
 
