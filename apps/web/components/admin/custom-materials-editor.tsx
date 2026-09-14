@@ -170,7 +170,7 @@ export function CustomMaterialsEditor({
             return (
               <li key={id} className="space-y-2 p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="w-20 shrink-0 text-xs font-[650] uppercase tracking-[0.1em] text-faint">Material {i + 1}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs font-[650] uppercase tracking-[0.1em] text-faint">Material {i + 1}</span>
                   <input
                     value={name}
                     onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
@@ -213,7 +213,7 @@ export function CustomMaterialsEditor({
                       aria-label={`${savedName}: OrcaSlicer generic to start from`}
                       value={generic[id] ?? ORCA_GENERIC_FILAMENTS[0]}
                       onChange={(e) => setGeneric((g) => ({ ...g, [id]: e.target.value as OrcaGenericFilament }))}
-                      className="input-base text-sm"
+                      className="input-base w-auto max-w-full text-sm"
                     >
                       {ORCA_GENERIC_FILAMENTS.map((g) => (
                         <option key={g} value={g}>
