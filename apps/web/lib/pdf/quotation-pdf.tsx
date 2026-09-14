@@ -15,6 +15,7 @@ import {
   formatGrams,
   formatPaise,
   materialName,
+  formatTaxRate,
   splitBrand,
   type MaterialId,
   type SupportMode,
@@ -92,6 +93,8 @@ export interface QuotationPdfData {
   lines: PdfLine[];
   setupFeePaise: number;
   shippingPaise?: number;
+  /** GST included in totalPaise, frozen at submission; null/absent when none. */
+  tax?: { paise: number; rateBp: number; hsn: string | null; gstin: string | null } | null;
   totalPaise: number;
   totalGrams: number;
   totalPrintSeconds: number;
@@ -298,6 +301,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
             <Text style={s.docTitle}>Quotation</Text>
             <Text style={{ fontFamily: "Helvetica-Bold", color: INK }}>{data.number}</Text>
             <Text>{fmtDate(data.createdAt)}</Text>
+            {data.tax?.gstin ? <Text>GSTIN {data.tax.gstin}</Text> : null}
           </View>
         </View>
         <View style={[s.rule, { backgroundColor: accent }]} />
@@ -348,7 +352,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
         <View style={s.totals}>
           <View style={s.totalRow}>
             <Text style={{ color: MUTED }}>Materials subtotal</Text>
-            <Text>{money(data.totalPaise - data.setupFeePaise - (data.shippingPaise ?? 0))}</Text>
+            <Text>{money(data.totalPaise - data.setupFeePaise - (data.shippingPaise ?? 0) - (data.tax?.paise ?? 0))}</Text>
           </View>
           <View style={s.totalRow}>
             <Text style={{ color: MUTED }}>Setup fee</Text>
@@ -362,6 +366,15 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
               <Text style={{ color: MUTED }}>Not included</Text>
             )}
           </View>
+          {data.tax && data.tax.paise > 0 ? (
+            <View style={s.totalRow}>
+              <Text style={{ color: MUTED }}>
+                GST @ {formatTaxRate(data.tax.rateBp)}
+                {data.tax.hsn ? ` (HSN/SAC ${data.tax.hsn})` : ""}
+              </Text>
+              <Text>{money(data.tax.paise)}</Text>
+            </View>
+          ) : null}
           <View style={s.grandRow}>
             <Text style={s.grandLabel}>Total</Text>
             <Text style={[s.grandValue, { color: accent }]}>{money(data.totalPaise)}</Text>

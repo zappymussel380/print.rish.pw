@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Loader2 } from "lucide-react";
-import { formatDuration, formatGrams, formatPaise } from "@print/shared";
+import { formatDuration, formatGrams, formatPaise, formatTaxRate, withTax } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { useCatalog } from "@/lib/use-catalog";
 import { useQuoteStore } from "@/lib/quote-store";
@@ -13,7 +13,7 @@ const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short
 export function SummaryBar() {
   const models = useQuoteStore((s) => s.models);
   const slices = useQuoteStore((s) => s.slices);
-  const { pricing } = useCatalog();
+  const { pricing, tax } = useCatalog();
 
   const readyModels = models.filter((m) => m.status === "ready");
   if (readyModels.length === 0) return null;
@@ -35,8 +35,8 @@ export function SummaryBar() {
           <Metric label="Ready by">
             {completion ? dateFmt.format(completion) : "—"}
           </Metric>
-          <Metric label="Total" accent>
-            {breakdown ? formatPaise(breakdown.totalPaise) : "—"}
+          <Metric label={tax.enabled ? "Total incl. GST" : "Total"} accent>
+            {breakdown ? formatPaise(withTax(breakdown.totalPaise, 0, tax).grandTotalPaise) : "—"}
           </Metric>
         </div>
 
@@ -68,8 +68,9 @@ export function SummaryBar() {
         </div>
       </div>
       <p className="mx-auto max-w-3xl px-1 pb-3 text-[0.7rem] text-faint">
-        Includes a {formatPaise(pricing.setupFeePaise)} one-time setup fee. Prices come from real
-        slicing; final confirmation happens over WhatsApp.
+        Includes a {formatPaise(pricing.setupFeePaise)} one-time setup fee
+        {tax.enabled ? ` and ${formatTaxRate(tax.rateBp)} GST` : ""}. Prices come from real slicing; final
+        confirmation happens over WhatsApp.
       </p>
     </div>
   );

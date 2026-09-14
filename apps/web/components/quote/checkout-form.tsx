@@ -8,7 +8,9 @@ import {
   formatDuration,
   formatGrams,
   formatPaise,
+  formatTaxRate,
   settingsKey,
+  withTax,
 } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { submitQuotation, type CheckoutError } from "@/lib/checkout-client";
@@ -82,7 +84,8 @@ export function CheckoutForm() {
   // Only trust the saved shipping estimate if it was priced for this exact quote.
   const quoteKey = `${breakdown.totals.grams}:${breakdown.totalPaise}`;
   const shippingValid = shipping && shipping.quoteKey === quoteKey ? shipping : null;
-  const grandTotalPaise = breakdown.totalPaise + (shippingValid?.amountPaise ?? 0);
+  // GST (when the shop adds it) is on the printing, setup fee and shipping.
+  const { taxPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingValid?.amountPaise ?? 0, catalog.tax);
 
   const field = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -290,6 +293,7 @@ export function CheckoutForm() {
             ) : (
               <Row label="Shipping" value="Confirmed on WhatsApp" muted />
             )}
+            {catalog.tax.enabled ? <Row label={`GST (${formatTaxRate(catalog.tax.rateBp)})`} value={formatPaise(taxPaise)} /> : null}
             <Row label="Print time" value={formatDuration(breakdown.totals.printSeconds)} muted />
             {completion && <Row label="Ready by" value={dateFmt.format(completion)} muted />}
           </div>

@@ -268,9 +268,10 @@ export function estimateOrderCostPaise(
  * no cost of its own and flows entirely into profit.
  */
 export function estimateOrderProfitPaise(
-  order: { totalPaise: number; shippingPaise: number },
+  order: { totalPaise: number; shippingPaise: number; taxPaise?: number },
   items: CostItem[],
   basis: InternalCostBasis = INTERNAL_COST,
 ): number {
-  return order.totalPaise - order.shippingPaise - estimateOrderCostPaise(items, basis);
+  // GST collected is the government's, like shipping is the courier's.
+  return order.totalPaise - order.shippingPaise - (order.taxPaise ?? 0) - estimateOrderCostPaise(items, basis);
 }

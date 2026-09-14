@@ -133,7 +133,7 @@ export function AdminDashboard({ quotations, stats }: { quotations: QuotationRow
       <p className="mt-3 text-xs text-faint">
         Lifetime · Revenue {formatPaise(stats.revenuePaise)} · Profit{" "}
         <span className="font-[600] text-muted">{formatPaise(stats.profitPaise)}</span>
-        <span className="text-faint"> (est., excluding shipping)</span>
+        <span className="text-faint"> (est., excluding shipping and GST)</span>
       </p>
 
       {/* Controls */}

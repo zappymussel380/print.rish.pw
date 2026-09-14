@@ -5,6 +5,8 @@ import { Prisma, prisma, type Quotation } from "@print/db";
 import {
   ACCENTS,
   assertConfigAvailable,
+  formatTaxRate,
+  withTax,
   customerSchema,
   estimateCompletionDate,
   modelConfigSchema,
@@ -20,6 +22,7 @@ import { getPrinterProfile } from "@/lib/printer";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
+import { getTax } from "@/lib/tax-settings";
 import { env } from "@/lib/env";
 import { logger, safeErrorMessage } from "@/lib/logger";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
@@ -178,7 +181,7 @@ async function postQuotation(request: NextRequest) {
 
   // The authoritative price uses the live (admin-editable) rates, never the
   // client's; the snapshot below records exactly which rates those were.
-  const { catalog } = await getPricing();
+  const [{ catalog }, tax] = await Promise.all([getPricing(), getTax()]);
   let breakdown;
   try {
     breakdown = priceQuote(inputs, catalog);
@@ -218,12 +221,15 @@ async function postQuotation(request: NextRequest) {
     shippingPincode = verified.pincode;
     shippingDays = verified.days;
   }
-  const grandTotalPaise = breakdown.totalPaise + shippingPaise;
+  // GST (when the shop adds it) on the printing, setup fee and shipping —
+  // the same sum the checkout page showed the customer.
+  const { taxPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingPaise, tax);
 
   const persistedIntegers = [
     breakdown.setupFeePaise,
     breakdown.totalPaise,
     shippingPaise,
+    taxPaise,
     grandTotalPaise,
     ...breakdown.lines.flatMap((line) => [
       line.unitPrintSeconds,
@@ -299,6 +305,8 @@ async function postQuotation(request: NextRequest) {
           totalPaise: grandTotalPaise,
           shippingPaise,
           shippingPincode,
+          taxPaise,
+          ...(tax.enabled ? { taxRateBp: tax.rateBp, taxHsn: tax.hsn, taxGstin: tax.gstin } : {}),
           estimatedCompletion: completion,
           pricingSnapshot: {
             catalog,
@@ -307,6 +315,7 @@ async function postQuotation(request: NextRequest) {
               shippingPaise > 0
                 ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays }
                 : { excluded: true },
+            tax: tax.enabled ? { rateBp: tax.rateBp, hsn: tax.hsn, gstin: tax.gstin, amountPaise: taxPaise } : null,
             generatedAt: new Date().toISOString(),
           } as unknown as Prisma.InputJsonValue,
           items: {
@@ -423,6 +432,7 @@ async function postQuotation(request: NextRequest) {
       })),
       setupFeePaise: breakdown.setupFeePaise,
       shippingPaise,
+      tax: tax.enabled ? { paise: taxPaise, rateBp: tax.rateBp, hsn: tax.hsn, gstin: tax.gstin } : null,
       totalPaise: grandTotalPaise,
       totalGrams: breakdown.totals.grams,
       totalPrintSeconds: breakdown.totals.printSeconds,
@@ -492,6 +502,7 @@ async function postQuotation(request: NextRequest) {
     totalPaise: grandTotalPaise,
     shippingPaise,
     shippingPincode,
+    taxPaise,
   });
 
   const materialsSummary = summariseItems(
@@ -513,6 +524,7 @@ async function postQuotation(request: NextRequest) {
         materialsSummary,
         totalPaise: grandTotalPaise,
         shippingPaise,
+        ...(taxPaise > 0 ? { taxPaise, taxRate: formatTaxRate(tax.rateBp) } : {}),
         shippingPincode,
         notes: customer.data.notes,
       })
