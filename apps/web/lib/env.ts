@@ -22,6 +22,18 @@ export function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
+/** Loopback, or an IPv4 address in a private range (10/8, 172.16/12,
+ *  192.168/16): somewhere only this computer or its home network can reach.
+ *  Takes a URL's hostname, which WHATWG URL has already normalised to dotted
+ *  decimal (so "0xC0A80107" arrives as "192.168.1.7"). */
+export function isPrivateNetworkHost(hostname: string): boolean {
+  if (isLoopbackHost(hostname)) return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
 function appOrigin(): string {
   const raw = process.env.APP_ORIGIN;
   if (!raw && isProduction) throw new Error("Missing required environment variable APP_ORIGIN");
@@ -34,10 +46,13 @@ function appOrigin(): string {
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
     throw new Error("APP_ORIGIN must contain only scheme, host, and optional port");
   }
-  // Loopback may stay plain HTTP (the installer's local test mode); anything
-  // reachable from elsewhere must be HTTPS in production.
-  if (isProduction && url.protocol !== "https:" && !isLoopbackHost(url.hostname)) {
-    throw new Error("APP_ORIGIN must use HTTPS in production (plain HTTP only for localhost)");
+  // Loopback or a home-network address may stay plain HTTP (the installer's
+  // local test mode); anything reachable from the internet must be HTTPS in
+  // production.
+  if (isProduction && url.protocol !== "https:" && !isPrivateNetworkHost(url.hostname)) {
+    throw new Error(
+      "APP_ORIGIN must use HTTPS in production (plain HTTP only for localhost or a private network address)",
+    );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("APP_ORIGIN must use HTTP or HTTPS");
