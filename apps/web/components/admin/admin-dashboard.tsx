@@ -16,6 +16,7 @@ import {
   type Catalog,
   type FaqEntry,
   type FaqSettings,
+  type LayerHeightUm,
   type MaterialFamily,
   type PricingInput,
   type PublicMaterial,
@@ -88,7 +89,7 @@ export function AdminDashboard({
 }: {
   quotations: QuotationRow[];
   stats: AdminStats;
-  catalog: { materials: PublicMaterial[] };
+  catalog: { materials: PublicMaterial[]; layerHeights: LayerHeightUm[] };
   /** Every rate in storable form, for the rates editor. */
   pricing: PricingInput;
   /** The live customer-facing rates, for display elsewhere on the page. */

@@ -55,6 +55,7 @@ export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
     courierQuotes: Boolean(process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD),
     retention: { uploadHours: env.uploadRetentionHours, fileDays: env.fileRetentionDays },
     contactChannel: profile.contact.whatsappNumber ? "WhatsApp" : "the contact page",
+    layerHeights: availability.layerHeights,
   });
 });
 

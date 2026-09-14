@@ -7,13 +7,16 @@ import {
   CUSTOM_COLOUR_GROUP,
   CUSTOM_COLOUR_NAME_MAX,
   HEX_COLOUR_RE,
+  LAYER_HEIGHTS_UM,
   colourShortName,
   formatPaise,
   groupColours,
+  layerHeightLabel,
   newCustomColourId,
   swatchBackground,
   type Catalog,
   type CustomColour,
+  type LayerHeightUm,
   type MaterialId,
   type PublicColour,
   type PublicMaterial,
@@ -23,9 +26,12 @@ interface CatalogEditState {
   materials: Record<string, boolean>;
   colours: Record<string, Record<string, boolean>>;
   customColours: CustomColour[];
+  layerHeights: LayerHeightUm[];
 }
 
-function toEditState(catalog: { materials: PublicMaterial[] }): CatalogEditState {
+type EditorCatalog = { materials: PublicMaterial[]; layerHeights: LayerHeightUm[] };
+
+function toEditState(catalog: EditorCatalog): CatalogEditState {
   const materials: Record<string, boolean> = {};
   const colours: Record<string, Record<string, boolean>> = {};
   const customColours: CustomColour[] = [];
@@ -38,7 +44,7 @@ function toEditState(catalog: { materials: PublicMaterial[] }): CatalogEditState
     }
     colours[m.id] = row;
   }
-  return { materials, colours, customColours };
+  return { materials, colours, customColours, layerHeights: [...catalog.layerHeights] };
 }
 
 /** A material's colours as the editor shows them: its supplier palette (fixed)
@@ -65,14 +71,15 @@ function editorColours(m: PublicMaterial, customs: readonly CustomColour[]): Pub
 
 /** Enable/disable materials and, per material, each colour — the Numakers
  *  palette plus colours the admin defines by hex code (the only kind ABS and
- *  ASA have). Saves the whole availability blob at once. Each material folds
+ *  ASA have) — and the layer heights customers may pick. Saves the whole
+ *  availability blob at once. Each material folds
  *  away (switched-off tiers start folded), and the filter narrows every tier at
  *  once — All/None then act on just the matching colours, e.g. "silk" → All. */
 export function CatalogEditor({
   catalog,
   rates,
 }: {
-  catalog: { materials: PublicMaterial[] };
+  catalog: EditorCatalog;
   rates: Catalog;
 }) {
   const router = useRouter();
@@ -93,6 +100,7 @@ export function CatalogEditor({
           Object.entries(prev.colours).map(([m, cs]) => [m, { ...cs }]),
         ),
         customColours: prev.customColours.map((c) => ({ ...c })),
+        layerHeights: [...prev.layerHeights],
       };
       fn(next);
       return next;
@@ -145,6 +153,7 @@ export function CatalogEditor({
           materials: state.materials,
           colours,
           customColours: state.customColours,
+          layerHeights: state.layerHeights,
         }),
       });
       if (!res.ok) {
@@ -166,6 +175,36 @@ export function CatalogEditor({
         <span className="text-faint">manage</span>
       </summary>
       <div className="space-y-5 border-t border-line p-4">
+        <fieldset>
+          <legend className="text-sm font-[650]">Layer heights offered</legend>
+          <p className="mt-0.5 text-xs text-faint">
+            Untick any your printer doesn&apos;t print at. With only one left, customers just see it, with nothing to
+            choose.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+            {LAYER_HEIGHTS_UM.map((um) => {
+              const on = state.layerHeights.includes(um);
+              const last = on && state.layerHeights.length === 1;
+              return (
+                <label key={um} className="flex items-center gap-2 text-sm" title={last ? "At least one layer height stays on" : undefined}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={last}
+                    onChange={(e) =>
+                      mutate((d) => {
+                        d.layerHeights = LAYER_HEIGHTS_UM.filter((h) => (h === um ? e.target.checked : d.layerHeights.includes(h)));
+                      })
+                    }
+                    className="size-4 accent-[var(--accent)]"
+                  />
+                  {layerHeightLabel(um)}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
         <label className="relative block">
           <span className="sr-only">Filter colours</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
