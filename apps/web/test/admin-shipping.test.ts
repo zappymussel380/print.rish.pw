@@ -79,7 +79,10 @@ describe("secret box", () => {
 
 describe("which settings the estimator uses", () => {
   it("is off with nothing anywhere, and the server's environment when admin hasn't saved", async () => {
+    vi.stubEnv("SHIPROCKET_PICKUP_PINCODE", "781001");
     expect(await getShippingConfig()).toMatchObject({ source: "none", live: false });
+    // docker-compose's default pincode isn't offered as the shop's choice.
+    expect(await (await route.GET()).json()).toMatchObject({ source: "none", pickupPincode: "" });
     vi.stubEnv("SHIPROCKET_EMAIL", "env@shop.test");
     vi.stubEnv("SHIPROCKET_PASSWORD", "envpw");
     vi.stubEnv("SHIPROCKET_PICKUP_PINCODE", "781001");

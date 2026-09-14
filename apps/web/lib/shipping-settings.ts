@@ -79,7 +79,9 @@ export function toAdminView(config: ShippingConfig): ShippingAdminView {
     source: config.source,
     enabled: config.enabled,
     email: config.email,
-    pickupPincode: config.pickupPincode,
+    // With nothing set up, the environment's pincode is only docker-compose's
+    // Guwahati default; don't offer it as if the shop had chosen it.
+    pickupPincode: config.source === "none" ? "" : config.pickupPincode,
     hasPassword: config.password !== "",
     passwordUnreadable: config.passwordUnreadable,
     live: config.live,
