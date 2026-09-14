@@ -25,7 +25,9 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 ```
 
 It downloads the code to `/opt/print-shop` (you can pick another folder) and
-asks, in plain language:
+asks, in plain language, the questions below. Don't worry about getting them
+perfect: almost all of it can be changed later, in the admin dashboard or by
+running the installer again (see [after that](#after-install)).
 
 1. **Your shop:** name, the initials your quotation numbers start with
    (e.g. `AP-2026-0001`), a one-line tagline, and your city.
@@ -50,13 +52,21 @@ asks, in plain language:
 Then it builds everything. That takes 10–25 minutes the first time. When it's
 done it prints your site and admin addresses.
 
+<a id="after-install"></a>
 After that, **the admin dashboard is where you change things**:
 
-- **Catalog:** which colours you have in stock. ABS and ASA start with black and
-  white; add any colour by name and hex code.
+- **Catalog:** which materials and colours you offer. ABS and ASA start with
+  black and white; add any colour by name and hex code.
 - **Rates:** per-gram prices, the setup fee, lead time, and your real filament
   and running costs (for profit estimates).
-- **Site:** shop name, contact details, footer, and the Materials page.
+- **Site:** shop name, tagline, city, quotation initials, contact details,
+  footer, and the Materials page.
+- **FAQ** and **Recent prints** (showcase photos).
+- **Slicer profiles**, if you skipped the printer step (see
+  [advanced mode](#your-own-printer-or-profiles-advanced-mode)).
+
+The web address and HTTPS, the admin password, the printer, and email,
+shipping and Telegram change by running `sudo /opt/print-shop/install.sh` again.
 
 If the first run is interrupted (for example the build fails on a network
 blip), just run the command again: it picks up where it stopped.

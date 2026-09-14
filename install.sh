@@ -796,6 +796,21 @@ existing_menu() {
 }
 valid_menu() { [[ "$1" =~ ^[1-8]$ ]]; }
 
+# Shown before the first question of a fresh install, so nobody agonises over
+# an answer that the admin dashboard can change in a minute afterwards.
+changeable_later() {
+  say ""
+  say "  ${C_BOLD}Good to know:${C_OFF} almost everything here can be changed later."
+  say "   • In the admin dashboard, any time:"
+  say "       shop name, tagline, city, quotation initials, contact details and footer;"
+  say "       per-gram rates, setup fee, your costs and lead time; which materials and"
+  say "       colours you offer; the Materials page, FAQ and showcase photos; and your"
+  say "       own OrcaSlicer presets if you skip the printer step."
+  say "   • By running ${C_BOLD}sudo $ROOT_DIR/install.sh${C_OFF} again:"
+  say "       web address and HTTPS, admin password, printer, and email/shipping/Telegram."
+  hint "So don't worry about getting everything perfect now."
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
   say "${C_BOLD}Print shop installer${C_OFF}  ${C_DIM}($ROOT_DIR)${C_OFF}"
@@ -856,6 +871,7 @@ main() {
 
   say "This sets up the whole site: shop details, web address, rates, then a build."
   hint "Press Enter to accept a [default]. Ctrl+C stops at any point without changing anything."
+  changeable_later
   sec_shop
   sec_printer
   sec_address
