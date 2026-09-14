@@ -191,11 +191,14 @@ export function CatalogEditor({
                     type="checkbox"
                     checked={on}
                     disabled={last}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      // Read now: by the time the state updater runs, React
+                      // has put the controlled box back to its old value.
+                      const checked = e.target.checked;
                       mutate((d) => {
-                        d.layerHeights = LAYER_HEIGHTS_UM.filter((h) => (h === um ? e.target.checked : d.layerHeights.includes(h)));
-                      })
-                    }
+                        d.layerHeights = LAYER_HEIGHTS_UM.filter((h) => (h === um ? checked : d.layerHeights.includes(h)));
+                      });
+                    }}
                     className="size-4 accent-[var(--accent)]"
                   />
                   {layerHeightLabel(um)}
