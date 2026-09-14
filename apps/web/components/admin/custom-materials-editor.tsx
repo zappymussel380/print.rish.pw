@@ -368,7 +368,7 @@ function GuideFields({
       <div className="space-y-2.5 border-t border-line p-3">
         <p className="text-xs text-faint">
           How {name} compares on /materials. Blank rows read &ldquo;Ask us about this.&rdquo; Once there&apos;s some
-          text, tick {name} under Site → Materials page to show it.
+          text, tick {name} under Site → Materials page (Site in the admin menu) to show it.
         </p>
         {GUIDE_FIELDS.map((f) => (
           <label key={f.key} className="block text-xs">

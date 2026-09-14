@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { type Prisma, prisma } from "@print/db";
 import {
   estimateOrderProfitPaise,
@@ -8,35 +7,18 @@ import {
   type MaterialFamily,
   type MaterialId,
   type InternalCostBasis,
-  toPricingInput,
-  toPublicCatalog,
 } from "@print/shared";
-import {
-  AdminDashboard,
-  type AdminStats,
-  type QuotationRow,
-} from "@/components/admin/admin-dashboard";
-import { getReadyCustomMaterials, getStoredCatalogAvailability } from "@/lib/catalog-availability";
+import { AdminDashboard, type AdminStats, type QuotationRow } from "@/components/admin/admin-dashboard";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getPricing } from "@/lib/pricing-settings";
-import { getStoredSiteProfile } from "@/lib/site-profile";
-import { getFaqSettings, getGeneratedFaq } from "@/lib/faq";
-import { getRecentPrints } from "@/lib/recent-prints";
-import { advancedProfilesEnabled } from "@/lib/printer";
-import { getShippingConfig, toAdminView } from "@/lib/shipping-settings";
-import { getSlicerProfilesState } from "@/lib/slicer-profiles";
-import { isAdmin } from "@/lib/session";
 
-export const metadata: Metadata = {
-  title: "Admin",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = { title: "Admin" };
 
 export const dynamic = "force-dynamic";
 
+/** Admin home: the numbers and every quotation. */
 export default async function AdminPage() {
-  // Keep the PII query independently protected even if proxy matching or
-  // framework behavior changes. API routes apply the same defense in depth.
-  if (!(await isAdmin())) redirect("/admin/login");
+  await requireAdminPage();
 
   const quotations = await prisma.quotation.findMany({
     orderBy: { createdAt: "desc" },
@@ -69,34 +51,8 @@ export default async function AdminPage() {
   }));
 
   const stats = computeStats(quotations, costBasis);
-  // As saved, with what each of the shop's own materials still needs.
-  const [storedAvailability, readyCustom] = await Promise.all([getStoredCatalogAvailability(), getReadyCustomMaterials()]);
-  const catalog = toPublicCatalog(storedAvailability, readyCustom);
-  const recentPrints = await getRecentPrints();
-  const siteProfile = await getStoredSiteProfile().catch(() => null);
-  const [faqGenerated, faqSettings, slicerProfiles, shipping] = await Promise.all([
-    getGeneratedFaq(),
-    getFaqSettings(),
-    getSlicerProfilesState(),
-    getShippingConfig(),
-  ]);
 
-  return (
-    <AdminDashboard
-      quotations={rows}
-      stats={stats}
-      catalog={catalog}
-      pricing={toPricingInput(pricing)}
-      rates={pricing.catalog}
-      siteProfile={siteProfile}
-      shipping={toAdminView(shipping)}
-      faq={{ generated: faqGenerated, settings: faqSettings }}
-      slicerProfiles={slicerProfiles}
-      advancedProfiles={advancedProfilesEnabled()}
-      materialNames={storedAvailability.customMaterials}
-      recentPrints={recentPrints}
-    />
-  );
+  return <AdminDashboard quotations={rows} stats={stats} />;
 }
 
 type QuotationWithItems = Prisma.QuotationGetPayload<{ include: { items: true } }>;

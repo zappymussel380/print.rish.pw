@@ -240,7 +240,7 @@ export function SiteEditor({
                     className="size-4 accent-[var(--accent)]"
                   />
                   {materialName(m, materialNames)}
-                  {noCopy ? <span className="text-xs text-faint">(write its text in Your own materials)</span> : null}
+                  {noCopy ? <span className="text-xs text-faint">(write its text under Filament → Your own materials)</span> : null}
                 </label>
               );
             })}
