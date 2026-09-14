@@ -5,7 +5,7 @@ import {
   MATERIAL_GUIDE_ROWS,
   listJoin,
   materialName,
-  type MaterialId,
+  type StockMaterialId,
 } from "@print/shared";
 import { PageIntro } from "@/components/shell/page-intro";
 import { getPricing } from "@/lib/pricing-settings";
@@ -20,15 +20,15 @@ export async function generateMetadata(): Promise<Metadata> {
   const { materialsPage } = await getSiteProfile();
   return {
     title: "Materials",
-    description: `${materialsPage.length === 2 ? materialsPage.map(materialName).join(" vs ") : listJoin(materialsPage.map(materialName))} compared: strength, flexibility, temperature and UV resistance, print quality and what to use each for.`,
+    description: `${materialsPage.length === 2 ? materialsPage.map((m) => materialName(m)).join(" vs ") : listJoin(materialsPage.map((m) => materialName(m)))} compared: strength, flexibility, temperature and UV resistance, print quality and what to use each for.`,
   };
 }
 
 /** The shop chooses which materials this page compares (admin → Site). */
 export default async function MaterialsPage() {
   const [{ materialsPage }, { catalog }] = await Promise.all([getSiteProfile(), getPricing()]);
-  const shown: MaterialId[] = materialsPage;
-  const names = shown.map(materialName);
+  const shown: StockMaterialId[] = materialsPage;
+  const names = shown.map((m) => materialName(m));
   const printer = catalog.printers[catalog.defaultPrinterId]!.name;
   const pair = shown.length === 2;
 

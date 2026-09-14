@@ -110,6 +110,32 @@ Happy with it? Run `sudo /opt/print-shop/install.sh`, pick **2) Change the web
 address**, and choose one of the options below. Your settings, rates and
 quotations come along.
 
+## Your own materials
+
+Print something the installer doesn't list — ABS-CF, PC, PA, PETG-GF…? The
+admin dashboard has four slots for your own materials, on every install. In
+**Your own materials**:
+
+1. **Name it** the way customers should see it, e.g. *PC-PBT-GF*.
+2. **Give it an OrcaSlicer filament profile**, either way:
+   - **Start from one of OrcaSlicer's generics** (Generic PC, PA-CF, PPA-GF,
+     PETG-CF, TPU…) and enter your filament's **density** from the spool or
+     its datasheet. Weight is density × volume, and the generics' own
+     densities are often placeholders.
+   - **Upload the preset you tuned** in OrcaSlicer (the filament's settings →
+     Export → `.json`, or a filament bundle).
+
+   Either way it's **test-sliced** on a 20 mm cube before quotes use it. If
+   OrcaSlicer rejects it you see why, and nothing changes.
+3. **Switch it on** in **Catalog** and add its colours by name and hex code.
+4. **Set its prices** in **Rates**: per gram, its filament cost, and its spool
+   cost for profit estimates.
+
+A material can't be switched on until it has a name and a live profile, and
+removing its profile takes it off sale by itself. Quotations keep the name a
+material had when they were submitted, so renaming one later doesn't change
+old quotations.
+
 ## Your own printer or profiles (advanced mode)
 
 Is your printer missing from OrcaSlicer's list (a Voron, a modded Ender, a

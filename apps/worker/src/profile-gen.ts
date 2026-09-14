@@ -206,6 +206,8 @@ const PROCESS_PREFERENCE: Record<number, RegExp> = {
   200: /standard/i,
 };
 
+const OTHER_PLACEHOLDER = { types: ["PETG", "PET"], name: /\bGeneric PETG\b/i, exclude: /cf|hf|gf/i };
+
 /** What each tier slices as when the printer has no hand-tuned preset. */
 export const TIER_FILAMENTS: Record<MaterialId, { types: string[]; name: RegExp; exclude?: RegExp }> = {
   PLA: { types: ["PLA"], name: /\bGeneric PLA\b/i, exclude: /silk|matte|high speed|cf|glow|wood|marble|metal|\+/i },
@@ -215,6 +217,12 @@ export const TIER_FILAMENTS: Record<MaterialId, { types: string[]; name: RegExp;
   PETG_PREMIUM: { types: ["PETG-CF", "PETG", "PET"], name: /petg[- ]?cf/i },
   ABS: { types: ["ABS"], name: /\bGeneric ABS\b/i, exclude: /gf|cf/i },
   ASA: { types: ["ASA"], name: /\bGeneric ASA\b/i, exclude: /gf|cf|aero/i },
+  // The shop's own materials: a placeholder so every set is complete. The owner
+  // replaces it in admin, and a slot isn't offered until they have.
+  OTHER_1: OTHER_PLACEHOLDER,
+  OTHER_2: OTHER_PLACEHOLDER,
+  OTHER_3: OTHER_PLACEHOLDER,
+  OTHER_4: OTHER_PLACEHOLDER,
 };
 
 function pickProcess(

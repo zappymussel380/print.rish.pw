@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { startingPreset } from "@print/shared";
 
 const mocks = vi.hoisted(() => ({
   findMany: vi.fn(),
@@ -143,7 +144,7 @@ describe("processProfileBatch", () => {
       return { ok: true, filamentGrams: 3.1, slicerVersion: "2.4.1", rawMeta: {} };
     });
 
-    await processProfileBatch(BATCH, { index: () => index, slice });
+    await processProfileBatch(BATCH, { index: () => index, slice, advanced: true });
 
     expect(slice).toHaveBeenCalledTimes(1);
     expect(seen!.files).toEqual(expect.arrayContaining(["machine.bbl-a1-04.json", "process.0.20.json", "printer.json"]));
@@ -163,7 +164,7 @@ describe("processProfileBatch", () => {
     mocks.findMany.mockResolvedValueOnce(pending).mockResolvedValueOnce([]);
     const slice = vi.fn(async () => ({ ok: false, errorCode: "SLICER_REJECTED_MODEL", errorMessage: "Nozzle temperature too low.", slicerVersion: "2.4.1", rawMeta: {} }));
 
-    await processProfileBatch(BATCH, { index: () => index, slice });
+    await processProfileBatch(BATCH, { index: () => index, slice, advanced: true });
 
     expect(mocks.transaction).not.toHaveBeenCalled();
     expect(mocks.updateMany).toHaveBeenLastCalledWith({
@@ -172,10 +173,65 @@ describe("processProfileBatch", () => {
     });
   });
 
+  describe("on an install without advanced mode", () => {
+    it("takes the shop's own material, started from an OrcaSlicer generic, and makes it live", async () => {
+      const raw = startingPreset("PC-PBT-GF", "Generic PLA @System", 1.3);
+      mocks.findMany.mockResolvedValueOnce([row("c", "filament:OTHER_1", raw)]).mockResolvedValueOnce([]);
+      let filament: Record<string, unknown> | null = null;
+      const slice = vi.fn(async (_input, settings, _workDir, _identity, _progress, set) => {
+        expect(settings).toMatchObject({ material: "OTHER_1" });
+        filament = JSON.parse(readFileSync(join(set.dir, "filament.other-1.json"), "utf8"));
+        return { ok: true, filamentGrams: 3.3, slicerVersion: "2.4.1", rawMeta: {} };
+      });
+
+      await processProfileBatch(BATCH, { index: () => index, slice, advanced: false });
+
+      // Resolved against OrcaSlicer's generic, with the shop's density on top.
+      expect(filament).toMatchObject({
+        name: "PC-PBT-GF (from Generic PLA)",
+        filament_type: ["PLA"],
+        filament_density: ["1.30"],
+        filament_flow_ratio: ["0.98"],
+        compatible_printers: ["Bambu Lab A1 0.4 nozzle"],
+      });
+      expect(mocks.update).toHaveBeenCalledWith({
+        where: { id: "c" },
+        data: expect.objectContaining({ status: "ACTIVE", slot: "filament:OTHER_1", testGrams: 3.3 }),
+      });
+    });
+
+    it("refuses a preset for the printer or a stock material before slicing anything", async () => {
+      for (const slot of ["filament:PLA", "process:200"]) {
+        mocks.findMany.mockResolvedValueOnce([row("a", slot, slot === "filament:PLA" ? myPla : { name: "p", inherits: "0.20mm Standard @Generic" })]);
+        const slice = vi.fn();
+        await processProfileBatch(BATCH, { index: () => index, slice, advanced: false });
+        expect(slice, slot).not.toHaveBeenCalled();
+        expect(mocks.updateMany).toHaveBeenLastCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ status: "FAILED", error: expect.stringMatching(/Only your own materials/) }) }),
+        );
+      }
+    });
+
+    it("leaves presets from an earlier advanced-mode setup out of the test", async () => {
+      const raw = startingPreset("ABS-CF", "Generic PLA @System");
+      const klipper = index.flattenPreset("machine", { name: "Leftover", inherits: "Generic Klipper Printer 0.4 nozzle" }, []);
+      mocks.findMany
+        .mockResolvedValueOnce([row("c", "filament:OTHER_2", raw)])
+        .mockResolvedValueOnce([{ id: "old", slot: "machine", meta: { presetName: "Leftover" }, flattened: klipper }]);
+      let machine: Record<string, unknown> | null = null;
+      const slice = vi.fn(async (_input, _settings, _workDir, _identity, _progress, set) => {
+        machine = JSON.parse(readFileSync(join(set.dir, "machine.bbl-a1-04.json"), "utf8"));
+        return { ok: true, filamentGrams: 3, slicerVersion: "2.4.1", rawMeta: {} };
+      });
+      await processProfileBatch(BATCH, { index: () => index, slice, advanced: false });
+      expect(machine).toMatchObject({ name: "Bambu Lab A1 0.4 nozzle" });
+    });
+  });
+
   it("fails an unusable upload before slicing anything", async () => {
     mocks.findMany.mockResolvedValueOnce([{ ...pending[0], slot: "machine" }]);
     const slice = vi.fn();
-    await processProfileBatch(BATCH, { index: () => index, slice });
+    await processProfileBatch(BATCH, { index: () => index, slice, advanced: true });
     expect(slice).not.toHaveBeenCalled();
     expect(mocks.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "FAILED", error: expect.stringMatching(/filament preset; this slot needs a printer/) }) }),

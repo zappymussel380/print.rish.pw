@@ -138,6 +138,11 @@ const FILAMENT_FAMILY: Record<MaterialId, { re: RegExp; label: string }> = {
   PETG_PREMIUM: { re: /^(PETG|PET|PCTG)/i, label: "PETG" },
   ABS: { re: /^ABS/i, label: "ABS" },
   ASA: { re: /^ASA/i, label: "ASA" },
+  // The shop's own materials are whatever the shop says they are.
+  OTHER_1: { re: /./, label: "filament" },
+  OTHER_2: { re: /./, label: "filament" },
+  OTHER_3: { re: /./, label: "filament" },
+  OTHER_4: { re: /./, label: "filament" },
 };
 
 const KIND_LABEL: Record<ProfileKind, string> = { machine: "printer", process: "process", filament: "filament" };

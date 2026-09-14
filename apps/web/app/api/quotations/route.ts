@@ -10,8 +10,10 @@ import {
   priceQuote,
   type QuoteLineInput,
   sliceArtifactKey,
+  materialName,
   resolveColourName,
   summariseItems,
+  type MaterialId,
 } from "@print/shared";
 import { getPrinterProfile } from "@/lib/printer";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
@@ -110,6 +112,8 @@ async function postQuotation(request: NextRequest) {
   // Custom colours can be deleted later, so every record of this quotation
   // carries the colour's name as it was at submission.
   const nameOf = (colour: string) => resolveColourName(colour, availability.customColours);
+  // Likewise the shop's own materials can be renamed.
+  const materialNameOf = (material: MaterialId) => materialName(material, availability.customMaterials);
 
   for (const raw of rawItems) {
     const modelId = (raw as { modelId?: unknown })?.modelId;
@@ -313,6 +317,7 @@ async function postQuotation(request: NextRequest) {
                 material: e.config.material,
                 colour: e.config.colour,
                 colourName: nameOf(e.config.colour),
+                materialName: materialNameOf(e.config.material),
                 layerHeightUm: e.config.layerHeightUm,
                 infillPct: e.config.infillPct,
                 supports: SUPPORT_ENUM[e.config.supports],
@@ -371,6 +376,7 @@ async function postQuotation(request: NextRequest) {
               material: line.config.material,
               colour: line.config.colour,
               colourName: nameOf(line.config.colour),
+              materialName: materialNameOf(line.config.material),
               layerHeightUm: line.config.layerHeightUm,
               infillPct: line.config.infillPct,
               supports: line.config.supports,
@@ -403,6 +409,7 @@ async function postQuotation(request: NextRequest) {
         material: line.config.material,
         colour: line.config.colour,
         colourName: nameOf(line.config.colour),
+        materialName: materialNameOf(line.config.material),
         layerHeightUm: line.config.layerHeightUm,
         infillPct: line.config.infillPct,
         supports: line.config.supports,
@@ -469,6 +476,7 @@ async function postQuotation(request: NextRequest) {
         material: line.config.material,
         colour: line.config.colour,
         colourName: nameOf(line.config.colour),
+        materialName: materialNameOf(line.config.material),
         layerHeightUm: line.config.layerHeightUm,
         infillPct: line.config.infillPct,
         supports: line.config.supports,
@@ -488,6 +496,7 @@ async function postQuotation(request: NextRequest) {
       material: e.config.material,
       colour: e.config.colour,
       colourName: nameOf(e.config.colour),
+      materialName: materialNameOf(e.config.material),
       quantity: e.config.quantity,
     })),
   );

@@ -32,6 +32,8 @@ export interface PdfLine {
   colour: string;
   /** Name captured at submission; falls back to the palette lookup when null. */
   colourName?: string | null;
+  /** Likewise for the shop's own (renamable) materials. */
+  materialName?: string | null;
   layerHeightUm: number;
   infillPct: number;
   supports: SupportMode;
@@ -58,6 +60,7 @@ export interface PdfAnnexure {
     material: MaterialId;
     colour: string;
     colourName?: string | null;
+    materialName?: string | null;
     layerHeightUm: number;
     infillPct: number;
     supports: SupportMode;
@@ -246,7 +249,7 @@ function AnnexurePage({
           <KV label="File size" value={formatBytes(geometry.sizeBytes)} />
 
           <Text style={[s.sectionLabel, { marginTop: 14 }]}>Print settings</Text>
-          <KV label="Material" value={`${materialName(settings.material)} · ${settings.colourName ?? colourName(settings.colour)}`} />
+          <KV label="Material" value={`${settings.materialName ?? materialName(settings.material)} · ${settings.colourName ?? colourName(settings.colour)}`} />
           <KV label="Layer height" value={LAYER(settings.layerHeightUm)} />
           <KV label="Infill" value={`${settings.infillPct}%`} />
           <KV label="Supports" value={settings.supports} />
@@ -327,7 +330,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
               <Text style={{ color: MUTED, marginTop: 1 }}>{formatDuration(l.totalPrintSeconds)}</Text>
             </View>
             <Text style={s.cSpec}>
-              {materialName(l.material)} · {l.colourName ?? colourName(l.colour)}
+              {l.materialName ?? materialName(l.material)} · {l.colourName ?? colourName(l.colour)}
               {"\n"}
               {LAYER(l.layerHeightUm)} · {l.infillPct}% · supports {l.supports}
             </Text>

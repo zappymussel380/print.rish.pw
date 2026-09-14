@@ -108,10 +108,21 @@ describe("/api/admin/slicer-profiles", () => {
     expect(db.createMany).not.toHaveBeenCalled();
   });
 
-  it("doesn't exist outside advanced mode", async () => {
+  it("outside advanced mode, takes presets only for the shop's own materials", async () => {
     vi.stubEnv("ADVANCED_PROFILES", "");
-    expect((await GET()).status).toBe(404);
-    expect((await POST(req("?slot=filament:PLA"))).status).toBe(404);
+    const state = await (await GET()).json();
+    expect(state.slots.map((s: { slot: string }) => s.slot)).toEqual(["filament:OTHER_1", "filament:OTHER_2", "filament:OTHER_3", "filament:OTHER_4"]);
+    for (const slot of ["filament:PLA", "machine", "process:200"]) {
+      expect((await POST(req(`?slot=${slot}`))).status, slot).toBe(403);
+    }
+    // A bundle (no slot) is a whole printer.
+    expect((await POST(req(""))).status).toBe(403);
+    expect((await DELETE(req("?slot=filament:PLA"))).status).toBe(403);
+    expect(db.createMany).not.toHaveBeenCalled();
+
+    const res = await POST(req("?slot=filament:OTHER_1&name=abs-cf.json"));
+    expect(res.status).toBe(202);
+    expect(db.createMany.mock.calls[0]![0].data).toEqual([expect.objectContaining({ slot: "filament:OTHER_1", status: "PENDING" })]);
   });
 
   it("stores an upload as one pending batch and queues its test slice", async () => {
@@ -123,7 +134,7 @@ describe("/api/admin/slicer-profiles", () => {
     ]);
     expect(queue.add).toHaveBeenCalledWith("test", { batchId: rows[0].batchId }, { jobId: `profile_${rows[0].batchId}` });
     const body = await res.json();
-    expect(body.slots).toHaveLength(11);
+    expect(body.slots).toHaveLength(15);
   });
 
   it("explains a rejected file and stores nothing", async () => {
@@ -153,10 +164,26 @@ describe("/api/admin/slicer-profiles", () => {
 describe("getPrinterProfile", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("is the installed printer, untouched, outside advanced mode (print.rish.pw)", async () => {
+  it("is the installed printer, untouched, until one of the shop's own materials has a profile (print.rish.pw)", async () => {
     vi.stubEnv("ADVANCED_PROFILES", "");
-    expect(await getPrinterProfile()).toBe(getPrinterSpec());
-    expect(db.findMany).not.toHaveBeenCalled();
+    db.findMany.mockResolvedValueOnce([]);
+    expect(await getPrinterProfile()).toEqual(getPrinterSpec());
+    // Only the shop's own materials' slots are even asked for.
+    expect(db.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { status: "ACTIVE", slot: { in: ["filament:OTHER_1", "filament:OTHER_2", "filament:OTHER_3", "filament:OTHER_4"] } } }),
+    );
+  });
+
+  it("outside advanced mode, applies the shop's own materials' profiles and ignores the rest", async () => {
+    vi.stubEnv("ADVANCED_PROFILES", "");
+    db.findMany.mockResolvedValueOnce([
+      { id: "c1", slot: "filament:OTHER_1", meta: { presetName: "PC (from Generic PC)", plate: "Textured PEI Plate" } },
+      { id: "x", slot: "machine", meta: { presetName: "Leftover", bedMm: [100, 100, 100] } },
+    ]);
+    const spec = await getPrinterProfile();
+    expect(spec.id).toMatch(/^bbl-a1-r[0-9a-z]{11}$/);
+    expect(spec.filamentPresets?.OTHER_1).toBe("PC (from Generic PC)");
+    expect(spec.bedMm).toEqual(getPrinterSpec().bedMm);
   });
 
   it("carries the live uploads' revision in advanced mode", async () => {

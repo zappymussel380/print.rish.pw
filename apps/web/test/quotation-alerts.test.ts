@@ -21,6 +21,8 @@ vi.mock("@print/db", () => ({
     uploadedModel: { findFirst: mocks.findModel },
     sliceResult: { findUnique: mocks.findSlice },
     quotation: { update: mocks.updateQuotation },
+    // No live presets for the shop's own materials: the printer as installed.
+    slicerProfileUpload: { findMany: vi.fn(async () => []) },
     $transaction: mocks.transaction,
   },
 }));

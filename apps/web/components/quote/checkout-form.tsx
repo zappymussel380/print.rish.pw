@@ -8,14 +8,13 @@ import {
   formatDuration,
   formatGrams,
   formatPaise,
-  materialName,
   settingsKey,
 } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { submitQuotation, type CheckoutError } from "@/lib/checkout-client";
 import { emailSuggestions, isProbablyEmail } from "@/lib/email-hint";
 import { sliceCacheKey, useQuoteStore } from "@/lib/quote-store";
-import { catalogColourName, useCatalog } from "@/lib/use-catalog";
+import { catalogColourName, catalogMaterialName, useCatalog } from "@/lib/use-catalog";
 import { useSite } from "@/lib/site-context";
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -274,7 +273,7 @@ export function CheckoutForm() {
                       {fileName}
                     </p>
                     <p className="text-xs text-faint">
-                      {materialName(config.material)} · {catalogColourName(catalog, config.material, config.colour)} ·{" "}
+                      {catalogMaterialName(catalog, config.material)} · {catalogColourName(catalog, config.material, config.colour)} ·{" "}
                       {formatGrams(grams)}
                     </p>
                   </div>

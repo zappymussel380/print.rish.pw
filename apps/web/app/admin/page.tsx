@@ -16,7 +16,7 @@ import {
   type AdminStats,
   type QuotationRow,
 } from "@/components/admin/admin-dashboard";
-import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getReadyCustomMaterials, getStoredCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
 import { getStoredSiteProfile } from "@/lib/site-profile";
 import { getFaqSettings, getGeneratedFaq } from "@/lib/faq";
@@ -68,13 +68,15 @@ export default async function AdminPage() {
   }));
 
   const stats = computeStats(quotations, costBasis);
-  const catalog = toPublicCatalog(await getCatalogAvailability());
+  // As saved, with what each of the shop's own materials still needs.
+  const [storedAvailability, readyCustom] = await Promise.all([getStoredCatalogAvailability(), getReadyCustomMaterials()]);
+  const catalog = toPublicCatalog(storedAvailability, readyCustom);
   const recentPrints = await getRecentPrints();
   const siteProfile = await getStoredSiteProfile().catch(() => null);
   const [faqGenerated, faqSettings, slicerProfiles] = await Promise.all([
     getGeneratedFaq(),
     getFaqSettings(),
-    advancedProfilesEnabled() ? getSlicerProfilesState() : null,
+    getSlicerProfilesState(),
   ]);
 
   return (
@@ -87,6 +89,8 @@ export default async function AdminPage() {
       siteProfile={siteProfile}
       faq={{ generated: faqGenerated, settings: faqSettings }}
       slicerProfiles={slicerProfiles}
+      advancedProfiles={advancedProfilesEnabled()}
+      materialNames={storedAvailability.customMaterials}
       recentPrints={recentPrints}
     />
   );
@@ -111,7 +115,7 @@ function computeStats(quotations: QuotationWithItems[], costBasis: InternalCostB
   let profitPaise = 0;
   let billableCount = 0;
   let printSeconds = 0;
-  const familyGrams: Record<MaterialFamily, number> = { PLA: 0, PETG: 0, ABS: 0, ASA: 0 };
+  const familyGrams: Record<MaterialFamily, number> = { PLA: 0, PETG: 0, ABS: 0, ASA: 0, Other: 0 };
 
   for (const q of quotations) {
     statusCounts[q.status] = (statusCounts[q.status] ?? 0) + 1;

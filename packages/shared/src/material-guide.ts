@@ -1,9 +1,10 @@
-import type { MaterialId } from "./quote-types";
+import type { StockMaterialId } from "./quote-types";
 
 /**
  * Plain-language comparison copy for the /materials page, one entry per
  * material tier. Which tiers the page shows (and in what order) is the shop's
- * choice — `SiteProfile.materialsPage`.
+ * choice — `SiteProfile.materialsPage`. The shop's own materials (OTHER_*)
+ * have no copy here, so the page can't offer them.
  */
 export interface MaterialGuideEntry {
   /** What the material is, under its name ("Polylactic acid"). */
@@ -25,7 +26,7 @@ export const MATERIAL_GUIDE_ROWS: { key: keyof Omit<MaterialGuideEntry, "subtitl
   { key: "bestFor", label: "Best for" },
 ];
 
-export const MATERIAL_GUIDE: Record<MaterialId, MaterialGuideEntry> = {
+export const MATERIAL_GUIDE: Record<StockMaterialId, MaterialGuideEntry> = {
   PLA: {
     subtitle: "Polylactic acid",
     strength: "Stiff and strong in static loads; can be brittle under impact.",

@@ -1,8 +1,8 @@
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { MATERIAL_IDS } from "@print/shared";
+import { MATERIAL_IDS, ORCA_GENERIC_FILAMENTS } from "@print/shared";
 import {
   ProfileIndex,
   bedOf,
@@ -172,5 +172,19 @@ describe("profile-gen", () => {
     expect(readdirSync(out).sort()).toEqual([...committed, "printer.json"].sort());
     rmSync(empty, { recursive: true, force: true });
     rmSync(out, { recursive: true, force: true });
+  });
+});
+
+// Only where OrcaSlicer is installed (the worker image): the generics a shop's
+// own material can start from must all exist in the OrcaSlicer we ship, and
+// resolve to a filament with a density.
+const ORCA_ROOT = "/opt/orca/resources/profiles";
+describe.skipIf(!existsSync(join(ORCA_ROOT, "OrcaFilamentLibrary")))("the OrcaSlicer generics custom materials start from", () => {
+  it("all ship with this OrcaSlicer and flatten to a usable filament", () => {
+    const orca = new ProfileIndex(ORCA_ROOT);
+    for (const name of ORCA_GENERIC_FILAMENTS) {
+      const flat = orca.flattenPreset("filament", { name: "probe", inherits: name }, []);
+      expect(Number((flat.filament_density as string[])[0]), name).toBeGreaterThan(0);
+    }
   });
 });

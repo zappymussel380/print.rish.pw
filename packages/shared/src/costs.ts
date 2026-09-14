@@ -1,4 +1,4 @@
-import type { MaterialId } from "./quote-types";
+import type { CustomMaterialId, MaterialId } from "./quote-types";
 
 /**
  * Internal cost basis for profit reporting.
@@ -32,7 +32,12 @@ export type FilamentLine =
   | "translucentGlitter"
   | "petgCf"
   | "abs"
-  | "asa";
+  | "asa"
+  // The shop's own materials (CUSTOM_MATERIAL_IDS), one spool line each.
+  | "other1"
+  | "other2"
+  | "other3"
+  | "other4";
 
 /** How each line is named in the admin rates editor. A Record, so a new line
  *  cannot ship without a label. */
@@ -55,6 +60,11 @@ export const FILAMENT_LINE_LABELS: Record<FilamentLine, string> = {
   petgCf: "PETG-CF",
   abs: "ABS",
   asa: "ASA",
+  // Shown under the shop's own name for the material where it has one.
+  other1: "Other material 1",
+  other2: "Other material 2",
+  other3: "Other material 3",
+  other4: "Other material 4",
 };
 
 export interface InternalCostBasis {
@@ -96,6 +106,10 @@ export const INTERNAL_COST: InternalCostBasis = {
     // Placeholders until the operator enters real spool prices in admin → Rates.
     abs: 650,
     asa: 900,
+    other1: 1500,
+    other2: 1500,
+    other3: 1500,
+    other4: 1500,
   },
   gstRate: 0.18,
   spoolShippingPaise: 90_00,
@@ -160,8 +174,24 @@ export function filamentLine(material: MaterialId, colour: string): FilamentLine
       return "abs";
     case "ASA":
       return "asa";
+    case "OTHER_1":
+      return "other1";
+    case "OTHER_2":
+      return "other2";
+    case "OTHER_3":
+      return "other3";
+    case "OTHER_4":
+      return "other4";
   }
 }
+
+/** The spool line each of the shop's own materials is costed as. */
+export const CUSTOM_MATERIAL_LINE = {
+  OTHER_1: "other1",
+  OTHER_2: "other2",
+  OTHER_3: "other3",
+  OTHER_4: "other4",
+} as const satisfies Record<CustomMaterialId, FilamentLine>;
 
 /** What a kilogram of this material+colour actually costs us. */
 export function filamentCostPerKgPaise(

@@ -33,7 +33,7 @@ import {
   type UploadedModelDto,
 } from "@print/shared";
 import { config } from "./config.js";
-import { activeSpec } from "./profile-set.js";
+import { activeBedMm } from "./profile-set.js";
 import {
   ParseRunnerPublicError,
   removeParseWorkDir,
@@ -366,7 +366,7 @@ async function processValidatedJob(
   // the sandboxed child so this event loop never blocks on customer geometry.
   // The build volume loose 3MF items are packed onto and fit is judged by:
   // the owner's uploaded printer in advanced mode, the installer's otherwise.
-  const { bedMm } = await activeSpec();
+  const bedMm = await activeBedMm();
   const prepared = await runPreparedParse(
     {
       jobId,

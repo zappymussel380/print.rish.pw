@@ -8,6 +8,9 @@ export interface OrderItemLike {
   /** Colour name captured at submission — the only record of a custom colour
    *  the admin has since deleted. */
   colourName?: string | null;
+  /** Material name captured at submission (the shop's own materials can be
+   *  renamed). */
+  materialName?: string | null;
   quantity: number;
 }
 
@@ -16,7 +19,7 @@ export interface OrderItemLike {
 export function summariseItems(items: OrderItemLike[]): string {
   const groups = new Map<string, number>();
   for (const it of items) {
-    const k = `${materialName(it.material)} (${it.colourName ?? colourName(it.colour)})`;
+    const k = `${it.materialName ?? materialName(it.material)} (${it.colourName ?? colourName(it.colour)})`;
     groups.set(k, (groups.get(k) ?? 0) + it.quantity);
   }
   return [...groups].map(([k, q]) => `${q}× ${k}`).join(", ");

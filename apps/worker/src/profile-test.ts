@@ -13,6 +13,7 @@ import {
   slotLayerUm,
   slotMaterial,
   slotMismatch,
+  slotInScope,
   type LayerHeightUm,
   type MaterialId,
   type OrcaProfile,
@@ -165,6 +166,10 @@ export function cubeStl(size = 20): Buffer {
 export interface ProfileBatchDeps {
   index: () => Flattener;
   slice?: typeof runSlice;
+  /** Advanced mode: every slot may be uploaded. Otherwise only the shop's own
+   *  materials' filament slots (slotInScope) — its printer and stock materials
+   *  keep the profiles the installer generated. */
+  advanced: boolean;
 }
 
 let sharedIndex: ProfileIndex | null = null;
@@ -237,6 +242,13 @@ export async function processProfileBatch(batchId: string, deps: ProfileBatchDep
     if (live.length === 0) {
       throw new ProfileBatchError(skipped[0]?.skipReason ?? "Nothing in this upload could be used.");
     }
+    // The web only queues in-scope slots; this is the backstop.
+    const outOfScope = live.find((p) => !slotInScope(p.slot, deps.advanced));
+    if (outOfScope) {
+      throw new ProfileBatchError(
+        "Only your own materials' filament presets can be uploaded on this install. Your printer and the other materials use the profiles the installer set up (advanced mode changes that).",
+      );
+    }
     const slots = live.map((p) => p.slot);
     const others = await prisma.slicerProfileUpload.findMany({
       where: { status: "ACTIVE", slot: { notIn: slots } },
@@ -244,7 +256,7 @@ export async function processProfileBatch(batchId: string, deps: ProfileBatchDep
     });
     const candidate: SetUpload[] = [
       ...others.flatMap((o) =>
-        isProfileSlot(o.slot) && o.flattened
+        isProfileSlot(o.slot) && slotInScope(o.slot, deps.advanced) && o.flattened
           ? [{ id: o.id, slot: o.slot, meta: o.meta, flattened: o.flattened as OrcaProfile }]
           : [],
       ),

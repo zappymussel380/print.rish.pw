@@ -5,6 +5,7 @@ import {
   CATALOG,
   colourName,
   defaultAvailability,
+  materialName,
   toPublicCatalog,
   type Catalog,
   type PublicMaterial,
@@ -74,6 +75,12 @@ export function useCatalog(): PublicCatalog {
 
 /** Display name for a colour as the live catalog knows it — custom colours
  *  included — falling back to the palette lookup. */
+/** A material's name as the shop shows it (its own materials by the name it
+ *  gave them). */
+export function catalogMaterialName(catalog: PublicCatalog, material: string): string {
+  return catalog.materials.find((m) => m.id === material)?.name ?? materialName(material);
+}
+
 export function catalogColourName(catalog: PublicCatalog, material: string, colour: string): string {
   return (
     catalog.materials.find((m) => m.id === material)?.colours.find((c) => c.id === colour)?.name ??

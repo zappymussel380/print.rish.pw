@@ -9,6 +9,8 @@ import {
   MAX_CAPTION_LENGTH,
   MAX_SHOWCASE_PHOTO_BYTES,
   type RecentPrint,
+  isCustomMaterial,
+  type CustomMaterialNames,
 } from "@print/shared";
 import { shrinkPhoto } from "@/lib/shrink-photo";
 
@@ -33,7 +35,14 @@ const MAX_PHOTO_MB = Math.round(MAX_SHOWCASE_PHOTO_BYTES / 1024 / 1024);
  * keeps ordering and deletion a single atomic write, the same way the catalog
  * editor works, and means a photo is never half-described.
  */
-export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
+export function ShowcaseEditor({
+  prints,
+  materialNames,
+}: {
+  prints: RecentPrint[];
+  /** The shop's names for its own materials (only named ones are offered). */
+  materialNames?: CustomMaterialNames;
+}) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<EditorPrint[]>(
@@ -328,9 +337,9 @@ export function ShowcaseEditor({ prints }: { prints: RecentPrint[] }) {
                         })
                       }
                     >
-                      {MATERIAL_IDS.map((id) => (
+                      {MATERIAL_IDS.filter((id) => !isCustomMaterial(id) || materialNames?.[id] || id === item.material).map((id) => (
                         <option key={id} value={id}>
-                          {materialName(id)}
+                          {materialName(id, materialNames)}
                         </option>
                       ))}
                     </select>

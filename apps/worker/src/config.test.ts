@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CATALOG, MATERIAL_IDS, materialFamily } from "@print/shared";
+import { CATALOG, MATERIAL_IDS, isCustomMaterial, materialFamily } from "@print/shared";
 import { MACHINE_PROFILE, config, filamentProfile, stubSlicerEnabled } from "./config";
 
 describe("stubSlicerEnabled", () => {
@@ -56,6 +56,10 @@ describe("filamentProfile", () => {
     // "" — Orca 2.4.1 reads that as an empty vector and aborts in set_at()
     // before slicing anything (every slice failed NO_OUTPUT, exit 134).
     expect(profile).not.toHaveProperty("filament_notes");
+    // The shop's own materials ship a placeholder that is never quoted with
+    // (effectiveAvailability): they have no family, and their grams come from
+    // the profile the owner gives them.
+    if (isCustomMaterial(material)) return;
     // A tier must never slice with another family's temperatures.
     const type = (profile.filament_type as string[])[0]!;
     // Orca's generic PETG presets report their type as "PET".

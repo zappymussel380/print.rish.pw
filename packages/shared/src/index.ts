@@ -7,6 +7,7 @@ export * from "./faq";
 export * from "./costs";
 export * from "./custom-colours";
 export * from "./custom-colours-schema";
+export * from "./custom-materials";
 export * from "./filename";
 export * from "./ingest-job";
 export * from "./parse-child-contract";

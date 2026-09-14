@@ -33,7 +33,11 @@ const renderQuotationPdf = vi.hoisted(() =>
 const readThumbPng = vi.hoisted(() => vi.fn(async () => null));
 
 vi.mock("@print/db", () => ({
-  prisma: { quotation: { findUnique: db.findUnique, update: db.update } },
+  prisma: {
+    quotation: { findUnique: db.findUnique, update: db.update },
+    // No live presets for the shop's own materials: the printer as installed.
+    slicerProfileUpload: { findMany: vi.fn(async () => []) },
+  },
 }));
 vi.mock("node:fs/promises", () => ({ writeFile: fs.writeFile }));
 vi.mock("@/lib/storage", () => storage);

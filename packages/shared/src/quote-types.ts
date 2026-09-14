@@ -16,6 +16,12 @@ export const MATERIAL_IDS = [
   "PETG_PREMIUM",
   "ABS",
   "ASA",
+  // Named, priced and given an OrcaSlicer profile by the shop in the admin
+  // dashboard (ABS-CF, PC, PA…); they ship disabled. See CUSTOM_MATERIAL_IDS.
+  "OTHER_1",
+  "OTHER_2",
+  "OTHER_3",
+  "OTHER_4",
 ] as const;
 /** The full orderable colour universe (Numakers palette), plus the legacy
  *  `black`/`white` ids kept accept-only for records created before the palette
@@ -180,6 +186,21 @@ export const INFILL_MAX_PCT = 60;
 export const MAX_QUANTITY = 100;
 
 export type MaterialId = (typeof MATERIAL_IDS)[number];
+
+/** The shop's own materials: fixed slots the owner names and sets up in admin
+ *  → Catalog. One can only be offered once it has a name and a live OrcaSlicer
+ *  filament profile (catalog-availability.ts). */
+export const CUSTOM_MATERIAL_IDS = ["OTHER_1", "OTHER_2", "OTHER_3", "OTHER_4"] as const satisfies readonly MaterialId[];
+export type CustomMaterialId = (typeof CUSTOM_MATERIAL_IDS)[number];
+export function isCustomMaterial(id: string): id is CustomMaterialId {
+  return (CUSTOM_MATERIAL_IDS as readonly string[]).includes(id);
+}
+/** The materials this software knows by itself: everything but the shop's own. */
+export type StockMaterialId = Exclude<MaterialId, CustomMaterialId>;
+export const STOCK_MATERIAL_IDS = MATERIAL_IDS.filter((m): m is StockMaterialId => !isCustomMaterial(m)) as [
+  StockMaterialId,
+  ...StockMaterialId[],
+];
 export type ColourId = (typeof COLOUR_IDS)[number];
 
 /** Shape of any colour a model may carry: a palette id from `COLOUR_IDS` or an

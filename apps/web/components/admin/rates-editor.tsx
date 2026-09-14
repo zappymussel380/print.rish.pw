@@ -9,6 +9,10 @@ import {
   materialName,
   type FilamentLine,
   type PricingInput,
+  CUSTOM_MATERIAL_IDS,
+  CUSTOM_MATERIAL_LINE,
+  type CustomMaterialNames,
+  type MaterialId,
 } from "@print/shared";
 
 /**
@@ -33,7 +37,16 @@ interface FieldDef {
 const B = PRICING_BOUNDS;
 const LINES = Object.keys(FILAMENT_LINE_LABELS) as FilamentLine[];
 
-function sections(): { title: string; hint: string; fields: FieldDef[] }[] {
+/** The shop's own materials read by the names it gave them; the rest, as built in. */
+type NameOf = (material: MaterialId) => string;
+
+/** A spool line's label: the shop's own materials' lines by their names. */
+function lineLabel(line: FilamentLine, nameOf: NameOf): string {
+  const own = CUSTOM_MATERIAL_IDS.find((id) => CUSTOM_MATERIAL_LINE[id] === line);
+  return own ? nameOf(own) : FILAMENT_LINE_LABELS[line];
+}
+
+function sections(nameOf: NameOf): { title: string; hint: string; fields: FieldDef[] }[] {
   return [
     {
       title: "Customer prices",
@@ -42,7 +55,7 @@ function sections(): { title: string; hint: string; fields: FieldDef[] }[] {
         { key: "setupFeePaise", label: "Setup fee per order", unit: "rupees", bound: B.setupFeePaise },
         ...MATERIAL_IDS.map((m) => ({
           key: `materials.${m}.sellPerGramPaise`,
-          label: `${materialName(m)} — per gram`,
+          label: `${nameOf(m)} — per gram`,
           unit: "rupees" as const,
           suffix: "/ g",
           bound: B.sellPerGramPaise,
@@ -55,7 +68,7 @@ function sections(): { title: string; hint: string; fields: FieldDef[] }[] {
       fields: [
         ...MATERIAL_IDS.map((m) => ({
           key: `materials.${m}.costPerKgPaise`,
-          label: `${materialName(m)} filament`,
+          label: `${nameOf(m)} filament`,
           unit: "rupees" as const,
           suffix: "/ kg",
           bound: B.costPerKgPaise,
@@ -79,7 +92,7 @@ function sections(): { title: string; hint: string; fields: FieldDef[] }[] {
       fields: [
         ...LINES.map((line) => ({
           key: `internal.spoolListPriceInr.${line}`,
-          label: `${FILAMENT_LINE_LABELS[line]} spool`,
+          label: `${lineLabel(line, nameOf)} spool`,
           unit: "plain" as const,
           suffix: "₹ / kg list",
           bound: B.spoolListPriceInr,
@@ -123,9 +136,16 @@ function fromText(text: string, unit: Unit): number | undefined {
   return n;
 }
 
-export function RatesEditor({ pricing }: { pricing: PricingInput }) {
+export function RatesEditor({
+  pricing,
+  materialNames,
+}: {
+  pricing: PricingInput;
+  /** The shop's names for its own materials. */
+  materialNames?: CustomMaterialNames;
+}) {
   const router = useRouter();
-  const defs = useMemo(() => sections(), []);
+  const defs = useMemo(() => sections((m) => materialName(m, materialNames)), [materialNames]);
   const initial = useMemo(() => {
     const out: Record<string, string> = {};
     for (const s of defs) for (const f of s.fields) out[f.key] = toText(getPath(pricing, f.key), f.unit);

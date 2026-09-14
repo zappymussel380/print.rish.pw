@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { materialName, type RecentPrint } from "@print/shared";
+import { materialName, type CustomMaterialNames, type RecentPrint } from "@print/shared";
 
 /** The showcase photos, as a responsive grid, each opening full size in place.
  *
@@ -16,7 +16,14 @@ import { materialName, type RecentPrint } from "@print/shared";
  * cache hit and the full-size image is already decoded — which is what makes
  * the open animation smooth rather than a flash of empty frame.
  */
-export function RecentPrintsGrid({ prints }: { prints: readonly RecentPrint[] }) {
+export function RecentPrintsGrid({
+  prints,
+  materialNames,
+}: {
+  prints: readonly RecentPrint[];
+  /** The shop's names for its own materials. */
+  materialNames?: CustomMaterialNames;
+}) {
   const [openAt, setOpenAt] = useState<number | null>(null);
 
   return (
@@ -47,7 +54,7 @@ export function RecentPrintsGrid({ prints }: { prints: readonly RecentPrint[] })
             <div className="flex flex-wrap items-center justify-between gap-2 p-4">
               <p className="text-sm font-[650]">{print.caption}</p>
               <span className="chip">
-                {materialName(print.material)}
+                {materialName(print.material, materialNames)}
                 {print.colour ? ` · ${print.colour}` : ""}
               </span>
             </div>
@@ -55,7 +62,13 @@ export function RecentPrintsGrid({ prints }: { prints: readonly RecentPrint[] })
         ))}
       </ul>
 
-      <Lightbox prints={prints} openAt={openAt} onClose={() => setOpenAt(null)} onMove={setOpenAt} />
+      <Lightbox
+        prints={prints}
+        materialNames={materialNames}
+        openAt={openAt}
+        onClose={() => setOpenAt(null)}
+        onMove={setOpenAt}
+      />
     </>
   );
 }
@@ -91,11 +104,13 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
  */
 function Lightbox({
   prints,
+  materialNames,
   openAt,
   onClose,
   onMove,
 }: {
   prints: readonly RecentPrint[];
+  materialNames?: CustomMaterialNames;
   openAt: number | null;
   onClose: () => void;
   onMove: (index: number) => void;
@@ -361,7 +376,7 @@ function Lightbox({
             <div className="min-w-0 text-white">
               <p className="text-sm font-[650]">{print.caption}</p>
               <p className="mt-0.5 text-xs text-white/70">
-                {materialName(print.material)}
+                {materialName(print.material, materialNames)}
                 {print.colour ? ` · ${print.colour}` : ""}
                 {prints.length > 1 ? ` · ${(openAt ?? 0) + 1} of ${prints.length}` : ""}
                 {zoomed ? ` · ${view.zoom.toFixed(1)}×` : ""}

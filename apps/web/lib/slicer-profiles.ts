@@ -1,25 +1,33 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, prisma } from "@print/db";
 import {
-  CATALOG,
   PROFILE_SLOTS,
   isProfileSlot,
+  materialName,
   slicerProfileJobId,
+  slotInScope,
   slotLayerUm,
   slotMaterial,
+  type CustomMaterialNames,
   type ProfileSlot,
 } from "@print/shared";
-import { getPrinterProfile, getPrinterSpec } from "./printer";
+import { getStoredCatalogAvailability } from "./catalog-availability";
+import { advancedProfilesEnabled, getPrinterProfile, getPrinterSpec } from "./printer";
 import { getSlicerProfileQueue } from "./queue";
 import type { ParsedUpload } from "./slicer-profile-upload";
 
-/** What the admin Slicer profiles section shows (advanced mode only). */
+/** What the admin shows per preset slot: every slot in advanced mode (the
+ *  Slicer profiles section), the shop's own materials' filament slots on any
+ *  install (Your own materials). */
 export interface SlicerProfileSlotState {
   slot: ProfileSlot;
   label: string;
   /** The live upload, or null while the slot uses the installed preset. */
   live: { presetName: string; originalName: string; testGrams: number | null; checkedAt: string | null } | null;
   testing: boolean;
+  /** Why the latest upload for this slot didn't go live, when it's newer than
+   *  what is live. */
+  lastError: string | null;
 }
 
 export interface SlicerProfileUploadState {
@@ -38,19 +46,21 @@ export interface SlicerProfilesState {
   busy: boolean;
 }
 
-export function slotTitle(slot: ProfileSlot): string {
+export function slotTitle(slot: ProfileSlot, names?: CustomMaterialNames): string {
   const um = slotLayerUm(slot);
   if (um) return `Process · ${(um / 1000).toFixed(2)} mm layers`;
   const material = slotMaterial(slot);
-  if (material) return `Filament · ${CATALOG.materials[material].name}`;
+  if (material) return `Filament · ${materialName(material, names)}`;
   return "Printer";
 }
 
 const RECENT_BATCHES = 8;
 
 export async function getSlicerProfilesState(): Promise<SlicerProfilesState> {
-  const [printer, rows] = await Promise.all([
+  const advanced = advancedProfilesEnabled();
+  const [printer, { customMaterials }, rows] = await Promise.all([
     getPrinterProfile(),
+    getStoredCatalogAvailability(),
     prisma.slicerProfileUpload.findMany({
       where: { status: { not: "RETIRED" } },
       orderBy: { createdAt: "desc" },
@@ -77,11 +87,15 @@ export async function getSlicerProfilesState(): Promise<SlicerProfilesState> {
     select: { batchId: true, slot: true, originalName: true, presetName: true, status: true, error: true, createdAt: true },
   });
 
-  const slots = PROFILE_SLOTS.map((slot): SlicerProfileSlotState => {
+  const slots = PROFILE_SLOTS.filter((slot) => slotInScope(slot, advanced)).map((slot): SlicerProfileSlotState => {
     const live = rows.find((r) => r.slot === slot && r.status === "ACTIVE");
+    // Rows come newest first: the latest attempt, if it failed after what's live.
+    const latest = rows.find((r) => r.slot === slot && r.status !== "SKIPPED");
+    const failedLater = latest?.status === "FAILED" && (!live || latest.createdAt > live.createdAt);
     return {
       slot,
-      label: slotTitle(slot),
+      label: slotTitle(slot, customMaterials),
+      lastError: failedLater ? latest.error : null,
       live: live
         ? {
             presetName: live.presetName,

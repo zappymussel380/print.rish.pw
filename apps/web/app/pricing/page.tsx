@@ -5,7 +5,8 @@ import {
   isMaterialEnabled,
   MATERIAL_IDS,
   materialName,
-  type MaterialId,
+  isCustomMaterial,
+  type StockMaterialId,
 } from "@print/shared";
 import { PageIntro } from "@/components/shell/page-intro";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
@@ -22,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = "force-dynamic";
 
-const MATERIAL_BLURB: Record<MaterialId, string> = {
+const MATERIAL_BLURB: Record<StockMaterialId, string> = {
   PLA: "The everyday material — crisp detail, easy on the wallet.",
   PLA_AESTHETIC: "Silk, matte, metallic, starlight, glow-in-the-dark and wood finishes for display pieces.",
   PLA_CF: "Carbon-fibre-filled PLA — stiff, matte, and dimensionally stable.",
@@ -59,12 +60,14 @@ export default async function PricingPage() {
           </div>
           {shownMaterials.map((m) => (
             <div key={m} className="tile p-5">
-              <p className="eyebrow text-[0.7rem]">{materialName(m)}</p>
+              <p className="eyebrow text-[0.7rem]">{materialName(m, availability.customMaterials)}</p>
               <p className="mt-2 text-2xl font-[650] tracking-tight">
                 {formatPaise(materials[m].sellPerGramPaise)}
                 <span className="text-sm font-[450] text-muted"> / gram</span>
               </p>
-              <p className="mt-1 text-sm text-muted">{MATERIAL_BLURB[m]}</p>
+              <p className="mt-1 text-sm text-muted">
+                {isCustomMaterial(m) ? "Ask us about this material's properties." : MATERIAL_BLURB[m]}
+              </p>
             </div>
           ))}
         </div>

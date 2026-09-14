@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ProfileSlot } from "@print/shared";
+import { CUSTOM_FILAMENT_SLOTS, type ProfileSlot } from "@print/shared";
 import type { SlicerProfilesState } from "@/lib/slicer-profiles";
 
 const API = "/api/admin/slicer-profiles";
@@ -16,7 +16,10 @@ const STATUS_TEXT: Record<SlicerProfilesState["uploads"][number]["status"], stri
   replaced: "Replaced",
 };
 
-async function errorMessage(res: Response, fallback: string): Promise<string> {
+/** The shop's own materials have their own card (Your own materials). */
+const isCustomFilamentSlot = (slot: ProfileSlot) => (CUSTOM_FILAMENT_SLOTS as readonly string[]).includes(slot);
+
+export async function errorMessage(res: Response, fallback: string): Promise<string> {
   const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
   return data?.error?.message ?? fallback;
 }
@@ -137,7 +140,7 @@ export function SlicerProfilesEditor({ initial }: { initial: SlicerProfilesState
         />
 
         <ul className="divide-y divide-line rounded-lg border border-line">
-          {state.slots.map((row) => {
+          {state.slots.filter((row) => !isCustomFilamentSlot(row.slot)).map((row) => {
             const busy = pendingSlot === row.slot;
             return (
               <li key={row.slot} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3">

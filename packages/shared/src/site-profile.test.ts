@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MATERIAL_IDS } from "./quote-types";
+import { STOCK_MATERIAL_IDS } from "./quote-types";
 import { MATERIAL_GUIDE, MATERIAL_GUIDE_ROWS } from "./material-guide";
 import { DEFAULT_SITE_PROFILE, listJoin, splitBrand } from "./site-profile";
 import { findSiteProfileIssues, normalizeSiteProfile } from "./site-profile-schema";
@@ -95,8 +95,8 @@ describe("helpers", () => {
     expect(listJoin(["PLA", "PETG", "ABS"])).toBe("PLA, PETG and ABS");
   });
 
-  it("has comparison copy for every material and every row", () => {
-    for (const m of MATERIAL_IDS) {
+  it("has comparison copy for every stock material and every row", () => {
+    for (const m of STOCK_MATERIAL_IDS) {
       expect(MATERIAL_GUIDE[m].subtitle.length).toBeGreaterThan(0);
       for (const row of MATERIAL_GUIDE_ROWS) expect(MATERIAL_GUIDE[m][row.key].length).toBeGreaterThan(10);
     }
