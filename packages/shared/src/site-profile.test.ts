@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { STOCK_MATERIAL_IDS } from "./quote-types";
-import { MATERIAL_GUIDE, MATERIAL_GUIDE_ROWS } from "./material-guide";
+import {
+  GUIDE_BLANK_ROW,
+  MATERIAL_GUIDE,
+  MATERIAL_GUIDE_KEYS,
+  MATERIAL_GUIDE_ROWS,
+  cleanCustomGuide,
+  materialsPageEntries,
+} from "./material-guide";
+import { normalizeAvailability } from "./catalog-availability-schema";
 import { DEFAULT_SITE_PROFILE, listJoin, splitBrand } from "./site-profile";
 import { findSiteProfileIssues, normalizeSiteProfile } from "./site-profile-schema";
 
@@ -100,5 +108,45 @@ describe("helpers", () => {
       expect(MATERIAL_GUIDE[m].subtitle.length).toBeGreaterThan(0);
       for (const row of MATERIAL_GUIDE_ROWS) expect(MATERIAL_GUIDE[m][row.key].length).toBeGreaterThan(10);
     }
+  });
+});
+
+describe("the shop's own materials on /materials", () => {
+  const names = normalizeAvailability({
+    customMaterials: {
+      OTHER_1: { name: "PA-CF", guide: { subtitle: "Carbon-fibre nylon", strength: " Very   stiff. ", junk: "x" } },
+      OTHER_2: { name: "PC" },
+      OTHER_3: { guide: { strength: "orphaned" } },
+    },
+  }).customMaterials;
+
+  it("keeps the owner's copy tidied, only with a name", () => {
+    expect(names).toEqual({
+      OTHER_1: { name: "PA-CF", guide: { subtitle: "Carbon-fibre nylon", strength: "Very stiff." } },
+      OTHER_2: { name: "PC" },
+    });
+    expect(cleanCustomGuide({ strength: "   " })).toBeNull();
+    expect(cleanCustomGuide({ subtitle: "x".repeat(81) })).toBeNull();
+    expect(cleanCustomGuide("nope")).toBeNull();
+  });
+
+  it("can be picked for the page, and a Site save keeps them", () => {
+    expect(normalizeSiteProfile({ materialsPage: ["PLA", "OTHER_1"] }).materialsPage).toEqual(["PLA", "OTHER_1"]);
+    expect(findSiteProfileIssues({ materialsPage: ["OTHER_9"] })).toEqual(["materialsPage"]);
+  });
+
+  it("show with their copy, blanks asking; without copy or a name they drop out", () => {
+    const shown = materialsPageEntries(["PLA", "OTHER_1", "OTHER_2", "OTHER_4"], names);
+    expect(shown.map((m) => [m.id, m.name])).toEqual([
+      ["PLA", "PLA"],
+      ["OTHER_1", "PA-CF"],
+    ]);
+    const own = shown[1]!.guide;
+    expect(own.subtitle).toBe("Carbon-fibre nylon");
+    expect(own.strength).toBe("Very stiff.");
+    expect(own.uv).toBe(GUIDE_BLANK_ROW);
+    for (const key of MATERIAL_GUIDE_KEYS) expect(typeof own[key]).toBe("string");
+    // Nothing left to show: the default pair.
+    expect(materialsPageEntries(["OTHER_2"], names).map((m) => m.id)).toEqual(["PLA", "PETG"]);
   });
 });

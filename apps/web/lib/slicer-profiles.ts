@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, prisma } from "@print/db";
 import {
   PROFILE_SLOTS,
+  filamentPresetFacts,
   isProfileSlot,
   materialName,
   slicerProfileJobId,
@@ -9,6 +10,7 @@ import {
   slotLayerUm,
   slotMaterial,
   type CustomMaterialNames,
+  type OrcaGenericFilament,
   type ProfileSlot,
 } from "@print/shared";
 import { getStoredCatalogAvailability } from "./catalog-availability";
@@ -23,11 +25,20 @@ export interface SlicerProfileSlotState {
   slot: ProfileSlot;
   label: string;
   /** The live upload, or null while the slot uses the installed preset. */
-  live: { presetName: string; originalName: string; testGrams: number | null; checkedAt: string | null } | null;
+  live: ({ presetName: string; originalName: string; testGrams: number | null; checkedAt: string | null } & PresetFacts) | null;
   testing: boolean;
+  /** For a filament slot, what the upload being tested was made with — the
+   *  owner's latest choice, shown ahead of what is still live. */
+  pending: PresetFacts | null;
   /** Why the latest upload for this slot didn't go live, when it's newer than
    *  what is live. */
   lastError: string | null;
+}
+
+/** A filament preset's density and the OrcaSlicer generic it started from. */
+export interface PresetFacts {
+  densityGcm3?: number;
+  startedFrom?: OrcaGenericFilament;
 }
 
 export interface SlicerProfileUploadState {
@@ -79,6 +90,19 @@ export async function getSlicerProfilesState(): Promise<SlicerProfilesState> {
       },
     }),
   ]);
+  // Density and starting generic of the live and in-test filament presets —
+  // read here, so the browser never gets the presets themselves.
+  const factIds = rows
+    .filter((r) => r.slot?.startsWith("filament:") && ["ACTIVE", "PENDING", "TESTING"].includes(r.status))
+    .map((r) => r.id);
+  const factRows =
+    factIds.length === 0
+      ? []
+      : await prisma.slicerProfileUpload.findMany({
+          where: { id: { in: factIds } },
+          select: { id: true, raw: true, flattened: true },
+        });
+  const facts = new Map(factRows.map((r) => [r.id, filamentPresetFacts(r.raw, r.flattened)]));
   // Retired rows only matter for describing recent uploads that were replaced.
   const batchIds = [...new Set(rows.map((r) => r.batchId))].slice(0, RECENT_BATCHES);
   const batchRows = await prisma.slicerProfileUpload.findMany({
@@ -92,6 +116,7 @@ export async function getSlicerProfilesState(): Promise<SlicerProfilesState> {
     // Rows come newest first: the latest attempt, if it failed after what's live.
     const latest = rows.find((r) => r.slot === slot && r.status !== "SKIPPED");
     const failedLater = latest?.status === "FAILED" && (!live || latest.createdAt > live.createdAt);
+    const inTest = rows.find((r) => r.slot === slot && (r.status === "PENDING" || r.status === "TESTING"));
     return {
       slot,
       label: slotTitle(slot, customMaterials),
@@ -102,9 +127,11 @@ export async function getSlicerProfilesState(): Promise<SlicerProfilesState> {
             originalName: live.originalName,
             testGrams: live.testGrams,
             checkedAt: live.checkedAt?.toISOString() ?? null,
+            ...facts.get(live.id),
           }
         : null,
-      testing: rows.some((r) => r.slot === slot && (r.status === "PENDING" || r.status === "TESTING")),
+      testing: inTest !== undefined,
+      pending: inTest ? (facts.get(inTest.id) ?? {}) : null,
     };
   });
 

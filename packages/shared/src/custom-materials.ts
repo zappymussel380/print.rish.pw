@@ -89,6 +89,26 @@ export function genericLabel(name: OrcaGenericFilament): string {
 export const DENSITY_MIN = 0.5;
 export const DENSITY_MAX = 3;
 
+/** What the admin shows about a stored filament preset: its density, and the
+ *  generic it was started from (when it was). Reads the resolved preset when the
+ *  worker has written one — an exported preset may inherit its density — and
+ *  the upload as sent otherwise. */
+export function filamentPresetFacts(
+  raw: unknown,
+  flattened?: unknown,
+): { densityGcm3?: number; startedFrom?: OrcaGenericFilament } {
+  const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const own = obj(raw);
+  const resolved = obj(flattened);
+  const first = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+  const density = Number(first(resolved.filament_density ?? own.filament_density));
+  const inherits = own.inherits;
+  return {
+    ...(density >= DENSITY_MIN && density <= DENSITY_MAX ? { densityGcm3: density } : {}),
+    ...(typeof inherits === "string" && isOrcaGenericFilament(inherits) ? { startedFrom: inherits } : {}),
+  };
+}
+
 /** A filament preset that starts from an OrcaSlicer generic with the real
  *  density of the shop's filament (grams are density × volume, and the
  *  generics' own densities are often placeholders). It goes through the same

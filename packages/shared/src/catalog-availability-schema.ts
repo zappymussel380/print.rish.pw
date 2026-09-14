@@ -4,6 +4,7 @@ import { MATERIAL_COLOURS } from "./colours";
 import { MAX_CUSTOM_COLOURS, type CustomColour } from "./custom-colours";
 import { normalizeCustomColours } from "./custom-colours-schema";
 import { cleanCustomMaterialName } from "./custom-materials";
+import { CUSTOM_GUIDE_LIMITS, MATERIAL_GUIDE_KEYS, cleanCustomGuide } from "./material-guide";
 import type { CustomMaterialNames } from "./catalog";
 import { defaultAvailability, type Availability } from "./catalog-availability";
 
@@ -18,8 +19,9 @@ export const availabilitySchema = z.object({
   // Entries are hardened one by one in `normalizeCustomColours`; only the
   // length is bounded here so an oversized blob is refused outright.
   customColours: z.array(z.unknown()).max(MAX_CUSTOM_COLOURS).optional(),
-  // The shop's names for its own materials; hardened by cleanCustomMaterialName.
-  customMaterials: z.record(z.string(), z.object({ name: z.unknown() }).partial()).optional(),
+  // The shop's names for its own materials and their /materials copy; hardened
+  // by cleanCustomMaterialName and cleanCustomGuide.
+  customMaterials: z.record(z.string(), z.object({ name: z.unknown(), guide: z.unknown() }).partial()).optional(),
   // Offered layer heights (µm); anything else is dropped, none means all.
   layerHeights: z.array(z.unknown()).max(LAYER_HEIGHTS_UM.length * 2).optional(),
 });
@@ -61,22 +63,37 @@ export function normalizeAvailability(raw: unknown): Availability {
   return base;
 }
 
-/** Keep the names of the shop's own materials that are usable; drop the rest. */
+/** Keep the names of the shop's own materials that are usable, with their
+ *  /materials copy; drop the rest (copy goes with its name). */
 export function normalizeCustomMaterialNames(raw: unknown): CustomMaterialNames {
   const out: CustomMaterialNames = {};
   if (!raw || typeof raw !== "object") return out;
   for (const id of CUSTOM_MATERIAL_IDS) {
-    const name = cleanCustomMaterialName((raw as Record<string, { name?: unknown } | undefined>)[id]?.name);
-    if (name) out[id] = { name };
+    const entry = (raw as Record<string, { name?: unknown; guide?: unknown } | undefined>)[id];
+    const name = cleanCustomMaterialName(entry?.name);
+    if (!name) continue;
+    const guide = cleanCustomGuide(entry?.guide);
+    out[id] = guide ? { name, guide } : { name };
   }
   return out;
 }
 
-/** Admin: the names the owner typed for their own materials, one per slot. An
- *  empty string clears a name. Loose here; normalizeCustomMaterialNames and
- *  the route decide what is usable. */
-export const customMaterialNamesInputSchema = z.object({
-  // Partial: the editor saves one slot at a time (a zod 4 enum-keyed record
-  // would demand every slot).
-  names: z.partialRecord(z.enum(CUSTOM_MATERIAL_IDS), z.string().max(200)),
-});
+const guideText = z.string().max(Math.max(CUSTOM_GUIDE_LIMITS.subtitle, CUSTOM_GUIDE_LIMITS.row) * 2);
+
+/** Admin: the names the owner typed for their own materials, one per slot, and
+ *  the copy they wrote for /materials. An empty string clears a name; a guide of
+ *  blanks clears the copy. Loose here; normalizeCustomMaterialNames and the
+ *  route decide what is usable. */
+export const customMaterialNamesInputSchema = z
+  .object({
+    // Partial: the editor saves one slot at a time (a zod 4 enum-keyed record
+    // would demand every slot).
+    names: z.partialRecord(z.enum(CUSTOM_MATERIAL_IDS), z.string().max(200)).optional(),
+    guides: z
+      .partialRecord(
+        z.enum(CUSTOM_MATERIAL_IDS),
+        z.partialRecord(z.enum(MATERIAL_GUIDE_KEYS), guideText),
+      )
+      .optional(),
+  })
+  .refine((v) => v.names !== undefined || v.guides !== undefined);
