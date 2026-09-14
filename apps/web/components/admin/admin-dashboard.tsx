@@ -21,6 +21,7 @@ import {
   type PricingInput,
   type PublicMaterial,
   type RecentPrint,
+  type ShippingAdminView,
   type SiteProfile,
   type CustomMaterialNames,
 } from "@print/shared";
@@ -30,6 +31,7 @@ import { CustomMaterialsEditor } from "./custom-materials-editor";
 import { SlicerProfilesEditor } from "./slicer-profiles-editor";
 import type { SlicerProfilesState } from "@/lib/slicer-profiles";
 import { RatesEditor } from "./rates-editor";
+import { ShippingEditor } from "./shipping-editor";
 import { SiteEditor } from "./site-editor";
 import { ShowcaseEditor } from "./showcase-editor";
 
@@ -81,6 +83,7 @@ export function AdminDashboard({
   pricing,
   rates,
   siteProfile,
+  shipping,
   faq,
   recentPrints,
   slicerProfiles,
@@ -96,6 +99,7 @@ export function AdminDashboard({
   rates: Catalog;
   /** Null when the stored profile could not be read. */
   siteProfile: SiteProfile | null;
+  shipping: ShippingAdminView;
   faq: { generated: FaqEntry[]; settings: FaqSettings };
   recentPrints: RecentPrint[];
   /** Uploaded slicer presets: every open slot (the shop's own materials on any
@@ -221,6 +225,9 @@ export function AdminDashboard({
 
       {/* Shop name, contact details, materials page */}
       <SiteEditor profile={siteProfile} materialNames={materialNames} />
+
+      {/* Courier estimates on the quote page */}
+      <ShippingEditor initial={shipping} />
 
       {/* FAQ: hide generated answers, add the shop's own */}
       <FaqEditor generated={faq.generated} settings={faq.settings} />

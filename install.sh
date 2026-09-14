@@ -499,6 +499,7 @@ sec_integrations() {
     ask MAIL_TO "Send contact-form messages to" "${ANS[EMAIL]:-${CFG[MAIL_TO]:-}}" valid_email "Enter an email address."
     ask CONTACT_FROM_EMAIL "Send them from (an address on a domain verified in Resend)" "contact@${ANS[DOMAIN]}" valid_email "Enter an email address."
   fi
+  hint "Live courier prices can also be set up later, in the admin dashboard (Shipping)."
   if confirm "Show live courier shipping prices (needs a Shiprocket API user)?" N SHIPROCKET; then
     ask SHIPROCKET_EMAIL "Shiprocket API user email" "" valid_email "Enter an email address."
     ask_secret SHIPROCKET_PASSWORD "Shiprocket API user password (input hidden)"
@@ -892,10 +893,11 @@ changeable_later() {
   say "   • In the admin dashboard, any time:"
   say "       shop name, tagline, city, quotation initials, contact details and footer;"
   say "       per-gram rates, setup fee, your costs and lead time; which materials and"
-  say "       colours you offer; the Materials page, FAQ and showcase photos; and your"
-  say "       own OrcaSlicer presets if you skip the printer step."
+  say "       colours you offer; the Materials page, FAQ and showcase photos; live"
+  say "       courier prices (Shiprocket); and your own OrcaSlicer presets if you skip"
+  say "       the printer step."
   say "   • By running ${C_BOLD}sudo $ROOT_DIR/install.sh${C_OFF} again:"
-  say "       web address and HTTPS, admin password, printer, and email/shipping/Telegram."
+  say "       web address and HTTPS, admin password, printer, and email/Telegram."
   hint "So don't worry about getting everything perfect now."
 }
 

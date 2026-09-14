@@ -22,6 +22,7 @@ import { getStoredSiteProfile } from "@/lib/site-profile";
 import { getFaqSettings, getGeneratedFaq } from "@/lib/faq";
 import { getRecentPrints } from "@/lib/recent-prints";
 import { advancedProfilesEnabled } from "@/lib/printer";
+import { getShippingConfig, toAdminView } from "@/lib/shipping-settings";
 import { getSlicerProfilesState } from "@/lib/slicer-profiles";
 import { isAdmin } from "@/lib/session";
 
@@ -73,10 +74,11 @@ export default async function AdminPage() {
   const catalog = toPublicCatalog(storedAvailability, readyCustom);
   const recentPrints = await getRecentPrints();
   const siteProfile = await getStoredSiteProfile().catch(() => null);
-  const [faqGenerated, faqSettings, slicerProfiles] = await Promise.all([
+  const [faqGenerated, faqSettings, slicerProfiles, shipping] = await Promise.all([
     getGeneratedFaq(),
     getFaqSettings(),
     getSlicerProfilesState(),
+    getShippingConfig(),
   ]);
 
   return (
@@ -87,6 +89,7 @@ export default async function AdminPage() {
       pricing={toPricingInput(pricing)}
       rates={pricing.catalog}
       siteProfile={siteProfile}
+      shipping={toAdminView(shipping)}
       faq={{ generated: faqGenerated, settings: faqSettings }}
       slicerProfiles={slicerProfiles}
       advancedProfiles={advancedProfilesEnabled()}
