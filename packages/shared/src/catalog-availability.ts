@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { MATERIAL_IDS, type ColourId, type MaterialId } from "./quote-types";
 import { materialName } from "./catalog";
 import {
@@ -8,17 +7,14 @@ import {
   DEFAULT_ENABLED_MATERIALS,
   colourName,
 } from "./colours";
-import {
-  CUSTOM_COLOUR_GROUP,
-  MAX_CUSTOM_COLOURS,
-  normalizeCustomColours,
-  type CustomColour,
-} from "./custom-colours";
+import { CUSTOM_COLOUR_GROUP, type CustomColour } from "./custom-colours";
 
 /**
  * Runtime, admin-controlled availability of materials and colours, overlaid on
  * the static catalog. Persisted as a single JSON app setting; this module holds
- * only pure logic (no DB) so it is trivially testable and usable on the client.
+ * only pure logic (no DB) so it is trivially testable and usable on the client —
+ * and zod-free for the same reason: hardening a stored blob lives in
+ * catalog-availability-schema.ts.
  */
 export interface Availability {
   materials: Record<MaterialId, boolean>;
@@ -36,20 +32,6 @@ export const LEGACY_COLOUR_ALIAS: Record<string, ColourId> = {
   white: "pure-white",
 };
 
-/** Wire shape for a stored/submitted availability blob. Loose on purpose —
- *  `normalizeAvailability` is the single place that hardens it. */
-export const availabilitySchema = z.object({
-  // String keys (not a material enum) so a partial blob — e.g. colours for only
-  // one material — still parses; `normalizeAvailability` reads by known id and
-  // ignores anything else.
-  materials: z.record(z.string(), z.boolean()).optional(),
-  colours: z.record(z.string(), z.array(z.string())).optional(),
-  // Entries are hardened one by one in `normalizeCustomColours`; only the
-  // length is bounded here so an oversized blob is refused outright.
-  customColours: z.array(z.unknown()).max(MAX_CUSTOM_COLOURS).optional(),
-});
-export type AvailabilityInput = z.infer<typeof availabilitySchema>;
-
 /** The default when nothing is stored (or a stored blob predates a material):
  *  the basic materials on, premium tiers off, colours limited to the historically
  *  in-stock set. */
@@ -61,36 +43,6 @@ export function defaultAvailability(): Availability {
     colours[m] = [...DEFAULT_ENABLED_COLOURS[m]];
   }
   return { materials, colours, customColours: [] };
-}
-
-/** Every colour id a material can offer: its palette, then its custom colours. */
-function colourUniverse(material: MaterialId, customs: readonly CustomColour[]): string[] {
-  return [
-    ...MATERIAL_COLOURS[material],
-    ...customs.filter((c) => c.material === material).map((c) => c.id),
-  ];
-}
-
-/** Harden arbitrary/stored input into a valid Availability: fill missing keys
- *  from defaults, drop unknown materials, and drop any colour that isn't part of
- *  that material's real palette or its custom colours. */
-export function normalizeAvailability(raw: unknown): Availability {
-  const base = defaultAvailability();
-  const parsed = availabilitySchema.safeParse(raw ?? {});
-  if (!parsed.success) return base;
-
-  base.customColours = normalizeCustomColours(parsed.data.customColours);
-  for (const m of MATERIAL_IDS) {
-    const enabled = parsed.data.materials?.[m];
-    if (typeof enabled === "boolean") base.materials[m] = enabled;
-
-    const rawColours = parsed.data.colours?.[m];
-    if (Array.isArray(rawColours)) {
-      const universe = new Set(colourUniverse(m, base.customColours));
-      base.colours[m] = [...new Set(rawColours.filter((c) => universe.has(c)))];
-    }
-  }
-  return base;
 }
 
 export function isMaterialEnabled(avail: Availability, material: MaterialId): boolean {

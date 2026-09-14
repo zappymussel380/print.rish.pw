@@ -1,17 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { COLOUR_IDS, MATERIAL_IDS, modelConfigSchema, DEFAULT_MODEL_CONFIG } from "./quote-types";
-import {
-  MAX_CUSTOM_COLOURS,
-  isCustomColourId,
-  newCustomColourId,
-  normalizeCustomColours,
-} from "./custom-colours";
-import {
-  assertConfigAvailable,
-  normalizeAvailability,
-  resolveColourName,
-  toPublicCatalog,
-} from "./catalog-availability";
+import { COLOUR_IDS, MATERIAL_IDS, DEFAULT_MODEL_CONFIG } from "./quote-types";
+import { modelConfigSchema } from "./quote-schema";
+import { MAX_CUSTOM_COLOURS, isCustomColourId, newCustomColourId } from "./custom-colours";
+import { normalizeCustomColours } from "./custom-colours-schema";
+import { assertConfigAvailable, resolveColourName, toPublicCatalog } from "./catalog-availability";
+import { normalizeAvailability } from "./catalog-availability-schema";
 import { MATERIAL_COLOURS } from "./colours";
 import { filamentLine } from "./costs";
 import { materialFamily } from "./catalog";

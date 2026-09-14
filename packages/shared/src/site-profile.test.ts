@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MATERIAL_IDS } from "./quote-types";
 import { MATERIAL_GUIDE, MATERIAL_GUIDE_ROWS } from "./material-guide";
-import {
-  DEFAULT_SITE_PROFILE,
-  findSiteProfileIssues,
-  listJoin,
-  normalizeSiteProfile,
-  splitBrand,
-} from "./site-profile";
+import { DEFAULT_SITE_PROFILE, listJoin, splitBrand } from "./site-profile";
+import { findSiteProfileIssues, normalizeSiteProfile } from "./site-profile-schema";
 
 describe("normalizeSiteProfile", () => {
   it("reproduces print.rish.pw exactly when nothing is stored", () => {
