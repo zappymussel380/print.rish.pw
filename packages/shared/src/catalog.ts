@@ -1,5 +1,6 @@
 import type { BoundingBoxMm, ColourId, CustomMaterialId, MaterialId } from "./quote-types";
 import { MATERIAL_COLOURS } from "./colours";
+import type { CustomMaterialGuide } from "./material-guide";
 
 /**
  * Business configuration: printers, materials, rates.
@@ -147,8 +148,9 @@ export function materialName(id: string, custom?: CustomMaterialNames): string {
   return id in CATALOG.materials ? CATALOG.materials[id as MaterialId].name : id;
 }
 
-/** The shop's names for its own materials, as stored with catalog availability. */
-export type CustomMaterialNames = Partial<Record<CustomMaterialId, { name: string }>>;
+/** The shop's names for its own materials, as stored with catalog availability,
+ *  with the copy the owner wrote for /materials, if any. */
+export type CustomMaterialNames = Partial<Record<CustomMaterialId, { name: string; guide?: CustomMaterialGuide }>>;
 
 /** The base polymer a material tier is made of. Tiers of one family share its
  *  handling (print temperatures, reported weight splits, 3MF import). */
