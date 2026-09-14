@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CUSTOM_MATERIAL_IDS, MATERIAL_IDS, type MaterialId } from "./quote-types";
+import { CUSTOM_MATERIAL_IDS, LAYER_HEIGHTS_UM, MATERIAL_IDS, type MaterialId } from "./quote-types";
 import { MATERIAL_COLOURS } from "./colours";
 import { MAX_CUSTOM_COLOURS, type CustomColour } from "./custom-colours";
 import { normalizeCustomColours } from "./custom-colours-schema";
@@ -22,6 +22,8 @@ export const availabilitySchema = z.object({
   // The shop's names for its own materials and their /materials copy; hardened
   // by cleanCustomMaterialName and cleanCustomGuide.
   customMaterials: z.record(z.string(), z.object({ name: z.unknown(), guide: z.unknown() }).partial()).optional(),
+  // Offered layer heights (µm); anything else is dropped, none means all.
+  layerHeights: z.array(z.unknown()).max(LAYER_HEIGHTS_UM.length * 2).optional(),
 });
 export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 
@@ -43,6 +45,11 @@ export function normalizeAvailability(raw: unknown): Availability {
 
   base.customColours = normalizeCustomColours(parsed.data.customColours);
   base.customMaterials = normalizeCustomMaterialNames(parsed.data.customMaterials);
+  const heights = parsed.data.layerHeights;
+  if (heights) {
+    const offered = LAYER_HEIGHTS_UM.filter((um) => heights.includes(um));
+    if (offered.length > 0) base.layerHeights = offered;
+  }
   for (const m of MATERIAL_IDS) {
     const enabled = parsed.data.materials?.[m];
     if (typeof enabled === "boolean") base.materials[m] = enabled;

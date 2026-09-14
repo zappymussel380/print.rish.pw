@@ -89,7 +89,7 @@ async function rebuildTotals(
     const { modelId, ...rawConfig } = line;
     const model = await prisma.uploadedModel.findFirst({ where: { id: modelId, sessionId } });
     if (!model) return null;
-    const config = normalizeModelConfigLocks(rawConfig, model);
+    const config = normalizeModelConfigLocks(rawConfig, model, availability.layerHeights);
     if (!assertConfigAvailable(config, availability).ok) return null;
     const lineKey = `${modelId}::${settingsKey(config)}`;
     if (seen.has(lineKey)) continue;

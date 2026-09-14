@@ -13,10 +13,21 @@ const ctx: FaqContext = {
   courierQuotes: true,
   retention: { uploadHours: 48, fileDays: 30 },
   contactChannel: "WhatsApp",
+  layerHeights: [120, 160, 200],
 };
 const answer = (c: FaqContext, id: string) => buildFaq(c).find((e) => e.id === id)?.a ?? "";
 
 describe("buildFaq", () => {
+  it("talks only about the layer heights on offer, and reads as before with all three", () => {
+    expect(answer(ctx, "layer-lines")).toBe(
+      "Yes — every FDM print has them; they're the nature of the process. At 0.12 mm layer height they're subtle and mostly disappear at arm's length. Choose 0.12 mm for display pieces and 0.20 mm for functional parts where speed and price matter more.",
+    );
+    expect(answer({ ...ctx, layerHeights: [160, 200] }, "layer-lines")).toContain("Choose 0.16 mm for display pieces and 0.20 mm");
+    const one = answer({ ...ctx, layerHeights: [200] }, "layer-lines");
+    expect(one).toContain("Every part is printed at 0.20 mm layers.");
+    expect(one).not.toMatch(/0\.12|0\.16/);
+  });
+
   it("answers from the shop's own settings", () => {
     expect(answer(ctx, "materials")).toContain("Right now: PLA and PETG.");
     expect(answer(ctx, "colours")).toContain("12 colours across PLA and PETG");

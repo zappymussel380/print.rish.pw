@@ -48,12 +48,13 @@ export async function POST(request: NextRequest) {
     where: { id: modelId, sessionId },
   });
   if (!model) return jsonError(404, "NOT_FOUND", "Model not found in this session");
-  const settings = normalizeModelConfigLocks(parsed.data, model);
+  const availability = await getCatalogAvailability();
+  const settings = normalizeModelConfigLocks(parsed.data, model, availability.layerHeights);
 
-  // Don't spend the worker on a material that's been turned off. Colour isn't a
-  // slice setting, so only the material is checked here.
-  const material = assertConfigAvailable(settings, await getCatalogAvailability());
-  if (!material.ok) return jsonError(422, material.code, material.message);
+  // Don't spend the worker on a material or layer height that's been turned
+  // off. Colour isn't a slice setting, so it isn't checked here.
+  const available = assertConfigAvailable(settings, availability);
+  if (!available.ok) return jsonError(422, available.code, available.message);
 
   const key = sliceArtifactKey(model.format as "stl" | "3mf" | "obj" | "amf", settings, (await getPrinterProfile()).id);
 
