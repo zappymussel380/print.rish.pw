@@ -5,6 +5,7 @@ import { chmod, chown, mkdir, open, readFile, readdir, rm, writeFile } from "nod
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { extractZipEntry, PREARRANGED_PLATE_STL_HEADER } from "@print/geometry";
+import { supportGramsOf } from "./gcode-support";
 import type { SliceSettings } from "@print/shared";
 import { BASE_PROFILE_SET, config, filamentProfile, processProfile, type ProfileSet } from "./config.js";
 import { runStubSlice } from "./stub-slicer.js";
@@ -41,6 +42,8 @@ export interface SlicerInput {
 const MAX_SLICER_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_SLICER_RESULT_BYTES = 64 * 1024;
 const MAX_SLICE_INFO_BYTES = 512 * 1024;
+/** G-code read back only to measure supports; a bigger plate just goes unmeasured. */
+const MAX_GCODE_BYTES = 256 * 1024 * 1024;
 const MAX_ORCA_LOG_BYTES = 4 * 1024 * 1024;
 /** Kept small: this rides along in every successful slice's stored metadata. */
 const ORCA_LOG_TAIL_CHARS = 2000;
@@ -712,8 +715,9 @@ function parseSliceInfo(archive: Uint8Array, run: RunResult, logTail = ""): Slic
     filamentGrams: grams,
     filamentMm: metres * 1000,
     printSeconds: Math.round(seconds),
-    // Orca reports only a boolean for supports, not a separate gram figure.
-    supportGrams: null,
+    // slice_info's support_used only says supports were enabled, so measure
+    // what was actually generated from the plate's G-code.
+    supportGrams: supportUsed === "true" ? measureSupportGrams(archive, grams) : 0,
     slicerVersion: version,
     rawMeta: {
       prediction,
@@ -725,6 +729,20 @@ function parseSliceInfo(archive: Uint8Array, run: RunResult, logTail = ""): Slic
       ...(logTail ? { logTail } : {}),
     },
   };
+}
+
+/** Grams of supports the slice generated, from the G-code inside the output
+ *  3MF; null when it can't be read (never fails the slice). */
+function measureSupportGrams(archive: Uint8Array, filamentGrams: number): number | null {
+  try {
+    const gcode = extractZipEntry(Buffer.from(archive), (name) => /^Metadata\/plate_\d+\.gcode$/.test(name), {
+      maxEntryBytes: MAX_GCODE_BYTES,
+      maxExtractedBytes: MAX_GCODE_BYTES,
+    });
+    return gcode ? supportGramsOf(gcode.toString("latin1"), filamentGrams) : null;
+  } catch {
+    return null;
+  }
 }
 
 function num(v: string | undefined): number | undefined {

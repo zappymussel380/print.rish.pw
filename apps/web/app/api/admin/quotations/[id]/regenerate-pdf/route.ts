@@ -47,6 +47,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     layerHeightUm: item.layerHeightUm,
     infillPct: item.infillPct,
     supports: item.supports.toLowerCase() as SupportMode,
+    supportGrams: item.sliceResult?.supportGrams == null ? null : Number(item.sliceResult.supportGrams),
     quantity: item.quantity,
     totalGrams: Number(item.unitGrams) * item.quantity,
     totalPrintSeconds: item.unitPrintSeconds * item.quantity,

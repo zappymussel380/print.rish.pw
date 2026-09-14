@@ -9,6 +9,7 @@ import {
   formatPaise,
   priceLine,
   settingsKey,
+  type SupportMode,
 } from "@print/shared";
 import { formatDimensions, formatBytes, formatVolume } from "@/lib/format";
 import {
@@ -177,7 +178,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
                 )}
               </div>
 
-              <SliceStatsRow slice={slice} line={line} />
+              <SliceStatsRow slice={slice} line={line} supports={model.config.supports} />
 
               <div className="mt-5 border-t border-line pt-5">
                 <SettingsPanel
@@ -232,12 +233,22 @@ function UploadProgress({ progress }: { progress: number }) {
 function SliceStatsRow({
   slice,
   line,
+  supports,
 }: {
   slice: ReturnType<typeof useQuoteStore.getState>["slices"][string] | undefined;
   line: ReturnType<typeof priceLine> | null;
+  supports: SupportMode;
 }) {
   const pending = !slice || !["done", "failed"].includes(slice.status);
   const failed = slice?.status === "failed";
+  // What the slicer did about supports: they're filament the customer pays for.
+  const supportGrams = slice?.status === "done" ? slice.result?.supportGrams : undefined;
+  const supportNote =
+    line && supports !== "off" && supportGrams != null
+      ? supportGrams > 0
+        ? `Includes about ${formatGrams(supportGrams)} of supports per print, which the slicer added under overhangs.`
+        : "No supports needed for this part."
+      : null;
 
   return (
     <div className="mt-4 grid grid-cols-3 gap-3" aria-live="polite">
@@ -250,6 +261,7 @@ function SliceStatsRow({
       <Stat icon={<IndianRupee strokeWidth={1.65} className="h-4 w-4" />} label="Line price">
         {failed ? "—" : line ? formatPaise(line.subtotalPaise) : <Skel />}
       </Stat>
+      {supportNote ? <p className="col-span-3 -mt-1 text-xs text-faint">{supportNote}</p> : null}
       {pending && !failed && (
         <SliceProgress progress={slice?.progress} />
       )}
