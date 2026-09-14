@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  MATERIAL_GUIDE,
-  MATERIAL_GUIDE_ROWS,
-  listJoin,
-  materialName,
-  type StockMaterialId,
-} from "@print/shared";
+import { MATERIAL_GUIDE_ROWS, listJoin, materialsPageEntries } from "@print/shared";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
 import { getSiteProfile } from "@/lib/site-profile";
 
@@ -16,19 +11,25 @@ function orJoin(items: readonly string[]): string {
   return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
 }
 
+/** The materials the shop picked (admin → Site), with their copy — the shop's
+ *  own materials' copy is the owner's. */
+async function shownMaterials() {
+  const [{ materialsPage }, { customMaterials }] = await Promise.all([getSiteProfile(), getCatalogAvailability()]);
+  return materialsPageEntries(materialsPage, customMaterials);
+}
+
 export async function generateMetadata(): Promise<Metadata> {
-  const { materialsPage } = await getSiteProfile();
+  const names = (await shownMaterials()).map((m) => m.name);
   return {
     title: "Materials",
-    description: `${materialsPage.length === 2 ? materialsPage.map((m) => materialName(m)).join(" vs ") : listJoin(materialsPage.map((m) => materialName(m)))} compared: strength, flexibility, temperature and UV resistance, print quality and what to use each for.`,
+    description: `${names.length === 2 ? names.join(" vs ") : listJoin(names)} compared: strength, flexibility, temperature and UV resistance, print quality and what to use each for.`,
   };
 }
 
 /** The shop chooses which materials this page compares (admin → Site). */
 export default async function MaterialsPage() {
-  const [{ materialsPage }, { catalog }] = await Promise.all([getSiteProfile(), getPricing()]);
-  const shown: StockMaterialId[] = materialsPage;
-  const names = shown.map((m) => materialName(m));
+  const [shown, { catalog }] = await Promise.all([shownMaterials(), getPricing()]);
+  const names = shown.map((m) => m.name);
   const printer = catalog.printers[catalog.defaultPrinterId]!.name;
   const pair = shown.length === 2;
 
@@ -53,7 +54,7 @@ export default async function MaterialsPage() {
               <div className={`mt-4 grid gap-4 ${pair ? "min-[520px]:grid-cols-2" : ""}`}>
                 {shown.map((m, i) => (
                   <section
-                    key={m}
+                    key={m.id}
                     className={`min-w-0 ${
                       i === 0
                         ? ""
@@ -62,8 +63,8 @@ export default async function MaterialsPage() {
                           : "border-t border-line pt-4"
                     }`}
                   >
-                    <h3 className="chip chip-accent w-fit">{materialName(m)}</h3>
-                    <p className="mt-2 text-sm leading-6 text-muted">{MATERIAL_GUIDE[m][row.key]}</p>
+                    <h3 className="chip chip-accent w-fit">{m.name}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted">{m.guide[row.key]}</p>
                   </section>
                 ))}
               </div>
@@ -88,11 +89,9 @@ export default async function MaterialsPage() {
                 <span className="eyebrow text-[0.7rem]">Property</span>
               </th>
               {shown.map((m) => (
-                <th key={m} scope="col" className="tile rounded-b-none border-b-0 p-4 text-left">
-                  <span className="text-base font-[650]">{materialName(m)}</span>
-                  <span className="mt-1 block text-xs font-[450] text-muted">
-                    {MATERIAL_GUIDE[m].subtitle}
-                  </span>
+                <th key={m.id} scope="col" className="tile rounded-b-none border-b-0 p-4 text-left">
+                  <span className="text-base font-[650]">{m.name}</span>
+                  <span className="mt-1 block text-xs font-[450] text-muted">{m.guide.subtitle}</span>
                 </th>
               ))}
             </tr>
@@ -104,8 +103,8 @@ export default async function MaterialsPage() {
                   {row.label}
                 </th>
                 {shown.map((m) => (
-                  <td key={m} className="border-x border-line bg-surface p-4 align-top leading-6 text-muted">
-                    {MATERIAL_GUIDE[m][row.key]}
+                  <td key={m.id} className="border-x border-line bg-surface p-4 align-top leading-6 text-muted">
+                    {m.guide[row.key]}
                   </td>
                 ))}
               </tr>
@@ -116,7 +115,7 @@ export default async function MaterialsPage() {
 
       <div className="mx-auto mt-12 max-w-4xl text-sm leading-7 text-muted">
         <p>
-          {shown.includes("PLA") && shown.includes("PETG") ? (
+          {shown.some((m) => m.id === "PLA") && shown.some((m) => m.id === "PETG") ? (
             <>
               Rule of thumb: if it&apos;s decorative or a prototype, choose{" "}
               <strong className="text-text">PLA</strong>. If it clamps, carries load, lives outside or

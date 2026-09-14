@@ -33,6 +33,7 @@ vi.mock("@/lib/security", () => ({ assertSameOrigin: () => true }));
 
 const catalogRoute = await import("@/app/api/admin/catalog/route");
 const namesRoute = await import("@/app/api/admin/custom-materials/route");
+const siteRoute = await import("@/app/api/admin/site/route");
 const { getCatalogAvailability } = await import("@/lib/catalog-availability");
 
 const req = () => ({}) as unknown as NextRequest;
@@ -108,5 +109,62 @@ describe("what customers get", () => {
     db.live = [{ slot: "filament:OTHER_2" }];
     const offered = await getCatalogAvailability();
     expect(offered.materials).toMatchObject({ PLA: true, OTHER_1: false, OTHER_2: true });
+  });
+});
+
+describe("their copy for /materials", () => {
+  const named = () => ({ materials: { PLA: true }, customMaterials: { OTHER_1: { name: "PA-CF" } } });
+  const stored = () => (db.stored as { customMaterials: Record<string, { name: string; guide?: object }> }).customMaterials;
+
+  it("saves tidied copy for a named material, and a rename keeps it", async () => {
+    db.stored = named();
+    body({ guides: { OTHER_1: { subtitle: "  Carbon-fibre   nylon ", strength: "Very stiff.", uv: "   " } } });
+    expect((await namesRoute.PUT(req())).status).toBe(200);
+    expect(stored().OTHER_1).toEqual({ name: "PA-CF", guide: { subtitle: "Carbon-fibre nylon", strength: "Very stiff." } });
+
+    body({ names: { OTHER_1: "PA12-CF" } });
+    expect((await namesRoute.PUT(req())).status).toBe(200);
+    expect(stored().OTHER_1).toEqual({ name: "PA12-CF", guide: { subtitle: "Carbon-fibre nylon", strength: "Very stiff." } });
+  });
+
+  it("blank copy clears it; clearing the name drops it too", async () => {
+    db.stored = { ...named(), customMaterials: { OTHER_1: { name: "PA-CF", guide: { strength: "Stiff." } } } };
+    body({ guides: { OTHER_1: { strength: " " } } });
+    expect((await namesRoute.PUT(req())).status).toBe(200);
+    expect(stored().OTHER_1).toEqual({ name: "PA-CF" });
+
+    db.stored = { ...named(), customMaterials: { OTHER_1: { name: "PA-CF", guide: { strength: "Stiff." } } } };
+    body({ names: { OTHER_1: "" } });
+    expect((await namesRoute.PUT(req())).status).toBe(200);
+    expect(stored()).toEqual({});
+  });
+
+  it("needs the material named first, and bounded rows", async () => {
+    db.stored = named();
+    body({ guides: { OTHER_2: { strength: "Stiff." } } });
+    let res = await namesRoute.PUT(req());
+    expect(res.status).toBe(422);
+    expect((await error(res)).message).toMatch(/^Other material 2: name it first/);
+
+    body({ guides: { OTHER_1: { strength: "x".repeat(301) } } });
+    res = await namesRoute.PUT(req());
+    expect(res.status).toBe(422);
+    expect(db.upsert).not.toHaveBeenCalled();
+  });
+
+  it("Site can put one on /materials only once it has copy", async () => {
+    const profile = { brandName: "Acme", materialsPage: ["PLA", "OTHER_1"] };
+    db.stored = named();
+    body(profile);
+    let res = await siteRoute.PUT(req());
+    expect(res.status).toBe(422);
+    expect(await error(res)).toMatchObject({ code: "NO_MATERIAL_COPY", message: expect.stringMatching(/^PA-CF: write its materials page text/) });
+    expect(db.upsert).not.toHaveBeenCalled();
+
+    db.stored = { ...named(), customMaterials: { OTHER_1: { name: "PA-CF", guide: { strength: "Stiff." } } } };
+    body(profile);
+    res = await siteRoute.PUT(req());
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { materialsPage: string[] }).materialsPage).toEqual(["PLA", "OTHER_1"]);
   });
 });

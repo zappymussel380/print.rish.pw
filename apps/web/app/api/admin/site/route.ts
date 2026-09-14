@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { findSiteProfileIssues, siteProfileInputSchema } from "@print/shared";
+import { findSiteProfileIssues, hasCustomGuide, isCustomMaterial, materialName, siteProfileInputSchema } from "@print/shared";
 import { jsonError, readJsonBody, requireAdminApi } from "@/lib/api-util";
 import { assertSameOrigin } from "@/lib/security";
+import { getStoredCatalogAvailability } from "@/lib/catalog-availability";
 import { getStoredSiteProfile, saveSiteProfile } from "@/lib/site-profile";
 
 export const runtime = "nodejs";
@@ -31,6 +32,17 @@ export async function PUT(request: NextRequest) {
   const issues = findSiteProfileIssues(parsed.data);
   if (issues.length > 0) {
     return jsonError(422, "INVALID_FIELDS", `Check these fields: ${issues.join(", ")}`);
+  }
+  // The shop's own materials go on /materials only with a name and copy.
+  // (findSiteProfileIssues has checked the list holds material ids.)
+  const own = Array.isArray(parsed.data.materialsPage) ? (parsed.data.materialsPage as string[]).filter(isCustomMaterial) : [];
+  if (own.length > 0) {
+    const { customMaterials } = await getStoredCatalogAvailability();
+    const bare = own.filter((m) => !hasCustomGuide(customMaterials, m));
+    if (bare.length > 0) {
+      const which = bare.map((m) => materialName(m, customMaterials)).join(", ");
+      return jsonError(422, "NO_MATERIAL_COPY", `${which}: write its materials page text in Your own materials first.`);
+    }
   }
   return NextResponse.json(await saveSiteProfile(parsed.data));
 }

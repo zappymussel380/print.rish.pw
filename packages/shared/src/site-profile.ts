@@ -1,4 +1,4 @@
-import type { StockMaterialId } from "./quote-types";
+import type { MaterialId } from "./quote-types";
 import { DEFAULT_QUOTATION_PREFIX } from "./quotation-number";
 
 // Zod-free on purpose: the site header and context use this on every page.
@@ -28,8 +28,9 @@ export interface SiteProfile {
   };
   /** Small print in the footer. Plain text; a bare domain in it is linked. */
   footerNote: string;
-  /** Materials explained on /materials, in display order. */
-  materialsPage: StockMaterialId[];
+  /** Materials explained on /materials, in display order. The shop's own
+   *  materials can be among them once the owner has written their copy. */
+  materialsPage: MaterialId[];
   /** Initials that start every quotation number (2–5 capital letters). */
   quotationPrefix: string;
 }
