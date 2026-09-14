@@ -202,7 +202,7 @@ export function CustomMaterialsEditor({
                   {material?.enabled && material.setup?.ready ? <span> · on sale</span> : null}
                 </p>
                 {slot?.lastError ? (
-                  <p className="text-xs text-accent" role="alert">
+                  <p className="text-xs text-danger" role="alert">
                     The last profile didn&apos;t pass, so nothing changed: {slot.lastError}
                   </p>
                 ) : null}
@@ -251,7 +251,7 @@ export function CustomMaterialsEditor({
                 )}
 
                 {errors[id] ? (
-                  <p className="text-xs text-accent" role="alert">
+                  <p className="text-xs text-danger" role="alert">
                     {errors[id]}
                   </p>
                 ) : null}

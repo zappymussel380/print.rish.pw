@@ -279,7 +279,7 @@ export function ShowcaseEditor({
         </div>
 
         {error && (
-          <p className="text-xs text-accent" role="alert">
+          <p className="text-xs text-danger" role="alert">
             {error}
           </p>
         )}

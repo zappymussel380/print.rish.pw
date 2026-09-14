@@ -167,7 +167,7 @@ export function ContactForm() {
             </div>
           )}
           {emailNote && (
-            <p className="mt-1.5 text-xs text-accent" role="alert">
+            <p className="mt-1.5 text-xs text-danger" role="alert">
               {emailNote}
             </p>
           )}
@@ -203,7 +203,7 @@ export function ContactForm() {
       </Field>
 
       {status === "error" && error && (
-        <p className="mt-4 text-sm text-accent" role="alert">
+        <p className="mt-4 text-sm text-danger" role="alert">
           {error}
         </p>
       )}

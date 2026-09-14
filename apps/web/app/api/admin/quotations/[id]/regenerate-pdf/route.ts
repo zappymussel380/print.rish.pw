@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@print/db";
-import type { MaterialId, SupportMode } from "@print/shared";
+import { ACCENTS, type MaterialId, type SupportMode } from "@print/shared";
 import { jsonError, requireAdminApi } from "@/lib/api-util";
 import { env } from "@/lib/env";
 import { buildAnnexure } from "@/lib/pdf/annexure-data";
@@ -82,8 +82,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   try {
     await ensureStorageDirs();
+    const { brandName, accent } = await getSiteProfile();
     const pdf = await renderQuotationPdf({
-      brandName: (await getSiteProfile()).brandName,
+      brandName,
+      accent: ACCENTS[accent].pdf,
       printer: await getPrinterProfile(),
       number: quotation.number,
       createdAt: quotation.createdAt,

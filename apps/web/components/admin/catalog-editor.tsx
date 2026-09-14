@@ -467,7 +467,7 @@ function CustomColours({
           aria-invalid={!hexTextValid}
           spellCheck={false}
           className={`input-base w-24 py-1.5 font-mono text-sm ${
-            hexTextValid ? "" : "border-[var(--accent)]"
+            hexTextValid ? "" : "border-[var(--danger)]"
           }`}
         />
         <button type="button" onClick={submit} disabled={!valid} className="btn-ghost text-sm disabled:opacity-40">

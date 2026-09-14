@@ -29,7 +29,7 @@ export function ClearQuoteButton() {
           type="button"
           onClick={onClear}
           disabled={pending}
-          className="font-[650] text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          className="font-[650] text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           Yes, clear
         </button>
@@ -51,7 +51,7 @@ export function ClearQuoteButton() {
       disabled={pending}
       title={pending ? "Available after model checking finishes" : undefined}
       aria-label={pending ? "Clear quote unavailable while models are processing" : undefined}
-      className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
     >
       <RotateCcw strokeWidth={1.65} className="size-4" />
       Clear quote

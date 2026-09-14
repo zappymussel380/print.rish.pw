@@ -9,6 +9,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import {
+  ACCENTS,
   colourName,
   formatDuration,
   formatGrams,
@@ -83,6 +84,8 @@ export interface PdfAnnexure {
 export interface QuotationPdfData {
   /** The shop's name (SiteProfile.brandName) for the letterhead and footer. */
   brandName: string;
+  /** The site's accent for print (`ACCENTS[id].pdf`); the original coral when omitted. */
+  accent?: string;
   number: string;
   createdAt: Date;
   customer: { name: string; email: string; phone: string; city: string; notes: string };
@@ -98,7 +101,7 @@ export interface QuotationPdfData {
   printer?: PdfPrinter;
 }
 
-const ACCENT = "#ff5555";
+const DEFAULT_ACCENT = ACCENTS.red.pdf;
 const INK = "#111111";
 const MUTED = "#6b6b6b";
 const LINE = "#e2e2e2";
@@ -108,10 +111,9 @@ const s = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   wordmark: { fontFamily: "Helvetica-Bold", fontSize: 15 },
   wordmarkCompact: { fontFamily: "Helvetica-Bold", fontSize: 10 },
-  accent: { color: ACCENT },
   docTitle: { fontFamily: "Helvetica-Bold", fontSize: 20, marginBottom: 2 },
   metaRight: { textAlign: "right", color: MUTED, fontSize: 9 },
-  rule: { height: 2, backgroundColor: ACCENT, width: 46, marginTop: 14, marginBottom: 20 },
+  rule: { height: 2, width: 46, marginTop: 14, marginBottom: 20 },
   sectionLabel: { fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.4, color: MUTED, textTransform: "uppercase", marginBottom: 6 },
   twoCol: { flexDirection: "row", justifyContent: "space-between", marginBottom: 22 },
   col: { width: "48%" },
@@ -128,7 +130,7 @@ const s = StyleSheet.create({
   totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
   grandRow: { flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: INK, marginTop: 6, paddingTop: 8 },
   grandLabel: { fontFamily: "Helvetica-Bold", fontSize: 12 },
-  grandValue: { fontFamily: "Helvetica-Bold", fontSize: 12, color: ACCENT },
+  grandValue: { fontFamily: "Helvetica-Bold", fontSize: 12 },
   footer: { position: "absolute", bottom: 30, left: 44, right: 44, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 10, color: MUTED, fontSize: 7.5, lineHeight: 1.4 },
   annexTitle: { fontFamily: "Helvetica-Bold", fontSize: 14 },
   thumbBox: { borderWidth: 1, borderColor: LINE, height: 250, alignItems: "center", justifyContent: "center", padding: 8, marginTop: 16, marginBottom: 20 },
@@ -140,14 +142,14 @@ const fmtDate = (d: Date) =>
 
 /** Site wordmark, mirroring the web header: printer mark + the shop's name,
  *  its first part in the accent colour. */
-function Letterhead({ brandName, compact = false }: { brandName: string; compact?: boolean }) {
+function Letterhead({ brandName, accent, compact = false }: { brandName: string; accent: string; compact?: boolean }) {
   const brand = splitBrand(brandName);
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <PrinterMarkPdf size={compact ? 15 : 22} />
+      <PrinterMarkPdf size={compact ? 15 : 22} color={accent} />
       <View style={{ marginLeft: 6 }}>
         <Text style={compact ? s.wordmarkCompact : s.wordmark}>
-          <Text style={s.accent}>{brand.accent}</Text>
+          <Text style={{ color: accent }}>{brand.accent}</Text>
           {brand.rest}
         </Text>
         {!compact && <Text style={{ color: MUTED, marginTop: 2 }}>Instant 3D-printing quotation</Text>}
@@ -195,6 +197,7 @@ function AnnexurePage({
   number,
   createdAt,
   brandName,
+  accent,
   printer,
 }: {
   annexure: PdfAnnexure;
@@ -203,13 +206,14 @@ function AnnexurePage({
   number: string;
   createdAt: Date;
   brandName: string;
+  accent: string;
   printer: PdfPrinter;
 }) {
   const { geometry, settings, slicer, pricing } = annexure;
   return (
     <Page size="A4" style={s.page}>
       <View style={s.headerRow}>
-        <Letterhead brandName={brandName} compact />
+        <Letterhead brandName={brandName} accent={accent} compact />
         <View style={s.metaRight}>
           <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11, color: INK }}>
             Annexure {index + 1} of {total}
@@ -218,7 +222,7 @@ function AnnexurePage({
           <Text>{fmtDate(createdAt)}</Text>
         </View>
       </View>
-      <View style={s.rule} />
+      <View style={[s.rule, { backgroundColor: accent }]} />
 
       <Text style={s.annexTitle}>{annexure.fileName}</Text>
       <Text style={{ color: MUTED, marginTop: 2 }}>
@@ -270,7 +274,7 @@ function AnnexurePage({
           </Text>
           <View style={s.grandRow}>
             <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>Line total</Text>
-            <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10, color: ACCENT }}>
+            <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10, color: accent }}>
               {money(pricing.subtotalPaise)}
             </Text>
           </View>
@@ -284,18 +288,19 @@ function AnnexurePage({
 
 function QuotationDocument({ data }: { data: QuotationPdfData }) {
   const printer = data.printer ?? getPrinterSpec();
+  const accent = data.accent ?? DEFAULT_ACCENT;
   return (
     <Document title={`Quotation ${data.number}`} author={data.brandName}>
       <Page size="A4" style={s.page}>
         <View style={s.headerRow}>
-          <Letterhead brandName={data.brandName} />
+          <Letterhead brandName={data.brandName} accent={accent} />
           <View style={s.metaRight}>
             <Text style={s.docTitle}>Quotation</Text>
             <Text style={{ fontFamily: "Helvetica-Bold", color: INK }}>{data.number}</Text>
             <Text>{fmtDate(data.createdAt)}</Text>
           </View>
         </View>
-        <View style={s.rule} />
+        <View style={[s.rule, { backgroundColor: accent }]} />
 
         <View style={s.twoCol}>
           <View style={s.col}>
@@ -359,7 +364,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           </View>
           <View style={s.grandRow}>
             <Text style={s.grandLabel}>Total</Text>
-            <Text style={s.grandValue}>{money(data.totalPaise)}</Text>
+            <Text style={[s.grandValue, { color: accent }]}>{money(data.totalPaise)}</Text>
           </View>
         </View>
 
@@ -381,6 +386,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
           number={data.number}
           createdAt={data.createdAt}
           brandName={data.brandName}
+          accent={accent}
           printer={printer}
         />
       ))}

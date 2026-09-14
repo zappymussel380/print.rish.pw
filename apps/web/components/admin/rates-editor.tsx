@@ -220,7 +220,7 @@ export function RatesEditor({
                           setDirty(true);
                         }}
                         className={`input-base w-24 px-2 py-1.5 text-right text-sm tabular-nums ${
-                          bad ? "border-[var(--accent)]" : ""
+                          bad ? "border-[var(--danger)]" : ""
                         }`}
                       />
                       {f.suffix ? <span className="w-24 text-xs text-faint">{f.suffix}</span> : <span className="w-24" />}
@@ -241,13 +241,13 @@ export function RatesEditor({
             {saving ? "Saving…" : "Save rates"}
           </button>
           {invalid.size > 0 ? (
-            <span className="text-xs text-accent">
+            <span className="text-xs text-danger">
               {invalid.size} value{invalid.size === 1 ? " is" : "s are"} missing or out of range.
             </span>
           ) : dirty && !saving ? (
             <span className="text-xs text-faint">Unsaved changes — new quotes use the new rates; submitted quotations keep theirs.</span>
           ) : null}
-          {error ? <span className="text-xs text-accent">{error}</span> : null}
+          {error ? <span className="text-xs text-danger">{error}</span> : null}
         </div>
       </div>
     </details>

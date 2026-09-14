@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { Prisma, prisma, type Quotation } from "@print/db";
 import {
+  ACCENTS,
   assertConfigAvailable,
   customerSchema,
   estimateCompletionDate,
@@ -392,8 +393,10 @@ async function postQuotation(request: NextRequest) {
         }),
       )
     ).filter((annexure) => annexure !== null);
+    const { brandName, accent } = await getSiteProfile();
     const pdf = await renderQuotationPdf({
-      brandName: (await getSiteProfile()).brandName,
+      brandName,
+      accent: ACCENTS[accent].pdf,
       printer: await getPrinterProfile(),
       number: created.number,
       createdAt: created.createdAt,

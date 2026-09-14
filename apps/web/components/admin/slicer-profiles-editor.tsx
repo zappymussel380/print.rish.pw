@@ -174,7 +174,7 @@ export function SlicerProfilesEditor({ initial }: { initial: SlicerProfilesState
         </ul>
 
         {error ? (
-          <p className="text-xs text-accent" role="alert">
+          <p className="text-xs text-danger" role="alert">
             {error}
           </p>
         ) : null}
@@ -188,9 +188,9 @@ export function SlicerProfilesEditor({ initial }: { initial: SlicerProfilesState
                 <li key={u.batchId} className="text-xs">
                   <p>
                     <span className="font-[600] text-muted">{u.originalName}</span>{" "}
-                    <span className={u.status === "failed" ? "text-accent" : "text-faint"}>· {STATUS_TEXT[u.status]}</span>
+                    <span className={u.status === "failed" ? "text-danger" : "text-faint"}>· {STATUS_TEXT[u.status]}</span>
                   </p>
-                  {u.error ? <p className="mt-0.5 text-accent">{u.error}</p> : null}
+                  {u.error ? <p className="mt-0.5 text-danger">{u.error}</p> : null}
                   {u.presets
                     .filter((p) => p.note)
                     .map((p) => (

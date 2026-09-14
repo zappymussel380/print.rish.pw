@@ -15,6 +15,7 @@ describe("normalizeSiteProfile", () => {
       footerNote: "A rish.pw project",
       materialsPage: ["PLA", "PETG"],
       quotationPrefix: "RSP",
+      accent: "red",
     });
     // A copy, not the shared default.
     p.materialsPage.push("ABS");
@@ -63,6 +64,15 @@ describe("normalizeSiteProfile", () => {
   it("lets a shop clear optional fields", () => {
     const p = normalizeSiteProfile({ tagline: "", city: "", footerNote: "" });
     expect([p.tagline, p.city, p.footerNote]).toEqual(["", "", ""]);
+  });
+});
+
+describe("accent", () => {
+  it("keeps a preset, and an unknown one falls back to red but is reported on save", () => {
+    expect(normalizeSiteProfile({ accent: "teal" }).accent).toBe("teal");
+    expect(normalizeSiteProfile({ accent: "#ff00ff" }).accent).toBe("red");
+    expect(findSiteProfileIssues({ accent: "#ff00ff" })).toEqual(["accent"]);
+    expect(findSiteProfileIssues({ accent: "blue" })).toEqual([]);
   });
 });
 

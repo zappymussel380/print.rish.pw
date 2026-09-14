@@ -184,7 +184,7 @@ export function ShippingEstimate() {
       )}
 
       {status === "error" && error && (
-        <p className="mt-3 text-xs text-accent" role="alert">
+        <p className="mt-3 text-xs text-danger" role="alert">
           {error}
         </p>
       )}

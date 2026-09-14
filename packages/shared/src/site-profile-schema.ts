@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { STOCK_MATERIAL_IDS } from "./quote-types";
 import { QUOTATION_PREFIX_RE } from "./quotation-number";
+import { ACCENT_IDS, type AccentId } from "./accents";
 import { DEFAULT_SITE_PROFILE, SITE_PROFILE_LIMITS, type SiteProfile } from "./site-profile";
 
 /** Validation for site-profile.ts, kept out of it so the profile's defaults and
@@ -24,6 +25,7 @@ export const siteProfileFieldSchemas = {
   footerNote: text(L.footerNote),
   materialsPage: z.array(z.enum(STOCK_MATERIAL_IDS)).min(1).max(STOCK_MATERIAL_IDS.length),
   quotationPrefix: z.string().trim().toUpperCase().pipe(z.string().regex(QUOTATION_PREFIX_RE)),
+  accent: z.enum(ACCENT_IDS as [AccentId, ...AccentId[]]),
 };
 
 /** Wire/storage shape: loose on purpose, hardened field by field below. */
@@ -42,6 +44,7 @@ export const siteProfileInputSchema = z.object({
   footerNote: z.unknown().optional(),
   materialsPage: z.unknown().optional(),
   quotationPrefix: z.unknown().optional(),
+  accent: z.unknown().optional(),
 });
 export type SiteProfileInput = z.infer<typeof siteProfileInputSchema>;
 
@@ -73,6 +76,7 @@ export function normalizeSiteProfile(raw: unknown): SiteProfile {
     footerNote: pick(F.footerNote, input.footerNote, d.footerNote),
     materialsPage: [...new Set(materials)],
     quotationPrefix: pick(F.quotationPrefix, input.quotationPrefix, d.quotationPrefix),
+    accent: pick(F.accent, input.accent, d.accent),
   };
 }
 
@@ -97,5 +101,6 @@ export function findSiteProfileIssues(raw: unknown): string[] {
   check("footerNote", F.footerNote, input.footerNote);
   check("materialsPage", F.materialsPage, input.materialsPage);
   check("quotationPrefix", F.quotationPrefix, input.quotationPrefix);
+  check("accent", F.accent, input.accent);
   return issues;
 }

@@ -1,4 +1,5 @@
 export * from "./catalog";
+export * from "./accents";
 export * from "./catalog-availability";
 export * from "./catalog-availability-schema";
 export * from "./colours";
