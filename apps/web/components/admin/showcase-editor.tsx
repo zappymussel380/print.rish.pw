@@ -12,6 +12,7 @@ import {
   isCustomMaterial,
   type CustomMaterialNames,
 } from "@print/shared";
+import { shrinkPhoto } from "@/lib/shrink-photo";
 
 const ACCEPT = "image/jpeg,image/png";
 
@@ -77,7 +78,8 @@ export function ShowcaseEditor({
     });
 
   /** Upload one photo. Returns an error string, or null on success. */
-  const uploadOne = async (file: File): Promise<string | null> => {
+  const uploadOne = async (original: File): Promise<string | null> => {
+    const file = await shrinkPhoto(original);
     // Check the size here as well as server-side: it costs nothing, and it
     // turns "upload failed after a long wait" into an instant, specific answer.
     if (file.size > MAX_SHOWCASE_PHOTO_BYTES) {
@@ -271,8 +273,8 @@ export function ShowcaseEditor({
             </>
           )}
           <p className="text-xs text-faint">
-            JPEG or PNG, up to {MAX_PHOTO_MB}&nbsp;MB each. Several at once is fine. Location
-            and camera data are stripped on upload.
+            JPEG or PNG, up to {MAX_PHOTO_MB}&nbsp;MB each. Several at once is fine. Photos are
+            resized for the web, and location and camera data are stripped on upload.
           </p>
         </div>
 

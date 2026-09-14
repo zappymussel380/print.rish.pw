@@ -239,7 +239,9 @@ pick_listed_printer() {
 site_url() {
   local mode=${ANS[MODE]:-${CFG[SELFHOST_MODE]:-}}
   if [ "$mode" = local ]; then
-    echo "http://localhost:${ANS[LOCAL_PORT]:-${CFG[LOCAL_PORT]:-8000}}"
+    local host=${ANS[LOCAL_BIND]:-${CFG[LOCAL_BIND]:-127.0.0.1}}
+    [ "$host" = 127.0.0.1 ] && host=localhost
+    echo "http://$host:${ANS[LOCAL_PORT]:-${CFG[LOCAL_PORT]:-8000}}"
   else
     echo "https://${ANS[DOMAIN]:-${CFG[SELFHOST_DOMAIN]:-}}"
   fi
@@ -251,7 +253,7 @@ sec_address() {
   say "   1) This server has a public IP and ports 80/443 are free  ${C_DIM}(recommended — automatic HTTPS)${C_OFF}"
   say "   2) It's at home / behind a router — use a free Cloudflare Tunnel  ${C_DIM}(no port forwarding)${C_OFF}"
   say "   3) I already run my own reverse proxy (nginx, Nginx Proxy Manager, Traefik…)"
-  say "   4) Just try it on this computer first  ${C_DIM}(http://localhost — nothing is exposed; go live later)${C_OFF}"
+  say "   4) Try it on this computer or your home network first  ${C_DIM}(plain http — nothing on the internet can reach it; go live later)${C_OFF}"
   local current=1
   case "${CFG[SELFHOST_MODE]:-}" in tunnel) current=2 ;; proxy) current=3 ;; local) current=4 ;; esac
   ask MODE_CHOICE "Choose 1–4" "$current" valid_mode_choice "Please answer 1, 2, 3 or 4."
@@ -291,10 +293,85 @@ sec_address() {
     4|local)
       ANS[MODE]=local
       ANS[DOMAIN]=localhost
-      hint "Only this computer can open it. On Windows (WSL2), open the address in your Windows browser."
+      sec_local_access
       ask LOCAL_PORT "Port to open it on" "${CFG[LOCAL_PORT]:-8000}" valid_local_port "Pick a free port between 1024 and 65535 (8080 is taken by the site itself)."
       check_local_port_free "${ANS[LOCAL_PORT]}" ;;
   esac
+}
+
+# Local test mode: this computer only, or the devices on its home network too.
+# Caddy then listens on that one private address — never on every address, or a
+# server with a public interface would publish a plain-http site to the internet.
+sec_local_access() {
+  local lan stored="" access_default=1
+  lan=$(lan_address)
+  if [ "${CFG[SELFHOST_MODE]:-}" = local ] && [ -n "${CFG[LOCAL_BIND]:-}" ] && [ "${CFG[LOCAL_BIND]}" != 127.0.0.1 ]; then
+    stored=${CFG[LOCAL_BIND]}
+  fi
+  if [ -z "$lan" ] && [ -z "$stored" ]; then
+    case "${PS_LOCAL_ACCESS:-}" in 2|network) die "PS_LOCAL_ACCESS=network: this computer has no home-network address (10.x, 172.16–31.x or 192.168.x)." ;; esac
+    ANS[LOCAL_BIND]=127.0.0.1
+    hint "Only this computer can open it: it has no home-network address (10.x, 172.16–31.x or 192.168.x)."
+    return 0
+  fi
+  # Windows reaches WSL through localhost; its own network address is internal.
+  # Unattended installs only open it to the network when asked to
+  # (PS_LOCAL_ACCESS=network), so an existing script never starts exposing it.
+  if [ -n "$stored" ] || { [ -n "$lan" ] && ! is_wsl && ! unattended; }; then access_default=2; fi
+  if [ "${CFG[SELFHOST_MODE]:-}" = local ] && [ "${CFG[LOCAL_BIND]:-}" = 127.0.0.1 ]; then access_default=1; fi
+  say ""
+  say "  Who should be able to open it?"
+  say "   1) Only this computer            ${C_DIM}http://localhost${C_OFF}"
+  say "   2) Devices on my home network    ${C_DIM}http://${stored:-$lan}${C_OFF}  (e.g. a laptop, when this is a server without a screen)"
+  ask LOCAL_ACCESS "Choose 1–2" "$access_default" valid_local_access "Please answer 1 or 2."
+  case "${ANS[LOCAL_ACCESS]}" in
+    2|network)
+      ask LOCAL_ADDRESS "This computer's address on your network" "${stored:-$lan}" valid_lan_address \
+        "Enter one of this computer's own private addresses: $(private_ipv4s | paste -sd' ' -)."
+      ANS[LOCAL_BIND]=${ANS[LOCAL_ADDRESS]}
+      warn "Anyone on your network can open it, and it's plain http: use a network you trust."
+      hint "The admin password travels unencrypted on it. Nothing on the internet can reach it." ;;
+    *)
+      ANS[LOCAL_BIND]=127.0.0.1
+      hint "Only this computer can open it. On Windows (WSL2), open the address in your Windows browser." ;;
+  esac
+}
+valid_local_access() { [[ "$1" =~ ^(1|2|computer|network)$ ]]; }
+is_wsl() { grep -qi microsoft /proc/version 2>/dev/null; }
+# Private IPv4 (10/8, 172.16/12, 192.168/16): the addresses the app accepts for
+# a plain-http APP_ORIGIN (isPrivateNetworkHost in apps/web/lib/env.ts).
+is_private_ipv4() {
+  local a b
+  valid_ipv4 "$1" || return 1
+  IFS=. read -r a b _ <<<"$1"
+  [ "$a" -eq 10 ] || { [ "$a" -eq 172 ] && [ "$b" -ge 16 ] && [ "$b" -le 31 ]; } || { [ "$a" -eq 192 ] && [ "$b" -eq 168 ]; }
+}
+# This computer's private addresses, leaving out Docker's and other virtual
+# bridges (172.17.0.1 and friends): nothing on the home network can reach those.
+private_ipv4s() {
+  local a
+  for a in $(ip -4 -o addr show 2>/dev/null \
+      | awk '$2 !~ /^(docker|br-|veth|virbr|cni|flannel|cali|vxlan|lxcbr)/ {print $4}' | cut -d/ -f1 || true); do
+    if is_private_ipv4 "$a"; then echo "$a"; fi
+  done
+}
+# One of this computer's own private addresses: the only kind Caddy can listen on.
+# (The list is captured first: `private_ipv4s | grep -q` would let grep's early
+# exit SIGPIPE the loop, and pipefail would then fail a valid address.)
+valid_lan_address() {
+  local own
+  is_private_ipv4 "$1" || return 1
+  own=$(private_ipv4s)
+  grep -qxF -- "$1" <<<"$own"
+}
+# The address other devices most likely use: the source of the default route,
+# else this computer's first private address. Empty when it has none.
+lan_address() {
+  local src own
+  src=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}' || true)
+  if [ -n "$src" ] && valid_lan_address "$src"; then echo "$src"; return 0; fi
+  own=$(private_ipv4s)
+  echo "${own%%$'\n'*}"
 }
 valid_local_port() { [[ "$1" =~ ^[0-9]{4,5}$ ]] && [ "$1" -ge 1024 ] && [ "$1" -le 65535 ] && [ "$1" != 8080 ]; }
 check_local_port_free() {
@@ -493,7 +570,12 @@ configure_env() {
   local branch; branch=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
   [ "$branch" = HEAD ] || CFG[SELFHOST_BRANCH]=$branch
   CFG[APP_ORIGIN]=$(site_url)
-  if [ "$mode" = local ]; then CFG[LOCAL_PORT]=${ANS[LOCAL_PORT]}; else unset 'CFG[LOCAL_PORT]'; fi
+  if [ "$mode" = local ]; then
+    CFG[LOCAL_PORT]=${ANS[LOCAL_PORT]}
+    CFG[LOCAL_BIND]=${ANS[LOCAL_BIND]:-127.0.0.1}
+  else
+    unset 'CFG[LOCAL_PORT]' 'CFG[LOCAL_BIND]'
+  fi
   [ -n "${PS_TLS_INTERNAL:-}" ] && CFG[SELFHOST_TLS_INTERNAL]=$PS_TLS_INTERNAL
   apply_env_defaults || true
 
@@ -731,9 +813,13 @@ finish() {
       else warn "Not reachable over HTTPS yet — usually DNS still propagating. Caddy keeps retrying the certificate."; fi ;;
     tunnel) hint "Make sure the tunnel's public hostname points ${CFG[SELFHOST_DOMAIN]} at http://caddy:80." ;;
     local)
-      if curl -fsS --max-time 15 "$url/api/health" >/dev/null 2>&1; then ok "Open $url in your browser"
+      local where="in your browser" who="Only this computer can open it."
+      if [ "${CFG[LOCAL_BIND]:-127.0.0.1}" != 127.0.0.1 ]; then
+        where="on any device on your network"; who="Devices on your network can open it (plain http)."
+      fi
+      if curl -fsS --max-time 15 "$url/api/health" >/dev/null 2>&1; then ok "Open $url $where"
       else warn "The site isn't answering on $url yet — give it a minute, then check: docker compose ps"; fi
-      hint "Only this computer can open it. Happy with it? Put it online with: sudo $ROOT_DIR/install.sh (option 2)" ;;
+      hint "$who Happy with it? Put it online with: sudo $ROOT_DIR/install.sh (option 2)" ;;
     proxy)
       say ""
       say "  Point your reverse proxy at http://${CFG[PROXY_BIND]}:8080 (from ${CFG[TRUSTED_PROXY_CIDR]} only)."
@@ -798,6 +884,21 @@ existing_menu() {
 }
 valid_menu() { [[ "$1" =~ ^[1-8]$ ]]; }
 
+# Shown before the first question of a fresh install, so nobody agonises over
+# an answer that the admin dashboard can change in a minute afterwards.
+changeable_later() {
+  say ""
+  say "  ${C_BOLD}Good to know:${C_OFF} almost everything here can be changed later."
+  say "   • In the admin dashboard, any time:"
+  say "       shop name, tagline, city, quotation initials, contact details and footer;"
+  say "       per-gram rates, setup fee, your costs and lead time; which materials and"
+  say "       colours you offer; the Materials page, FAQ and showcase photos; and your"
+  say "       own OrcaSlicer presets if you skip the printer step."
+  say "   • By running ${C_BOLD}sudo $ROOT_DIR/install.sh${C_OFF} again:"
+  say "       web address and HTTPS, admin password, printer, and email/shipping/Telegram."
+  hint "So don't worry about getting everything perfect now."
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
   say "${C_BOLD}Print shop installer${C_OFF}  ${C_DIM}($ROOT_DIR)${C_OFF}"
@@ -858,6 +959,7 @@ main() {
 
   say "This sets up the whole site: shop details, web address, rates, then a build."
   hint "Press Enter to accept a [default]. Ctrl+C stops at any point without changing anything."
+  changeable_later
   sec_shop
   sec_printer
   sec_address

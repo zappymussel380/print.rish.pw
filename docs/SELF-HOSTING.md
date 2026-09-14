@@ -25,7 +25,9 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 ```
 
 It downloads the code to `/opt/print-shop` (you can pick another folder) and
-asks, in plain language:
+asks, in plain language, the questions below. Don't worry about getting them
+perfect: almost all of it can be changed later, in the admin dashboard or by
+running the installer again (see [after that](#after-install)).
 
 1. **Your shop:** name, the initials your quotation numbers start with
    (e.g. `AP-2026-0001`), a one-line tagline, and your city.
@@ -50,13 +52,21 @@ asks, in plain language:
 Then it builds everything. That takes 10–25 minutes the first time. When it's
 done it prints your site and admin addresses.
 
+<a id="after-install"></a>
 After that, **the admin dashboard is where you change things**:
 
-- **Catalog:** which colours you have in stock. ABS and ASA start with black and
-  white; add any colour by name and hex code.
+- **Catalog:** which materials and colours you offer. ABS and ASA start with
+  black and white; add any colour by name and hex code.
 - **Rates:** per-gram prices, the setup fee, lead time, and your real filament
   and running costs (for profit estimates).
-- **Site:** shop name, contact details, footer, and the Materials page.
+- **Site:** shop name, tagline, city, quotation initials, contact details,
+  footer, and the Materials page.
+- **FAQ** and **Recent prints** (showcase photos).
+- **Slicer profiles**, if you skipped the printer step (see
+  [advanced mode](#your-own-printer-or-profiles-advanced-mode)).
+
+The web address and HTTPS, the admin password, the printer, and email,
+shipping and Telegram change by running `sudo /opt/print-shop/install.sh` again.
 
 If the first run is interrupted (for example the build fails on a network
 blip), just run the command again: it picks up where it stopped.
@@ -64,11 +74,25 @@ blip), just run the command again: it picks up where it stopped.
 ## Try it locally first
 
 Want to see it working before you put anything online? Choose
-**4) Just try it on this computer first** when the installer asks how people
-will reach the site. You don't need a domain. The site opens at
-`http://localhost:8000` (the port is up to you) and nothing on your network or
-the internet can reach it. It's the complete site: real slicing, admin
-dashboard, quotations.
+**4) Try it on this computer or your home network first** when the installer
+asks how people will reach the site. You don't need a domain. It's the complete
+site: real slicing, admin dashboard, quotations. The installer then asks who
+should be able to open it, and which port to use (press Enter for 8000):
+
+- **Only this computer:** `http://localhost:8000`.
+- **Devices on my home network:** `http://<this computer's address>:8000`, for
+  example `http://192.168.1.50:8000`. Pick this when the server has no screen
+  and you want to open the site on your laptop. The installer finds the
+  computer's home-network address (10.x, 172.16–31.x or 192.168.x) and listens
+  on that address alone.
+
+Either way nothing on the internet can reach it. The site is plain http,
+though, so on the network option anyone on your network can open it and the
+admin password travels unencrypted. Use a network you trust.
+
+Already installed on "this computer only"? Update, then switch:
+`sudo /opt/print-shop/update.sh`, then `sudo /opt/print-shop/install.sh` →
+**2) Change the web address** → **4** → **2) Devices on my home network**.
 
 **Linux:** run the install command as usual.
 
@@ -255,6 +279,8 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_DOMAIN` | Domain name (not needed for local test mode) |
 | `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed) |
 | `PS_LOCAL_PORT` | Port for local test mode (default 8000) |
+| `PS_LOCAL_ACCESS` | Local test mode: `computer` (default when unattended) or `network` for the devices on your home network |
+| `PS_LOCAL_ADDRESS` | With `PS_LOCAL_ACCESS=network`, optional: which of this computer's private addresses to use (default: the one its default route uses) |
 | `PS_ACME_EMAIL` | Let's Encrypt email (mode 1, optional) |
 | `PS_TUNNEL_TOKEN` | Tunnel token (mode 2) |
 | `PS_PROXY_IP`, `PS_PROXY_BIND` | Proxy source IP, and the address to listen on (mode 3) |

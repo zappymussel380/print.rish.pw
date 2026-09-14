@@ -1,15 +1,17 @@
-# Local test mode: the whole site on this computer only, at
-# http://localhost:${LOCAL_PORT}. Caddy serves plain HTTP (browsers treat
-# localhost as secure) and is published on 127.0.0.1 alone, so nothing on the
-# network or internet can reach it. It stays the one trusted edge in front of
-# the compose nginx (TRUSTED_PROXY_CIDR = its fixed address), as in every mode.
+# Local test mode: the whole site over plain HTTP, on this computer
+# (http://localhost:${LOCAL_PORT}) or also on its home network
+# (http://<LOCAL_BIND>:${LOCAL_PORT}). Caddy is published on LOCAL_BIND alone —
+# 127.0.0.1, or one private address the installer checked belongs to this
+# computer — never on every address, so nothing on the internet can reach it.
+# It stays the one trusted edge in front of the compose nginx
+# (TRUSTED_PROXY_CIDR = its fixed address), as in every mode.
 services:
   caddy:
     image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     depends_on:
       - proxy
     ports:
-      - "127.0.0.1:${LOCAL_PORT:-8000}:80"
+      - "${LOCAL_BIND:-127.0.0.1}:${LOCAL_PORT:-8000}:80"
     volumes:
       - ./.selfhost/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
