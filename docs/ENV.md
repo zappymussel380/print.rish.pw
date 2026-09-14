@@ -51,8 +51,8 @@ to `$$`. The container receives the intended single-dollar value.
 | `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender. |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | empty | Both enable order notifications containing customer/order details and static, PII-free operator alerts. These remain web-only secrets. |
 | `TELEGRAM_MESSAGE_THREAD_ID` | empty | Optional positive Telegram forum topic ID. |
-| `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` | none | Optional API-user credentials for shipping estimates; do not use the dashboard login. |
-| `SHIPROCKET_PICKUP_PINCODE` | `781001` | Workshop origin pincode. |
+| `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` | none | Optional API-user credentials for shipping estimates; do not use the dashboard login. Used until admin → Shipping is saved, which then replaces all three. Without either, the quote page has no shipping estimator. |
+| `SHIPROCKET_PICKUP_PINCODE` | `781001` | Workshop origin pincode (until admin → Shipping is saved). |
 
 Treat third-party configuration as a privacy decision, not only a technical
 one. Review vendor retention/access terms before enabling it.

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   readJsonBody: vi.fn(),
   findMany: vi.fn(),
+  getShippingConfig: vi.fn(),
 }));
 
 vi.mock("@print/db", () => ({
@@ -20,6 +21,9 @@ vi.mock("@/lib/security", async () => {
   return { ...actual, assertSameOrigin: () => true, clientIp: () => "127.0.0.1", rateLimit: mocks.rateLimit };
 });
 vi.mock("@/lib/session", () => ({ getQuoteSessionId: mocks.getQuoteSessionId }));
+vi.mock("@/lib/shipping-settings", () => ({
+  getShippingConfig: mocks.getShippingConfig,
+}));
 
 const { POST } = await import("@/app/api/shipping/route");
 
@@ -30,6 +34,7 @@ beforeEach(() => {
   mocks.getQuoteSessionId.mockResolvedValue("11111111-1111-4111-8111-111111111111");
   mocks.rateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
   mocks.findMany.mockResolvedValue([]);
+  mocks.getShippingConfig.mockResolvedValue({ live: true, email: "api@shop.test", password: "pw", pickupPincode: "781001" });
 });
 
 describe("POST /api/shipping pincode validation", () => {
@@ -70,5 +75,17 @@ describe("POST /api/shipping pincode validation", () => {
     // exactly what proves the pincode itself was accepted.
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "NO_SLICE" } });
+  });
+});
+
+describe("POST /api/shipping when the shop hasn't set shipping up", () => {
+  it("answers 503 before the session, rate limits or body", async () => {
+    mocks.getShippingConfig.mockResolvedValue({ live: false, email: "", password: "", pickupPincode: "781001" });
+    const res = await POST(fakeReq());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: { code: "NOT_CONFIGURED" } });
+    expect(mocks.getQuoteSessionId).not.toHaveBeenCalled();
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.readJsonBody).not.toHaveBeenCalled();
   });
 });

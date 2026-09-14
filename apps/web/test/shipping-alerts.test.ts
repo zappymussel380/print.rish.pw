@@ -34,11 +34,10 @@ describe("Shiprocket operational alerts", () => {
       }),
     );
 
-    const result = await fetchShipping({
-      deliveryPincode: "781001",
-      weightGrams: 300,
-      declaredValuePaise: 50_000,
-    });
+    const result = await fetchShipping(
+      { deliveryPincode: "781001", weightGrams: 300, declaredValuePaise: 50_000 },
+      { live: true, email: "api@shop.test", password: "pw", pickupPincode: "781001" },
+    );
 
     expect(result).toEqual({ ok: false, reason: "BUSY" });
     expect(mocks.sendOperatorAlert).toHaveBeenCalledOnce();
@@ -47,5 +46,19 @@ describe("Shiprocket operational alerts", () => {
       "Shiprocket daily call cap reached; shipping estimates are temporarily busy.",
     );
     finishAlert?.();
+  });
+});
+
+describe("an estimator that isn't set up", () => {
+  it("spends nothing: no daily-cap count, no upstream call", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    const result = await fetchShipping(
+      { deliveryPincode: "781001", weightGrams: 300, declaredValuePaise: 50_000 },
+      { live: false, email: "", password: "", pickupPincode: "781001" },
+    );
+    expect(result).toEqual({ ok: false, reason: "NOT_CONFIGURED" });
+    expect(mocks.incr).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
   });
 });

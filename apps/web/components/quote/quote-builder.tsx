@@ -9,13 +9,17 @@ import { ShippingEstimate } from "./shipping-estimate";
 import { SummaryBar } from "./summary-bar";
 
 /** Client shell for the quote builder: uploads, per-model cards with live
- *  slicing + pricing, and the sticky quote summary. */
+ *  slicing + pricing, the courier estimate when the shop offers one, and the
+ *  sticky quote summary. */
 export function QuoteBuilder({
   maxModels,
   maxUploadMb,
+  shipping,
 }: {
   maxModels: number;
   maxUploadMb: number;
+  /** The shop has courier estimates set up (admin → Shipping). */
+  shipping: boolean;
 }) {
   const models = useQuoteStore((s) => s.models);
 
@@ -37,7 +41,7 @@ export function QuoteBuilder({
               <ModelCard key={m.key} model={m} />
             ))}
           </ul>
-          <ShippingEstimate />
+          {shipping ? <ShippingEstimate /> : null}
         </>
       )}
 

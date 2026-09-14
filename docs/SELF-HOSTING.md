@@ -61,12 +61,17 @@ After that, **the admin dashboard is where you change things**:
   and running costs (for profit estimates).
 - **Site:** shop name, tagline, city, quotation initials, contact details,
   footer, and the Materials page.
+- **Shipping:** live courier prices on the quote page (Shiprocket): switch
+  them on or off, or change the API user and pickup pincode. With them off,
+  the quote page has no shipping box and checkout says delivery is arranged
+  after the quotation. Once saved here, these settings replace the ones the
+  installer wrote.
 - **FAQ** and **Recent prints** (showcase photos).
 - **Slicer profiles**, if you skipped the printer step (see
   [advanced mode](#your-own-printer-or-profiles-advanced-mode)).
 
-The web address and HTTPS, the admin password, the printer, and email,
-shipping and Telegram change by running `sudo /opt/print-shop/install.sh` again.
+The web address and HTTPS, the admin password, the printer, and email and
+Telegram change by running `sudo /opt/print-shop/install.sh` again.
 
 If the first run is interrupted (for example the build fails on a network
 blip), just run the command again: it picks up where it stopped.

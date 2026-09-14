@@ -12,6 +12,7 @@ import {
 import { getCatalogAvailability } from "./catalog-availability";
 import { env } from "./env";
 import { getPricing } from "./pricing-settings";
+import { getShippingConfig } from "./shipping-settings";
 import { getSiteProfile } from "./site-profile";
 
 /** Key of the AppSetting row holding the shop's own FAQ entries and hides. */
@@ -39,10 +40,11 @@ export async function saveFaqSettings(settings: FaqSettings): Promise<FaqSetting
 
 /** The generated FAQ, answered from this shop's live settings. */
 export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
-  const [availability, { catalog }, profile] = await Promise.all([
+  const [availability, { catalog }, profile, shipping] = await Promise.all([
     getCatalogAvailability(),
     getPricing(),
     getSiteProfile(),
+    getShippingConfig(),
   ]);
   const printer = catalog.printers[catalog.defaultPrinterId]!;
   const offered = MATERIAL_IDS.filter((m) => availability.materials[m]);
@@ -52,7 +54,7 @@ export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
     printer: { name: printer.name, bedMm: printer.bedMm, multiMaterial: printer.multiMaterial ?? false },
     city: profile.city,
     leadTime: catalog.leadTime,
-    courierQuotes: Boolean(process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD),
+    courierQuotes: shipping.live,
     retention: { uploadHours: env.uploadRetentionHours, fileDays: env.fileRetentionDays },
     contactChannel: profile.contact.whatsappNumber ? "WhatsApp" : "the contact page",
   });

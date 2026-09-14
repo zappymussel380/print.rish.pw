@@ -16,6 +16,7 @@ import { env } from "@/lib/env";
 import { normalizeModelConfigLocks } from "@/lib/model-config-locks";
 import { assertSameOrigin, clientIp, rateLimit, RATE_LIMITS } from "@/lib/security";
 import { getQuoteSessionId } from "@/lib/session";
+import { getShippingConfig } from "@/lib/shipping-settings";
 import {
   billedWeightKg,
   fetchShipping,
@@ -41,7 +42,7 @@ function reasonError(reason: ShippingReason) {
     case "TOO_HEAVY":
       return jsonError(422, "TOO_HEAVY", "This parcel is too heavy for an instant estimate — we'll confirm shipping over WhatsApp.");
     case "NOT_CONFIGURED":
-      return jsonError(500, "NOT_CONFIGURED", "Shipping estimates are not configured yet.");
+      return jsonError(503, "NOT_CONFIGURED", "Shipping estimates aren't offered — we'll arrange delivery with you after your quotation.");
     case "NO_SERVICE":
       return jsonError(404, "NO_SERVICE", "We can't ship to that pincode right now.");
     case "BUSY":
@@ -132,6 +133,11 @@ export async function POST(request: NextRequest) {
     return jsonError(403, "CSRF", "Cross-origin request rejected");
   }
 
+  // The quote page only offers the estimator when it's set up; this stops
+  // anything else before it costs a lookup.
+  const config = await getShippingConfig();
+  if (!config.live) return reasonError("NOT_CONFIGURED");
+
   // Authorise and rate-limit BEFORE reading the body: these are cheap (a cookie
   // verify + one Redis op) and must gate the request so an unauthenticated or
   // over-limit caller can never push us into parsing an arbitrary JSON payload.
@@ -185,7 +191,7 @@ export async function POST(request: NextRequest) {
   };
 
   // Cache hit → serve free, without consuming the per-client upstream budget.
-  const cached = await getCachedShipping(input);
+  const cached = await getCachedShipping(input, config.pickupPincode);
   if (cached) {
     const token = await issueEstimateToken(input, cached);
     return NextResponse.json({
@@ -209,7 +215,7 @@ export async function POST(request: NextRequest) {
     return res;
   }
 
-  const result = await fetchShipping(input);
+  const result = await fetchShipping(input, config);
   if (!result.ok) return reasonError(result.reason);
   const token = await issueEstimateToken(input, result.estimate);
   return NextResponse.json({
