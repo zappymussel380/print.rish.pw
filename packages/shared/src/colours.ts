@@ -206,6 +206,10 @@ export const DEFAULT_ENABLED_MATERIALS: Record<MaterialId, boolean> = {
   PETG_PREMIUM: false,
   ABS: false,
   ASA: false,
+  OTHER_1: false,
+  OTHER_2: false,
+  OTHER_3: false,
+  OTHER_4: false,
 };
 
 /** Colours enabled out of the box — the black/white that were always in stock,
@@ -219,6 +223,11 @@ export const DEFAULT_ENABLED_COLOURS: Record<MaterialId, readonly ColourId[]> = 
   // No supplier palette: every ABS/ASA colour is added in the admin editor.
   ABS: [],
   ASA: [],
+  // The shop's own materials: colours are added with the hex picker too.
+  OTHER_1: [],
+  OTHER_2: [],
+  OTHER_3: [],
+  OTHER_4: [],
 };
 
 /** Human-readable name for any colour id, including legacy values. */

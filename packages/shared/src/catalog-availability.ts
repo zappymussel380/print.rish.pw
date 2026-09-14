@@ -1,5 +1,5 @@
-import { MATERIAL_IDS, type ColourId, type MaterialId } from "./quote-types";
-import { materialName } from "./catalog";
+import { CUSTOM_MATERIAL_IDS, MATERIAL_IDS, isCustomMaterial, type ColourId, type CustomMaterialId, type MaterialId } from "./quote-types";
+import { materialName, type CustomMaterialNames } from "./catalog";
 import {
   MASTER_COLOURS,
   MATERIAL_COLOURS,
@@ -23,6 +23,8 @@ export interface Availability {
   colours: Record<MaterialId, string[]>;
   /** Admin-defined hex colours, saved in the same blob as their enabled flags. */
   customColours: CustomColour[];
+  /** The shop's names for its own materials (OTHER_*). Only named slots appear. */
+  customMaterials: CustomMaterialNames;
 }
 
 /** Legacy colour ids resolve to their modern equivalent for availability checks
@@ -42,7 +44,31 @@ export function defaultAvailability(): Availability {
     materials[m] = DEFAULT_ENABLED_MATERIALS[m];
     colours[m] = [...DEFAULT_ENABLED_COLOURS[m]];
   }
-  return { materials, colours, customColours: [] };
+  return { materials, colours, customColours: [], customMaterials: {} };
+}
+
+/** Why one of the shop's own materials can't be offered yet, or null when it
+ *  can: it needs a name, and a live (test-sliced) OrcaSlicer filament profile. */
+export function customMaterialProblem(
+  avail: Availability,
+  id: CustomMaterialId,
+  ready: ReadonlySet<CustomMaterialId>,
+): string | null {
+  const label = materialName(id, avail.customMaterials);
+  if (!avail.customMaterials[id]?.name) return `${label} needs a name first.`;
+  if (!ready.has(id)) return `${label} needs an OrcaSlicer profile first — start from one of OrcaSlicer's or upload your own.`;
+  return null;
+}
+
+/** Availability as customers get it: one of the shop's own materials is only
+ *  on when it's switched on AND named AND has a live filament profile, so a
+ *  profile that later fails or is removed takes it off sale by itself. */
+export function effectiveAvailability(avail: Availability, ready: ReadonlySet<CustomMaterialId>): Availability {
+  const materials = { ...avail.materials };
+  for (const id of CUSTOM_MATERIAL_IDS) {
+    if (materials[id] && customMaterialProblem(avail, id, ready)) materials[id] = false;
+  }
+  return { ...avail, materials };
 }
 
 export function isMaterialEnabled(avail: Availability, material: MaterialId): boolean {
@@ -101,15 +127,31 @@ export interface PublicMaterial {
   name: string;
   enabled: boolean;
   colours: PublicColour[];
+  /** Admin view of one of the shop's own materials: what it still needs. */
+  setup?: { named: boolean; ready: boolean; problem: string | null };
 }
 
 /** Serialisable view of the full palette with per-item enabled flags, for the
  *  customer quote UI and the admin editor. */
-export function toPublicCatalog(avail: Availability): { materials: PublicMaterial[] } {
+/** Pass `ready` (the admin view) to describe what each of the shop's own
+ *  materials still needs; customers get effectiveAvailability instead. */
+export function toPublicCatalog(
+  avail: Availability,
+  ready?: ReadonlySet<CustomMaterialId>,
+): { materials: PublicMaterial[] } {
   const materials = MATERIAL_IDS.map((m) => ({
     id: m,
-    name: materialName(m),
+    name: materialName(m, avail.customMaterials),
     enabled: isMaterialEnabled(avail, m),
+    ...(ready && isCustomMaterial(m)
+      ? {
+          setup: {
+            named: Boolean(avail.customMaterials[m]?.name),
+            ready: ready.has(m),
+            problem: customMaterialProblem(avail, m, ready),
+          },
+        }
+      : {}),
     colours: [
       ...MATERIAL_COLOURS[m].map((id): PublicColour => {
         const { name, hex, stops, group } = MASTER_COLOURS[id];

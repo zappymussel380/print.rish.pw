@@ -38,6 +38,7 @@ const HEAT: Record<MaterialFamily, string> = {
   PETG: "PETG takes impacts, heat up to ~80 °C and outdoor exposure",
   ABS: "ABS is tough and holds its shape to ~95–100 °C",
   ASA: "ASA adds long-term sun and weather resistance to ABS's toughness",
+  Other: "", // the shop's own materials: nothing known to say
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -45,7 +46,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function buildFaq(ctx: FaqContext): FaqEntry[] {
   const [x, y, z] = ctx.printer.bedMm;
   const names = ctx.materials.map((m) => m.name);
-  const families = [...new Set(ctx.materials.map((m) => materialFamily(m.id)))];
+  // The shop's own materials have no known properties to claim here.
+  const families = [...new Set(ctx.materials.map((m) => materialFamily(m.id)))].filter((f) => HEAT[f]);
   const pickup = ctx.city ? ` Pickup in ${ctx.city} is available once printing finishes.` : "";
   const ask = `ask us on ${ctx.contactChannel}`;
 

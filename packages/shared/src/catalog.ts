@@ -1,4 +1,4 @@
-import type { BoundingBoxMm, ColourId, MaterialId } from "./quote-types";
+import type { BoundingBoxMm, ColourId, CustomMaterialId, MaterialId } from "./quote-types";
 import { MATERIAL_COLOURS } from "./colours";
 
 /**
@@ -47,6 +47,10 @@ export interface Catalog {
     /** Days added on top of raw print time for prep, cooling, QC, packing. */
     bufferDays: number;
   };
+}
+
+function otherMaterial(n: number): MaterialSpec {
+  return { name: `Other material ${n}`, sellPerGramPaise: 400, costPerKgPaise: 1500_00, densityGcm3: 1.2, colours: [] };
 }
 
 export const CATALOG: Catalog = {
@@ -118,6 +122,13 @@ export const CATALOG: Catalog = {
       densityGcm3: 1.04,
       colours: MATERIAL_COLOURS.ASA,
     },
+    // The shop's own materials (CUSTOM_MATERIAL_IDS): named, priced and given
+    // an OrcaSlicer profile in admin. Placeholder rates until then; the billed
+    // grams come from the slicer profile the owner chooses.
+    OTHER_1: otherMaterial(1),
+    OTHER_2: otherMaterial(2),
+    OTHER_3: otherMaterial(3),
+    OTHER_4: otherMaterial(4),
   },
   electricityPerKwhPaise: 10_00,
   maintenancePerGramPaise: 20,
@@ -128,14 +139,20 @@ export const CATALOG: Catalog = {
 };
 
 /** Customer-facing name for a material id ("PLA_AESTHETIC" → "Aesthetic PLA").
- *  Unknown values (never expected) fall through verbatim. */
-export function materialName(id: string): string {
+ *  Pass the shop's names (`Availability.customMaterials`) so its own materials
+ *  (OTHER_*) read as it named them. Unknown values fall through verbatim. */
+export function materialName(id: string, custom?: CustomMaterialNames): string {
+  const own = custom?.[id as CustomMaterialId]?.name;
+  if (own) return own;
   return id in CATALOG.materials ? CATALOG.materials[id as MaterialId].name : id;
 }
 
+/** The shop's names for its own materials, as stored with catalog availability. */
+export type CustomMaterialNames = Partial<Record<CustomMaterialId, { name: string }>>;
+
 /** The base polymer a material tier is made of. Tiers of one family share its
  *  handling (print temperatures, reported weight splits, 3MF import). */
-export type MaterialFamily = "PLA" | "PETG" | "ABS" | "ASA";
+export type MaterialFamily = "PLA" | "PETG" | "ABS" | "ASA" | "Other";
 
 export const MATERIAL_FAMILY: Record<MaterialId, MaterialFamily> = {
   PLA: "PLA",
@@ -145,6 +162,10 @@ export const MATERIAL_FAMILY: Record<MaterialId, MaterialFamily> = {
   PETG_PREMIUM: "PETG",
   ABS: "ABS",
   ASA: "ASA",
+  OTHER_1: "Other",
+  OTHER_2: "Other",
+  OTHER_3: "Other",
+  OTHER_4: "Other",
 };
 
 export function materialFamily(id: MaterialId): MaterialFamily {
