@@ -262,7 +262,8 @@ export function RatesEditor({
         <span className="text-faint">edit</span>
       </summary>
       <div className="space-y-7 border-t border-line p-4">
-        <fieldset>
+        {/* A fieldset is min-content wide by default; min-w-0 lets the tables scroll inside it at phone widths. */}
+        <fieldset className="min-w-0">
           <legend className="text-sm font-[650]">Materials</legend>
           <p className="mt-0.5 text-xs text-faint">
             Every quote is grams × the material&apos;s rate, plus one setup fee per order. &ldquo;Shown as
@@ -327,7 +328,7 @@ export function RatesEditor({
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset className="min-w-0">
           <legend className="text-sm font-[650]">Running costs</legend>
           <p className="mt-0.5 text-xs text-faint">
             The pricing page explains the rate with the left column; the profit estimate uses the right.
@@ -368,7 +369,7 @@ export function RatesEditor({
           </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset className="min-w-0">
           <legend className="text-sm font-[650]">Lead time</legend>
           <p className="mt-0.5 text-xs text-faint">Drives the &ldquo;ready by&rdquo; date on every quote.</p>
           <div className="mt-3 grid gap-x-5 gap-y-2.5 sm:grid-cols-2">
