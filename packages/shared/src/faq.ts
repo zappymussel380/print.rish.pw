@@ -28,7 +28,8 @@ export interface FaqContext {
   leadTime: { printHoursPerDay: number; bufferDays: number };
   /** Live courier quotes are configured (Shiprocket). */
   courierQuotes: boolean;
-  retention: { uploadHours: number; fileDays: number };
+  /** How long files and finished quotations are kept; quotationDays null = for good. */
+  retention: { uploadHours: number; fileDays: number; quotationDays: number | null };
   /** How customers reach the shop, e.g. "WhatsApp" or "the contact page". */
   contactChannel: string;
   /** Layer heights on offer (µm), finest first. */
@@ -155,7 +156,7 @@ export function buildFaq(ctx: FaqContext): FaqEntry[] {
     {
       id: "retention",
       q: "How long do you keep my files and details?",
-      a: `Uploads that never become a quotation request are deleted automatically within ${plural(ctx.retention.uploadHours, "hour")}. Model files attached to an order are removed ${plural(ctx.retention.fileDays, "day")} after completion. The quotation record, PDF, contact and delivery details are kept for at most 90 days after completion or cancellation, then the next daily cleanup removes them. They are used only to process your order — never analysed, sold or used for marketing. Processing may share them with the shop's messaging and email accounts and the shipping provider, whose copies follow their own retention schedules.`,
+      a: `Uploads that never become a quotation request are deleted automatically within ${plural(ctx.retention.uploadHours, "hour")}. Model files attached to an order are removed ${plural(ctx.retention.fileDays, "day")} after completion. ${ctx.retention.quotationDays === null ? "The quotation record, PDF, contact and delivery details are kept with the shop's records; ask and they're deleted." : `The quotation record, PDF, contact and delivery details are kept for at most ${plural(ctx.retention.quotationDays, "day")} after completion or cancellation, then the next daily cleanup removes them.`} They are used only to process your order — never analysed, sold or used for marketing. Processing may share them with the shop's messaging and email accounts and the shipping provider, whose copies follow their own retention schedules.`,
     },
   ];
   return entries.filter((e): e is FaqEntry => e !== null);

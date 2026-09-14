@@ -40,7 +40,7 @@ delete (globalThis as { prisma?: unknown }).prisma;
 const { createPrismaClient, prisma: workerPrisma } = await import("@print/db");
 const webPrisma = createPrismaClient(webConnection.url);
 const ownerPrisma = createPrismaClient(ownerConnection.url);
-const { runRetention } = await import("../../worker/src/retention.js");
+const { envRetentionPolicy, runRetention } = await import("../../worker/src/retention.js");
 
 const log = pino({ enabled: false });
 const modelId = randomUUID();
@@ -168,7 +168,7 @@ describe("worker retention real-database fence", () => {
       }) as unknown as typeof workerPrisma.uploadedModel.deleteMany,
     );
 
-    const sweep = runRetention(log);
+    const sweep = runRetention(log, envRetentionPolicy());
     await Promise.race([
       enteredDelete.promise,
       sweep.then(() => {

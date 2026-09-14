@@ -2,7 +2,7 @@ import { lstat, opendir, rm as removeTree, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Logger } from "pino";
 import { prisma } from "@print/db";
-import { UUID_PATTERN } from "@print/shared";
+import { UUID_PATTERN, normalizeRetention, toRetentionPolicy, type RetentionPolicy, type RetentionSettings } from "@print/shared";
 import { config } from "./config.js";
 
 async function rm(path: string | null | undefined): Promise<void> {
@@ -180,19 +180,62 @@ async function reconcileOrphans(now: number): Promise<number> {
   return removed;
 }
 
+/** The environment's policy: what applies until admin → Settings → File
+ *  clean-up is saved. */
+export function envRetentionPolicy(): RetentionPolicy {
+  return {
+    uploadRetentionHours: config.uploadRetentionHours,
+    fileRetentionDays: config.fileRetentionDays,
+    quotationRetentionDays: config.quotationRetentionDays,
+  };
+}
+
+/** The policy to sweep with: the owner's saved one, else the environment's.
+ *  Null when the saved one can't be read — the caller then skips the sweep
+ *  rather than delete on a guess. */
+export async function loadRetentionPolicy(log: Logger): Promise<RetentionPolicy | null> {
+  const env = envRetentionPolicy();
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: "retention" } });
+    const fallback: RetentionSettings = {
+      uploadRetentionDays: Math.max(1, Math.round(env.uploadRetentionHours / 24)),
+      fileRetentionDays: env.fileRetentionDays,
+      quotationRetentionDays: env.quotationRetentionDays,
+    };
+    const saved = normalizeRetention(row?.value ?? null, fallback);
+    return saved ? toRetentionPolicy(saved) : env;
+  } catch (err) {
+    log.warn({ err: String(err) }, "retention settings unreadable; skipping this sweep");
+    return null;
+  }
+}
+
+export interface RetentionReport {
+  staleUploads: number;
+  purgedFiles: number;
+  deletedQuotations: number;
+  deletedQuotationModels: number;
+  orphanFiles: number;
+}
+
 /**
- * Data-retention sweep (runs daily):
+ * Data-retention sweep (runs daily, and when the admin asks to purge):
  *  1. Delete uploads that were never attached to a quotation once they exceed
- *     UPLOAD_RETENTION_HOURS — files, thumbnails and DB rows.
- *  2. Remove the model files of quotations in a terminal state older than
- *     FILE_RETENTION_DAYS, keeping the DB rows and PDFs for the record.
- *  3. Delete terminal quotations and their customer data once they exceed
- *     QUOTATION_RETENTION_DAYS, then remove their unreferenced storage.
+ *     the upload retention — files, thumbnails and DB rows.
+ *  2. Remove the model files of quotations in a terminal state older than the
+ *     file retention, keeping the DB rows and PDFs for the record.
+ *  3. Delete terminal quotations and their customer data once they exceed the
+ *     quotation retention (never when it's null, or on a purge), then remove
+ *     their unreferenced storage.
  */
-export async function runRetention(log: Logger): Promise<void> {
+export async function runRetention(
+  log: Logger,
+  policy: RetentionPolicy,
+  opts: { purgeOnly?: boolean } = {},
+): Promise<RetentionReport> {
   const now = Date.now();
 
-  const uploadCutoff = new Date(now - config.uploadRetentionHours * 3600_000);
+  const uploadCutoff = new Date(now - policy.uploadRetentionHours * 3600_000);
   let deletedUploads = 0;
   let afterUploadId: string | undefined;
   while (true) {
@@ -228,7 +271,7 @@ export async function runRetention(log: Logger): Promise<void> {
     }
   }
 
-  const fileCutoff = new Date(now - config.fileRetentionDays * 86_400_000);
+  const fileCutoff = new Date(now - policy.fileRetentionDays * 86_400_000);
   let purgedFiles = 0;
   let afterQuotationId: string | undefined;
   while (true) {
@@ -299,13 +342,13 @@ export async function runRetention(log: Logger): Promise<void> {
     }
   }
 
-  const quotationCutoff = new Date(
-    now - config.quotationRetentionDays * 86_400_000,
-  );
+  // Kept for good, or a purge (which never deletes quotations): no stage 3.
+  const quotationDays = opts.purgeOnly ? null : policy.quotationRetentionDays;
+  const quotationCutoff = new Date(now - (quotationDays ?? 0) * 86_400_000);
   let deletedQuotations = 0;
   let deletedQuotationModels = 0;
   let afterExpiredQuotationId: string | undefined;
-  while (true) {
+  while (quotationDays !== null) {
     const expired = await prisma.quotation.findMany({
       where: {
         status: { in: ["COMPLETED", "DELIVERED", "CANCELLED"] },
@@ -371,14 +414,13 @@ export async function runRetention(log: Logger): Promise<void> {
 
   const orphanFiles = await reconcileOrphans(now);
 
-  log.info(
-    {
-      staleUploads: deletedUploads,
-      purgedFiles,
-      deletedQuotations,
-      deletedQuotationModels,
-      orphanFiles,
-    },
-    "retention sweep complete",
-  );
+  const report: RetentionReport = {
+    staleUploads: deletedUploads,
+    purgedFiles,
+    deletedQuotations,
+    deletedQuotationModels,
+    orphanFiles,
+  };
+  log.info({ ...report, purge: opts.purgeOnly === true, policy }, opts.purgeOnly ? "purge complete" : "retention sweep complete");
+  return report;
 }

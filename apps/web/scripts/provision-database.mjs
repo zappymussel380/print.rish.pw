@@ -135,9 +135,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   "Quotation", "QuotationItem", "StatusHistory", "QuotationCounter"
   TO ${webRole};
 
--- Runtime app settings (catalog availability) are read on the quote/pricing
--- pages and written by the admin panel; the worker never consults them.
+-- Runtime app settings are read on the quote/pricing pages and written by the
+-- admin panel. The worker only reads them, for the owner's file clean-up policy
+-- ("retention"); it never gets SESSION_SECRET, so sealed secrets stored there
+-- stay unreadable to it.
 GRANT SELECT, INSERT, UPDATE ON TABLE "AppSetting" TO ${webRole};
+GRANT SELECT ON TABLE "AppSetting" TO ${workerRole};
 
 -- Upload transport is public-facing, but parsing and durable model creation run
 -- only in the single-concurrency ingest worker. Move INSERT rather than widening

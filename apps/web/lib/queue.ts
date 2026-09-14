@@ -2,10 +2,12 @@ import { Queue } from "bullmq";
 import {
   INGEST_JOB_RETENTION_SECONDS,
   INGEST_QUEUE,
+  MAINTENANCE_QUEUE,
   SLICER_PROFILE_QUEUE,
   SLICE_QUEUE,
   type IngestJobData,
   type IngestJobResult,
+  type PurgeJobData,
   type SliceJobData,
   type SlicerProfileJobData,
 } from "@print/shared";
@@ -20,6 +22,7 @@ const globalForQueue = globalThis as unknown as {
   sliceQueue?: Queue<SliceJobData>;
   ingestQueue?: Queue<IngestJobData, IngestJobResult>;
   slicerProfileQueue?: Queue<SlicerProfileJobData>;
+  maintenanceQueue?: Queue<PurgeJobData>;
 };
 
 function parseRedis(url: string, maxRetriesPerRequest: number | null = null) {
@@ -89,4 +92,16 @@ export function getSlicerProfileQueue(): Queue<SlicerProfileJobData> {
     });
   }
   return globalForQueue.slicerProfileQueue;
+}
+
+/** The worker's maintenance queue: the admin's "purge now". Bounded retries,
+ *  like the other HTTP-facing producers. */
+export function getMaintenanceQueue(): Queue<PurgeJobData> {
+  if (!globalForQueue.maintenanceQueue) {
+    globalForQueue.maintenanceQueue = new Queue<PurgeJobData>(MAINTENANCE_QUEUE, {
+      connection: parseRedis(env.redisUrl, 2),
+      defaultJobOptions: { attempts: 1, removeOnComplete: true, removeOnFail: 20 },
+    });
+  }
+  return globalForQueue.maintenanceQueue;
 }

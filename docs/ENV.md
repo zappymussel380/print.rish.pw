@@ -69,7 +69,7 @@ one. Review vendor retention/access terms before enabling it.
 | `DOWNLOAD_WINDOW_MB` | `1200` | Model download bytes per observed IP per 10 minutes. |
 | `STORAGE_RESERVE_MB` | `2048` | Free-space reserve preserved by capacity reservations and final checks. |
 | `MAX_MODELS_PER_SESSION` | `20` | Active models in one quote session. |
-| `UPLOAD_RETENTION_HOURS` | `48` | Unattached upload lifetime. |
+| `UPLOAD_RETENTION_HOURS` | `48` | Unattached upload lifetime. This and the two below apply until admin → Settings → File clean-up is saved. |
 | `FILE_RETENTION_DAYS` | `30` | Model-file lifetime after all referencing quotations are terminal and old. Quotation/model rows and PDFs remain until the quotation sweep. |
 | `QUOTATION_RETENTION_DAYS` | `90` | Deletion threshold measured from `updatedAt` for `COMPLETED`, `DELIVERED`, and `CANCELLED` quotations. Policy caps the threshold at 90 days, so larger values are reduced to 90; the next daily sweep deletes the quotation and its customer/contact/address data, items/history, PDF, and models that become unreferenced. Non-terminal quotations do not age out. |
 | `PRINT_DB_DIR`, `PRINT_UPLOAD_DIR`, `PRINT_PDF_DIR`, `PRINT_REDIS_DIR` | none | Required host paths when using `docker-compose.vault.yml`. |

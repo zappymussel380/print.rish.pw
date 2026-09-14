@@ -90,6 +90,11 @@ services:
       DOWNLOAD_WINDOW_MB: ${DOWNLOAD_WINDOW_MB:-1200}
       STORAGE_RESERVE_MB: ${STORAGE_RESERVE_MB:-2048}
       MAX_MODELS_PER_SESSION: ${MAX_MODELS_PER_SESSION:-20}
+      # The same retention the worker sweeps with, so admin and the FAQ show it
+      # until admin -> Settings -> File clean-up is saved.
+      UPLOAD_RETENTION_HOURS: ${UPLOAD_RETENTION_HOURS:-48}
+      FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS:-30}
+      QUOTATION_RETENTION_DAYS: ${QUOTATION_RETENTION_DAYS:-90}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       migrate:

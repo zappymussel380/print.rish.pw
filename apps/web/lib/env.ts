@@ -167,6 +167,10 @@ export const env = {
   get fileRetentionDays() {
     return int("FILE_RETENTION_DAYS", 30);
   },
+  /** Mirrors the worker: the environment can only shorten the 90 days. */
+  get quotationRetentionDays() {
+    return Math.min(int("QUOTATION_RETENTION_DAYS", 90), 90);
+  },
   // Contact form → Resend. Secrets have no defaults so a misconfigured deploy
   // fails loudly at send time rather than silently dropping messages.
   get resendApiKey() {

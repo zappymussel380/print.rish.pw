@@ -74,7 +74,10 @@ five pages:
   on or off, or change the API user and pickup pincode. With them off, the
   quote page has no shipping box and checkout says delivery is arranged after
   the quotation. Once saved here, these settings replace the ones the
-  installer wrote.
+  installer wrote. **File clean-up:** how long uploads, finished quotations'
+  model files and finished quotations are kept (or keep quotations for good),
+  and **Purge now** to free disk space at once — it deletes only files, never
+  quotations or anything still open.
 
 The web address and HTTPS, the admin password, the printer, and email and
 Telegram change by running `sudo /opt/print-shop/install.sh` again.
