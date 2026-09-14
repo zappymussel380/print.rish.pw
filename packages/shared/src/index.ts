@@ -12,6 +12,8 @@ export * from "./custom-materials";
 export * from "./filename";
 export * from "./ingest-job";
 export * from "./parse-child-contract";
+export * from "./mail-settings";
+export * from "./mail-settings-schema";
 export * from "./material-guide";
 export * from "./money";
 export * from "./orca-profile";

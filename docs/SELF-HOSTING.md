@@ -73,11 +73,14 @@ five pages:
 - **Settings:** live courier prices on the quote page (Shiprocket): switch them
   on or off, or change the API user and pickup pincode. With them off, the
   quote page has no shipping box and checkout says delivery is arranged after
-  the quotation. Once saved here, these settings replace the ones the
-  installer wrote.
+  the quotation. **Email:** where contact-form messages go, sent through
+  Resend or any SMTP server (a Gmail or Zoho app password works), with a
+  "Send test email" button. With email off, the contact page shows WhatsApp
+  and your details instead of a form. Once saved here, these settings replace
+  the ones the installer wrote.
 
-The web address and HTTPS, the admin password, the printer, and email and
-Telegram change by running `sudo /opt/print-shop/install.sh` again.
+The web address and HTTPS, the admin password, the printer, and Telegram
+change by running `sudo /opt/print-shop/install.sh` again.
 
 If the first run is interrupted (for example the build fails on a network
 blip), just run the command again: it picks up where it stopped.
