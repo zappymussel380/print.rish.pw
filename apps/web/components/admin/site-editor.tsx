@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ACCENTS,
+  ACCENT_IDS,
   DEFAULT_SITE_PROFILE,
+  accentCss,
   MATERIAL_IDS,
   SITE_PROFILE_LIMITS,
   hasCustomGuide,
   isCustomMaterial,
   materialName,
   siteProfileFieldSchemas,
+  type AccentId,
   type CustomMaterialNames,
   type MaterialId,
   type SiteProfile,
@@ -77,6 +81,17 @@ export function SiteEditor({
   const [materials, setMaterials] = useState<MaterialId[]>(() =>
     start.materialsPage.filter((m) => !isCustomMaterial(m) || hasCustomGuide(materialNames, m)),
   );
+  const [accent, setAccent] = useState<AccentId>(start.accent);
+
+  // Preview the accent on this page as it's picked. Appended after the layout's
+  // own accent style, which it then outranks; gone again when the editor is.
+  useEffect(() => {
+    const preview = document.createElement("style");
+    preview.id = "site-accent-preview";
+    preview.textContent = accent === start.accent ? "" : accentCss(accent, true);
+    document.body.append(preview);
+    return () => preview.remove();
+  }, [accent, start.accent]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +133,7 @@ export function SiteEditor({
           footerNote: form.footerNote,
           quotationPrefix: form.quotationPrefix.trim().toUpperCase(),
           materialsPage: materials,
+          accent,
         }),
       });
       if (!res.ok) {
@@ -135,12 +151,12 @@ export function SiteEditor({
   return (
     <details className="tile mt-4 p-0 [&_summary]:list-none">
       <summary className="flex cursor-pointer items-center justify-between p-4 text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
-        <span>Site · name, contact &amp; materials page</span>
+        <span>Site · name, contact, accent colour &amp; materials page</span>
         <span className="text-faint">edit</span>
       </summary>
       <div className="space-y-6 border-t border-line p-4">
         {profile === null ? (
-          <p className="text-xs text-accent">Could not load the saved profile; showing defaults.</p>
+          <p className="text-xs text-danger">Could not load the saved profile; showing defaults.</p>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
           {FIELDS.map((f) => {
@@ -149,7 +165,7 @@ export function SiteEditor({
               value: form[f.key],
               maxLength: f.max,
               "aria-invalid": bad,
-              className: `input-base py-2 text-sm ${bad ? "border-[var(--accent)]" : ""}`,
+              className: `input-base py-2 text-sm ${bad ? "border-[var(--danger)]" : ""}`,
             };
             return (
               <label key={f.key} className={`block text-sm ${f.multiline ? "sm:col-span-2" : ""}`}>
@@ -166,6 +182,45 @@ export function SiteEditor({
             );
           })}
         </div>
+        <fieldset>
+          <legend className="text-sm font-[600]">Accent colour</legend>
+          <p className="mt-0.5 text-xs text-faint">
+            Buttons, links, prices and the name in the header, across the whole site and the quotation PDF. Each has a
+            light- and a dark-theme shade; errors stay red.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {ACCENT_IDS.map((id) => {
+              const { label, light, dark } = ACCENTS[id];
+              const on = accent === id;
+              return (
+                <label
+                  key={id}
+                  className={`flex cursor-pointer items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--accent)] ${
+                    on ? "border-[var(--accent)] text-text" : "border-line text-muted hover:text-text"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="accent"
+                    value={id}
+                    checked={on}
+                    onChange={() => {
+                      setAccent(id);
+                      setDirty(true);
+                    }}
+                    className="sr-only"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="size-6 rounded-full border border-line"
+                    style={{ background: `linear-gradient(135deg, ${light} 50%, ${dark} 50%)` }}
+                  />
+                  {label}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
         <fieldset>
           <legend className="text-sm font-[600]">Materials page</legend>
           <p className="mt-0.5 text-xs text-faint">
@@ -201,13 +256,13 @@ export function SiteEditor({
             {saving ? "Saving…" : "Save site profile"}
           </button>
           {invalid.has("materialsPage") ? (
-            <span className="text-xs text-accent">Pick at least one material for the materials page.</span>
+            <span className="text-xs text-danger">Pick at least one material for the materials page.</span>
           ) : invalid.size > 0 ? (
-            <span className="text-xs text-accent">Check the highlighted fields.</span>
+            <span className="text-xs text-danger">Check the highlighted fields.</span>
           ) : dirty && !saving ? (
             <span className="text-xs text-faint">Unsaved changes</span>
           ) : null}
-          {error ? <span className="text-xs text-accent">{error}</span> : null}
+          {error ? <span className="text-xs text-danger">{error}</span> : null}
         </div>
       </div>
     </details>

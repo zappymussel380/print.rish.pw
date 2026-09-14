@@ -160,11 +160,11 @@ export function FaqEditor({ generated, settings }: { generated: FaqEntry[]; sett
             {saving ? "Saving…" : "Save FAQ"}
           </button>
           {incomplete ? (
-            <span className="text-xs text-accent">Every question needs an answer.</span>
+            <span className="text-xs text-danger">Every question needs an answer.</span>
           ) : dirty && !saving ? (
             <span className="text-xs text-faint">Unsaved changes</span>
           ) : null}
-          {error ? <span className="text-xs text-accent">{error}</span> : null}
+          {error ? <span className="text-xs text-danger">{error}</span> : null}
         </div>
       </div>
     </details>

@@ -178,7 +178,7 @@ export function RatesEditor({
             setValues((v) => ({ ...v, [key]: e.target.value }));
             setDirty(true);
           }}
-          className={`input-base ${width} px-2 py-1.5 text-right text-sm tabular-nums ${bad ? "border-[var(--accent)]" : ""}`}
+          className={`input-base ${width} px-2 py-1.5 text-right text-sm tabular-nums ${bad ? "border-[var(--danger)]" : ""}`}
         />
         {f.suffix ? <span className="whitespace-nowrap text-xs text-faint">{f.suffix}</span> : null}
       </span>
@@ -192,7 +192,7 @@ export function RatesEditor({
     const sell = stored(sellKey(m));
     const under = sell !== undefined && cost >= sell;
     return (
-      <span className={`tabular-nums ${under ? "text-accent" : "text-muted"}`} title={under ? "At or above what customers pay per gram" : undefined}>
+      <span className={`tabular-nums ${under ? "text-danger" : "text-muted"}`} title={under ? "At or above what customers pay per gram" : undefined}>
         ₹{(cost / 100).toFixed(2)}
         <span className="text-xs text-faint"> / g</span>
         {under ? <span className="text-xs"> · not covered</span> : null}
@@ -392,13 +392,13 @@ export function RatesEditor({
             {saving ? "Saving…" : "Save rates"}
           </button>
           {invalid.size > 0 ? (
-            <span className="text-xs text-accent">
+            <span className="text-xs text-danger">
               {invalid.size} value{invalid.size === 1 ? " is" : "s are"} missing or out of range.
             </span>
           ) : dirty && !saving ? (
             <span className="text-xs text-faint">Unsaved changes — new quotes use the new rates; submitted quotations keep theirs.</span>
           ) : null}
-          {error ? <span className="text-xs text-accent">{error}</span> : null}
+          {error ? <span className="text-xs text-danger">{error}</span> : null}
         </div>
       </div>
     </details>

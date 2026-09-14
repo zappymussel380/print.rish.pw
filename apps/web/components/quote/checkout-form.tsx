@@ -182,7 +182,7 @@ export function CheckoutForm() {
               </div>
             )}
             {(emailNote || issue("email")) && (
-              <span className="mt-1 block text-xs text-accent" role="alert">
+              <span className="mt-1 block text-xs text-danger" role="alert">
                 {emailNote || issue("email")}
               </span>
             )}
@@ -204,7 +204,7 @@ export function CheckoutForm() {
               required
             />
             {(phoneNote || issue("phone")) && (
-              <span className="mt-1 block text-xs text-accent" role="alert">
+              <span className="mt-1 block text-xs text-danger" role="alert">
                 {phoneNote || issue("phone")}
               </span>
             )}
@@ -236,7 +236,7 @@ export function CheckoutForm() {
         </label>
 
         {error && !error.issues && (
-          <p className="mt-4 text-sm text-accent" role="alert">
+          <p className="mt-4 text-sm text-danger" role="alert">
             {error.message}
           </p>
         )}
@@ -321,7 +321,7 @@ function Input({
         {label}
       </span>
       <input {...props} className="input-base" aria-invalid={!!error} />
-      {error && <span className="mt-1 block text-xs text-accent">{error}</span>}
+      {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
     </label>
   );
 }

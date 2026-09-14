@@ -1,5 +1,6 @@
 import type { MaterialId } from "./quote-types";
 import { DEFAULT_QUOTATION_PREFIX } from "./quotation-number";
+import { DEFAULT_ACCENT, type AccentId } from "./accents";
 
 // Zod-free on purpose: the site header and context use this on every page.
 // Validation lives in site-profile-schema.ts.
@@ -33,6 +34,8 @@ export interface SiteProfile {
   materialsPage: MaterialId[];
   /** Initials that start every quotation number (2–5 capital letters). */
   quotationPrefix: string;
+  /** The site's accent colour (a preset from accents.ts). */
+  accent: AccentId;
 }
 
 export const DEFAULT_SITE_PROFILE: SiteProfile = {
@@ -43,6 +46,7 @@ export const DEFAULT_SITE_PROFILE: SiteProfile = {
   footerNote: "A rish.pw project",
   materialsPage: ["PLA", "PETG"],
   quotationPrefix: DEFAULT_QUOTATION_PREFIX,
+  accent: DEFAULT_ACCENT,
 };
 
 export const SITE_PROFILE_LIMITS = {

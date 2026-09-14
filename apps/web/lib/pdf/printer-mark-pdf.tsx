@@ -18,7 +18,7 @@ const PATHS = [
   "M9.8 16.5h4.4",
 ];
 
-export function PrinterMarkPdf({ size = 22, color = "#ff5555" }: { size?: number; color?: string }) {
+export function PrinterMarkPdf({ size = 22, color }: { size?: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       {PATHS.map((d) => (

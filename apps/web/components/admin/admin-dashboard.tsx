@@ -341,7 +341,7 @@ export function AdminDashboard({
                       type="button"
                       onClick={() => remove(row)}
                       disabled={busyId === row.id}
-                      className="rounded-md p-2 text-faint transition-colors hover:text-accent disabled:opacity-40"
+                      className="rounded-md p-2 text-faint transition-colors hover:text-danger disabled:opacity-40"
                       aria-label={`Delete ${row.number}`}
                     >
                       <Trash2 strokeWidth={1.65} className="h-4 w-4" />

@@ -82,7 +82,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
           ) : (
             <div className="grid h-full min-h-[180px] place-items-center text-faint">
               {model.status === "error" ? (
-                <AlertTriangle strokeWidth={1.4} className="h-10 w-10 text-accent" />
+                <AlertTriangle strokeWidth={1.4} className="h-10 w-10 text-danger" />
               ) : (
                 <Box strokeWidth={1.2} className="h-12 w-12" />
               )}
@@ -131,7 +131,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
               disabled={removing || ingestPending}
               aria-label={`Remove ${model.fileName}`}
               title={ingestPending ? "Available after model checking finishes" : undefined}
-              className="shrink-0 rounded-md p-2 text-faint transition-colors hover:text-accent disabled:opacity-40"
+              className="shrink-0 rounded-md p-2 text-faint transition-colors hover:text-danger disabled:opacity-40"
             >
               {removing ? (
                 <Loader2 strokeWidth={1.65} className="h-4 w-4 animate-spin" />
@@ -154,7 +154,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
           )}
 
           {model.status === "error" && (
-            <p className="mt-3 text-sm text-accent" aria-live="polite">
+            <p className="mt-3 text-sm text-danger" aria-live="polite">
               {model.error ?? "Upload failed"}
             </p>
           )}
@@ -170,7 +170,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
                   </span>
                 )}
                 {!server.fitsBed && (
-                  <span className="inline-flex items-center gap-1 text-accent">
+                  <span className="inline-flex items-center gap-1 text-danger">
                     <AlertTriangle strokeWidth={1.65} className="h-3.5 w-3.5" />
                     Larger than the 256mm bed
                   </span>
@@ -254,7 +254,7 @@ function SliceStatsRow({
         <SliceProgress progress={slice?.progress} />
       )}
       {failed && (
-        <p className="col-span-3 -mt-1 text-xs text-accent">
+        <p className="col-span-3 -mt-1 text-xs text-danger">
           {slice?.error?.message ?? "Slicing failed. Adjust settings and try again."}
         </p>
       )}

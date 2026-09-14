@@ -54,7 +54,7 @@ export function SummaryBar() {
             </span>
           )}
           {failed > 0 && pending === 0 && (
-            <span className="text-xs text-accent">{failed} failed</span>
+            <span className="text-xs text-danger">{failed} failed</span>
           )}
           {canContinue ? (
             <Link href="/quote/details" className="btn-pill text-sm">

@@ -10,6 +10,8 @@
   --surface: #faf8f4;
   --line: #d7d0c8;
   --accent: #c23a3a;
+  /* Errors and destructive actions: red whatever the accent is. */
+  --danger: #c23a3a;
   --text: #17130f;
   --muted: #5f574f;
   --faint: #948b82;
@@ -26,6 +28,7 @@
     --surface: #0c0c0c;
     --line: #252525;
     --accent: #ff5555;
+    --danger: #ff5555;
     --text: #eeeeee;
     --muted: #9a9a9a;
     --faint: #555555;
@@ -38,6 +41,7 @@ html[data-theme="light"] {
   --surface: #faf8f4;
   --line: #d7d0c8;
   --accent: #c23a3a;
+  --danger: #c23a3a;
   --text: #17130f;
   --muted: #5f574f;
   --faint: #948b82;
@@ -49,6 +53,7 @@ html[data-theme="dark"] {
   --surface: #0c0c0c;
   --line: #252525;
   --accent: #ff5555;
+  --danger: #ff5555;
   --text: #eeeeee;
   --muted: #9a9a9a;
   --faint: #555555;
@@ -60,6 +65,7 @@ html[data-theme="dark"] {
   --color-surface: var(--surface);
   --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-danger: var(--danger);
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-faint: var(--faint);

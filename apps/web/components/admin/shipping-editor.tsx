@@ -116,7 +116,7 @@ export function ShippingEditor({ initial }: { initial: ShippingAdminView }) {
               maxLength={6}
               aria-invalid={badPincode}
               onChange={(e) => touch(setPincode)(e.target.value)}
-              className={`input-base mt-1.5 py-2 text-sm tabular-nums ${badPincode ? "border-[var(--accent)]" : ""}`}
+              className={`input-base mt-1.5 py-2 text-sm tabular-nums ${badPincode ? "border-[var(--danger)]" : ""}`}
             />
           </label>
         </div>
@@ -126,7 +126,7 @@ export function ShippingEditor({ initial }: { initial: ShippingAdminView }) {
             {saving ? "Checking with Shiprocket…" : "Save shipping"}
           </button>
           {error ? (
-            <span className="text-xs text-accent" role="alert">
+            <span className="text-xs text-danger" role="alert">
               {error}
             </span>
           ) : dirty && !saving ? (

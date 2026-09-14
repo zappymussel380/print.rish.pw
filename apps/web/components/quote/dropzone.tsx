@@ -293,7 +293,7 @@ export function Dropzone({ maxModels, maxUploadMb }: { maxModels: number; maxUpl
       {rejected.length > 0 && (
         <ul className="mt-3 space-y-1" aria-live="polite">
           {rejected.map((r, i) => (
-            <li key={`${r}-${i}`} className="text-xs" style={{ color: "var(--accent)" }}>
+            <li key={`${r}-${i}`} className="text-xs text-danger">
               Skipped: {r}
             </li>
           ))}

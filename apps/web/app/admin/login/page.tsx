@@ -59,7 +59,7 @@ function LoginForm() {
           />
         </label>
         {error && (
-          <p className="mt-3 text-sm text-accent" role="alert">
+          <p className="mt-3 text-sm text-danger" role="alert">
             {error}
           </p>
         )}

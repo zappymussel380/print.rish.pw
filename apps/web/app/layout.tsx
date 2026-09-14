@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import { headers } from "next/headers";
 import Script from "next/script";
 import type { ReactNode } from "react";
-import { listJoin, materialFamily, MATERIAL_IDS } from "@print/shared";
+import { accentCss, listJoin, materialFamily, MATERIAL_IDS } from "@print/shared";
 import { SiteFooter } from "@/components/shell/site-footer";
 import { SiteHeader } from "@/components/shell/site-header";
 import { ViewTransitions } from "@/components/shell/view-transitions";
@@ -48,9 +48,13 @@ const themeInit = `(function(){try{var t=localStorage.getItem("rish-theme");var 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   const profile = await getSiteProfile();
+  // Built from the preset table only (no text the owner typed), so it's safe
+  // to inline; the default accent needs none.
+  const accent = accentCss(profile.accent);
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans bg-bg text-text min-h-dvh flex flex-col`}>
+        {accent ? <style id="site-accent" dangerouslySetInnerHTML={{ __html: accent }} /> : null}
         <Script id="theme-init" strategy="beforeInteractive" nonce={nonce}>
           {themeInit}
         </Script>
