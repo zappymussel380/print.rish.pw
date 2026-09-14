@@ -12,17 +12,23 @@ import { Loader2 } from "lucide-react";
 /** Interactive WebGL preview of an uploaded model. Loaded via dynamic import
  *  (ssr:false) so three.js never enters the server bundle. Fetches the raw
  *  bytes from the model file endpoint and parses with the format's loader. */
+const NEUTRAL = "#d0d4d9";
+
 export default function ModelViewer({
   modelId,
   format,
   wireframe,
+  colour,
 }: {
   modelId: string;
   format: string;
   wireframe: boolean;
+  /** The chosen filament colour, already made preview-safe (previewColour). */
+  colour?: string | null;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const materialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const colourRef = useRef(colour ?? NEUTRAL);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +36,12 @@ export default function ModelViewer({
   useEffect(() => {
     for (const m of materialsRef.current) m.wireframe = wireframe;
   }, [wireframe]);
+
+  // Likewise the filament colour, as the customer changes it.
+  useEffect(() => {
+    colourRef.current = colour ?? NEUTRAL;
+    for (const m of materialsRef.current) m.color.set(colourRef.current);
+  }, [colour]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -76,7 +88,7 @@ export default function ModelViewer({
 
     const material = () => {
       const m = new THREE.MeshStandardMaterial({
-        color: 0xd0d4d9,
+        color: colourRef.current,
         metalness: 0.05,
         roughness: 0.75,
         wireframe,
