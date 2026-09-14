@@ -249,7 +249,12 @@ export function CatalogEditor({
                       checked={materialOn}
                       // One of the shop's own materials can't go on sale before it has a profile.
                       disabled={Boolean(m.setup?.problem) && !materialOn}
-                      onChange={(e) => mutate((d) => (d.materials[m.id] = e.target.checked))}
+                      onChange={(e) => {
+                        // Read now: by the time the updater runs, React may have put
+                        // the controlled box back, and the click would be lost.
+                        const on = e.target.checked;
+                        mutate((d) => (d.materials[m.id] = on));
+                      }}
                       className="size-4 accent-[var(--accent)] disabled:opacity-40"
                     />
                     {m.name}
@@ -272,6 +277,14 @@ export function CatalogEditor({
                 <p className="mt-1 pl-8 text-xs text-faint">
                   {materialOn ? "Not on sale yet: " : ""}
                   {m.setup.problem} See Your own materials below.
+                </p>
+              ) : m.setup?.ready && !materialOn ? (
+                <p className="mt-1 pl-8 text-xs text-faint">Ready to sell: tick it to put it on sale, then save.</p>
+              ) : null}
+              {materialOn && enabledCount === 0 ? (
+                // Customers could pick the material but no colour, and checkout would refuse it.
+                <p className="mt-1 pl-8 text-xs text-danger" role="status">
+                  No colours switched on: customers can&apos;t order it until you add or tick at least one.
                 </p>
               ) : null}
               {open ? (
@@ -486,7 +499,10 @@ function CustomColours({
           type="text"
           value={draft.name}
           maxLength={CUSTOM_COLOUR_NAME_MAX}
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          onChange={(e) => {
+            const name = e.target.value;
+            setDraft((d) => ({ ...d, name }));
+          }}
           onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), submit())}
           placeholder="Colour name, e.g. Signal Orange"
           aria-label="Colour name"

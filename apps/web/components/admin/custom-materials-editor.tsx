@@ -224,7 +224,10 @@ export function CustomMaterialsEditor({
                   <span className="shrink-0 whitespace-nowrap text-xs font-[650] uppercase tracking-[0.1em] text-faint">Material {i + 1}</span>
                   <input
                     value={name}
-                    onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setDrafts((d) => ({ ...d, [id]: value }));
+                    }}
                     maxLength={CUSTOM_MATERIAL_NAME_MAX}
                     placeholder="Name customers see, e.g. ABS-CF"
                     aria-label={`Material ${i + 1} name`}
@@ -259,6 +262,9 @@ export function CustomMaterialsEditor({
                     </span>
                   ) : null}
                   {material?.enabled && material.setup?.ready ? <span> · on sale</span> : null}
+                  {material?.setup?.ready && !material.enabled ? (
+                    <span className="text-muted"> · ready: switch it on in Catalog, and give it a colour</span>
+                  ) : null}
                 </p>
                 {slot?.lastError ? (
                   <p className="text-xs text-danger" role="alert">
@@ -271,7 +277,10 @@ export function CustomMaterialsEditor({
                     <select
                       aria-label={`${savedName}: OrcaSlicer generic to start from`}
                       value={shownGeneric(id)}
-                      onChange={(e) => setGeneric((g) => ({ ...g, [id]: e.target.value as OrcaGenericFilament }))}
+                      onChange={(e) => {
+                        const value = e.target.value as OrcaGenericFilament;
+                        setGeneric((g) => ({ ...g, [id]: value }));
+                      }}
                       className="input-base w-auto max-w-full text-sm"
                     >
                       {ORCA_GENERIC_FILAMENTS.map((g) => (
@@ -285,7 +294,10 @@ export function CustomMaterialsEditor({
                       <input
                         inputMode="decimal"
                         value={shownDensity(id)}
-                        onChange={(e) => setDensity((d) => ({ ...d, [id]: e.target.value }))}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setDensity((d) => ({ ...d, [id]: value }));
+                        }}
                         placeholder="e.g. 1.24"
                         aria-label={`${savedName}: filament density in g/cm³`}
                         className="input-base w-16 text-sm"
