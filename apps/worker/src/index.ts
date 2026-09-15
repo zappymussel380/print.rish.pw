@@ -17,6 +17,9 @@ import {
   type SliceJobData,
   type SliceProgressStage,
   type SlicerProfileJobData,
+  MAINTENANCE_QUEUE,
+  RETENTION_BOUNDS,
+  type PurgeJobData,
 } from "@print/shared";
 import { config } from "./config.js";
 import { INGEST_WORKER_OPTIONS, processIngestJob, terminalCleanup } from "./ingest.js";
@@ -25,7 +28,7 @@ import { runSlice } from "./orca.js";
 import { activeProfileSet } from "./profile-set.js";
 import { markBatchFailed, orcaIndex, processProfileBatch } from "./profile-test.js";
 import { slicerPool } from "./slicer-pool.js";
-import { runRetention } from "./retention.js";
+import { loadRetentionPolicy, runRetention } from "./retention.js";
 import {
   claimSliceAttempt,
   failLiveSliceAttempt,
@@ -392,8 +395,7 @@ ingestWorker.on("failed", (job, error) => {
 });
 ingestWorker.on("ready", () => log.info("ingest worker ready"));
 
-// --- daily data-retention sweep (repeatable) ---
-const MAINTENANCE_QUEUE = "maintenance";
+// --- daily data-retention sweep (repeatable), and the admin's "purge now" ---
 const maintenanceQueue = new Queue(MAINTENANCE_QUEUE, { connection: redisOptions() });
 // bullmq 6 dropped `repeat` from Queue.add; job schedulers are the replacement.
 // Upserting an already-registered scheduler does not re-emit, so the separate
@@ -433,8 +435,18 @@ profileWorker.on("failed", (job, err) => {
 
 const maintenanceWorker = new Worker(
   MAINTENANCE_QUEUE,
-  async () => {
-    await runRetention(log);
+  async (job) => {
+    const data = job.data as Partial<PurgeJobData> | undefined;
+    if (data?.kind === "purge") {
+      // Only uploads and finished quotations' files, older than the admin asked;
+      // quotation records are never touched by a purge.
+      const days = Number(data.olderThanDays);
+      const { min, max } = RETENTION_BOUNDS.purgeOlderThanDays;
+      if (!Number.isInteger(days) || days < min || days > max) throw new Error("Purge job has an invalid age");
+      return runRetention(log, { uploadRetentionHours: days * 24, fileRetentionDays: days, quotationRetentionDays: null }, { purgeOnly: true });
+    }
+    const policy = await loadRetentionPolicy(log);
+    return policy ? runRetention(log, policy) : null;
   },
   { connection: redisOptions() },
 );

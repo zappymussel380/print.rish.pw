@@ -44,7 +44,7 @@ delete (globalThis as { prisma?: unknown }).prisma;
 const { createPrismaClient, prisma: workerPrisma } = await import("@print/db");
 const webPrisma = createPrismaClient(webConnection.url);
 const ownerPrisma = createPrismaClient(ownerConnection.url);
-const { runRetention } = await import("../../worker/src/retention.js");
+const { envRetentionPolicy, runRetention } = await import("../../worker/src/retention.js");
 
 const fixtureSuffix = Date.now();
 const agedQuotationId = randomUUID();
@@ -366,7 +366,7 @@ describe("quotation PII retention against real services", () => {
     `;
     expect(identity?.role).toBe(workerConnection.username);
 
-    await runRetention(pino({ enabled: false }));
+    await runRetention(pino({ enabled: false }), envRetentionPolicy());
 
     await expect(
       webPrisma.quotation.findUnique({ where: { id: agedQuotationId } }),

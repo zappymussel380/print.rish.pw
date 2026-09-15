@@ -101,7 +101,12 @@ disaster-resilient backup rather than a same-host recovery copy.
 
 ## Automatic retention and reconciliation
 
-The worker runs cleanup once at startup and then daily:
+The worker runs cleanup once at startup and then daily. The periods below are
+the environment defaults; once the owner saves **admin → Settings → File
+clean-up**, the saved days apply instead (and finished quotations can be kept
+for good). If the worker can't read the saved policy, it skips that day's sweep
+rather than fall back and delete on a guess. The same section has **Purge
+now**: steps 1 and 2 with an age the owner picks, never step 3.
 
 1. Unattached uploads older than `UPLOAD_RETENTION_HOURS` (48 hours) are claimed
    by a conditional delete, then their derived model/thumbnail paths are

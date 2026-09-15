@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   quotationFindMany: vi.fn(),
   quotationDeleteMany: vi.fn(),
   itemCount: vi.fn(),
+  settingFindUnique: vi.fn(),
 }));
 
 vi.mock("@print/db", () => ({
@@ -32,6 +33,7 @@ vi.mock("@print/db", () => ({
       deleteMany: mocks.quotationDeleteMany,
     },
     quotationItem: { count: mocks.itemCount },
+    appSetting: { findUnique: mocks.settingFindUnique },
   },
 }));
 
@@ -49,9 +51,10 @@ vi.mock("./config.js", () => ({
   },
 }));
 
-const { runRetention } = await import("./retention");
+const { loadRetentionPolicy, runRetention } = await import("./retention");
 
-const log = { info: vi.fn(), error: vi.fn() } as never;
+const log = { info: vi.fn(), error: vi.fn(), warn: vi.fn() } as never;
+const POLICY = { uploadRetentionHours: 24, fileRetentionDays: 30, quotationRetentionDays: 90 };
 
 async function putOld(path: string): Promise<string> {
   await writeFile(path, "x");
@@ -73,6 +76,7 @@ beforeEach(async () => {
   mocks.quotationFindMany.mockResolvedValue([]);
   mocks.quotationDeleteMany.mockResolvedValue({ count: 1 });
   mocks.itemCount.mockResolvedValue(0);
+  mocks.settingFindUnique.mockResolvedValue(null);
 });
 
 afterEach(async () => {
@@ -100,7 +104,7 @@ describe("retention and STEP sources", () => {
       return [];
     });
 
-    await runRetention(log);
+    await runRetention(log, POLICY);
 
     expect(existsSync(stored)).toBe(false);
     expect(existsSync(source)).toBe(false);
@@ -129,7 +133,7 @@ describe("retention and STEP sources", () => {
         : [];
     });
 
-    await runRetention(log);
+    await runRetention(log, POLICY);
 
     expect(existsSync(liveStored)).toBe(true);
     expect(existsSync(liveSource)).toBe(true);
@@ -146,10 +150,45 @@ describe("retention and STEP sources", () => {
     const photo = await putOld(join(showcase, `${DEAD_ID}.png`));
     const jpeg = await putOld(join(showcase, `${LIVE_ID}.jpg`));
 
-    await runRetention(log);
+    await runRetention(log, POLICY);
 
     expect(existsSync(photo)).toBe(true);
     expect(existsSync(jpeg)).toBe(true);
   });
 
+});
+
+describe("the owner's retention settings", () => {
+  it("use the environment until saved, then the saved days", async () => {
+    expect(await loadRetentionPolicy(log)).toEqual({ uploadRetentionHours: 24, fileRetentionDays: 30, quotationRetentionDays: 90 });
+    mocks.settingFindUnique.mockResolvedValue({ value: { uploadRetentionDays: 3, fileRetentionDays: 60, quotationRetentionDays: null } });
+    expect(await loadRetentionPolicy(log)).toEqual({ uploadRetentionHours: 72, fileRetentionDays: 60, quotationRetentionDays: null });
+  });
+
+  it("skip the sweep when the settings can't be read, rather than delete on a guess", async () => {
+    mocks.settingFindUnique.mockRejectedValue(new Error("permission denied for table AppSetting"));
+    expect(await loadRetentionPolicy(log)).toBeNull();
+  });
+
+  it("never delete quotations when kept for good, or on a purge", async () => {
+    const finished = { id: "q1", number: "RSP-2026-0001", items: [], status: "COMPLETED" };
+    mocks.quotationFindMany.mockResolvedValueOnce([finished]).mockResolvedValue([]);
+    await runRetention(log, { ...POLICY, quotationRetentionDays: null });
+    expect(mocks.quotationDeleteMany).not.toHaveBeenCalled();
+
+    mocks.quotationFindMany.mockReset().mockResolvedValueOnce([finished]).mockResolvedValue([]);
+    const report = await runRetention(log, POLICY, { purgeOnly: true });
+    expect(mocks.quotationDeleteMany).not.toHaveBeenCalled();
+    expect(report.deletedQuotations).toBe(0);
+  });
+
+  it("still delete finished quotations past the saved days", async () => {
+    mocks.quotationFindMany
+      .mockResolvedValueOnce([]) // files stage
+      .mockResolvedValueOnce([{ id: "q1", number: "RSP-2026-0001", items: [] }])
+      .mockResolvedValue([]);
+    const report = await runRetention(log, POLICY);
+    expect(mocks.quotationDeleteMany).toHaveBeenCalledOnce();
+    expect(report.deletedQuotations).toBe(1);
+  });
 });

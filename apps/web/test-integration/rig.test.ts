@@ -46,6 +46,8 @@ interface WorkerPrivileges {
   quotationItemSelect: boolean;
   quotationItemDelete: boolean;
   statusHistoryDelete: boolean;
+  appSettingSelect: boolean;
+  appSettingUpdate: boolean;
 }
 
 describe("integration service rig", () => {
@@ -123,7 +125,11 @@ describe("integration service rig", () => {
         has_table_privilege(current_user, '"QuotationItem"', 'DELETE')
           AS "quotationItemDelete",
         has_table_privilege(current_user, '"StatusHistory"', 'DELETE')
-          AS "statusHistoryDelete"
+          AS "statusHistoryDelete",
+        has_table_privilege(current_user, '"AppSetting"', 'SELECT')
+          AS "appSettingSelect",
+        has_table_privilege(current_user, '"AppSetting"', 'UPDATE')
+          AS "appSettingUpdate"
     `;
 
     expect(privileges).toEqual({
@@ -139,6 +145,9 @@ describe("integration service rig", () => {
       quotationItemSelect: true,
       quotationItemDelete: false,
       statusHistoryDelete: false,
+      // Reads the owner's file clean-up policy; never writes settings.
+      appSettingSelect: true,
+      appSettingUpdate: false,
     });
   });
 
