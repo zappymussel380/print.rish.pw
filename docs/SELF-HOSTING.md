@@ -273,6 +273,31 @@ quotation PDFs) is only deleted if you confirm twice. Data you keep stays in
 Docker even if you delete the install folder, and its password is in that
 folder's `.env`, so keep `.env` if you might install again.
 
+## Backing up your settings (before a reinstall or a move)
+
+**Admin → Settings → Backup & restore → Download backup** saves one JSON file
+with everything you've set up in the admin:
+
+- rates
+- catalog and colours
+- your own materials and their OrcaSlicer presets
+- the material helper
+- shop profile
+- FAQ
+- GST
+- file clean-up
+- shipping and email
+
+After installing again (or on the new machine), sign in and use **Restore from
+file…** on the same card:
+
+- Your own materials' presets are test-sliced again and go live once they pass.
+- Passwords and API keys are never in the file, so re-enter the Shiprocket
+  password and the email key or password; the restore says which.
+- Quotations, uploads and showcase photos aren't in this file. They're in the
+  database and the data volume. See [MAINTENANCE.md](MAINTENANCE.md) for backing
+  those up.
+
 ## Unattended install
 
 Set `PS_UNATTENDED=1` and answer every question with a variable. With `sudo`,
