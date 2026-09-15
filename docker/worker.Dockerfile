@@ -15,8 +15,8 @@ RUN apt-get update \
 # the AppImage name pinned to 2404 even as the base moves forward.
 FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03 AS orca
 
-ARG ORCA_VERSION=2.4.1
-ARG ORCA_SHA256=7aff29a0ac6bb906f11c069eefe83459781c3364bac20ba9529eb9937a231402
+ARG ORCA_VERSION=2.4.2
+ARG ORCA_SHA256=d12fb8c8eac1aecd2dfb6377acd48f994f8fa439ed5292fa532dd82880f029fd
 ADD https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v${ORCA_VERSION}/OrcaSlicer_Linux_AppImage_Ubuntu2404_V${ORCA_VERSION}.AppImage /tmp/orca.AppImage
 # The headless worker never opens Orca's bundled GUI guide/include pages. Their
 # Swiper 7 copy is affected by GHSA-hmx5-qpq5-p643; remove the unused JavaScript
@@ -51,7 +51,7 @@ RUN pnpm --filter @print/db generate \
 # ---------- stage 3: runtime ----------
 FROM ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03
 
-ARG ORCA_VERSION=2.4.1
+ARG ORCA_VERSION=2.4.2
 ENV ORCA_VERSION=${ORCA_VERSION} \
     ORCA_BIN=/opt/orca/AppRun \
     NODE_ENV=production \

@@ -82,7 +82,7 @@ one. Review vendor retention/access terms before enabling it.
 | `SLICE_TIMEOUT_SECONDS` | `600` | Per-slice timeout; hard maximum 900 seconds. Sized for sculpt-detail models on the worker's shared CPU quota. |
 | `THUMB_SIZE` | `512` | Square PNG size; hard maximum 1024 px. |
 | `ORCA_BIN` | `/opt/orca/AppRun` | Baked-in executable. |
-| `ORCA_VERSION` | `2.4.1` | Must agree with the pinned image/cache pipeline version. |
+| `ORCA_VERSION` | `2.4.2` | Must agree with the pinned image/cache pipeline version. |
 | `STEP_CONVERT_BIN` | `/usr/bin/occt-draw` | OpenCASCADE DRAW harness used to tessellate STEP uploads inside the parse sandbox (baked into the worker image). |
 | `STEP_CONVERT_TIMEOUT_SECONDS` | `120` | Per-file STEP→STL conversion timeout; hard maximum 600 seconds. |
 | `PROFILES_DIR` | worker profiles | Flattened, committed A1 profiles. |

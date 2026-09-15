@@ -70,7 +70,7 @@ export const config = {
   maxSessionUploadBytes: int("MAX_SESSION_UPLOAD_MB", 900) * 1024 * 1024,
   maxModelsPerSession: int("MAX_MODELS_PER_SESSION", 20),
   storageReserveBytes: int("STORAGE_RESERVE_MB", 2048) * 1024 * 1024,
-  slicerVersion: str("ORCA_VERSION", "2.4.1"),
+  slicerVersion: str("ORCA_VERSION", "2.4.2"),
   /** OrcaSlicer's bundled presets — what an uploaded preset's `inherits` names. */
   orcaProfilesRoot: str("ORCA_PROFILES_ROOT", "/opt/orca/resources/profiles"),
   /** Advanced mode (self-host installer): the owner uploads their own presets

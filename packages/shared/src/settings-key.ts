@@ -4,7 +4,7 @@ import { DEFAULT_PRINTER_ID } from "./printer";
 
 /** Bump whenever OrcaSlicer or a machine/process/filament profile changes in a
  * way that can affect toolpaths. Old rows remain harmless cache misses. */
-export const SLICE_PIPELINE_VERSION = "orca-2.4.1-a1-v4";
+export const SLICE_PIPELINE_VERSION = "orca-2.4.2-a1-v4";
 
 /**
  * Canonical cache key for a slice-settings combination.
