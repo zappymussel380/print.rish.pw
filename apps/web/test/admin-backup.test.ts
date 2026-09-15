@@ -66,7 +66,7 @@ function seedShop() {
     customMaterials: { OTHER_1: { name: "PETG-HF" } },
   });
   db.rows.set("materialHelper", { enabled: true, own: { own1: { label: "Flexible", description: "", enabled: true } }, scores: { PETG: { own1: 2 } } });
-  db.rows.set("faq", { custom: [{ id: "c1", q: "Do you ship?", a: "Yes, across India." }], hidden: [] });
+  db.rows.set("faq", { custom: [{ id: "custom-ship", q: "Do you ship?", a: "Yes, across India." }], hidden: [] });
   db.rows.set("shipping", { enabled: true, email: "api@shop.test", passwordSealed: sealSecret("s3cret", "shiprocket-password"), pickupPincode: "411001" });
   db.rows.set("mail", {
     enabled: true,
@@ -109,6 +109,7 @@ describe("download", () => {
     expect(backup).toMatchObject({ format: "print-shop-settings", version: 1 });
     expect(Object.keys(backup.sections)).toEqual(["pricing", "catalogAvailability", "materialHelper", "faq", "shipping", "mail"]);
     expect(backup.sections.pricing.setupFeePaise).toBe(9900);
+    expect(backup.sections.faq.custom).toEqual([{ id: "custom-ship", q: "Do you ship?", a: "Yes, across India." }]);
     expect(backup.sections.catalogAvailability.customMaterials).toEqual({ OTHER_1: { name: "PETG-HF" } });
     expect(backup.sections.shipping).toMatchObject({ email: "api@shop.test", passwordSealed: "" });
     expect(backup.sections.mail.resendKeySealed).toBe("");
