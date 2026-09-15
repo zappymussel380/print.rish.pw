@@ -55,6 +55,9 @@ describe("describePick", () => {
     expect(describePick(petg, "PETG", needs)).toBe("PETG: good for strength and heat resistance");
     const pla = pickMaterial(["looks", "heat"], candidates(["PLA"]), defaultMaterialHelper().scores)!;
     expect(describePick(pla, "PLA", needs)).toBe("PLA: great for looks, not made for heat resistance");
+    // Ticked heat first, then looks: still read in the order they're offered.
+    const both = pickMaterial(["heat", "looks"], candidates(["PLA", "PETG"]), defaultMaterialHelper().scores)!;
+    expect(describePick(both, "PETG", needs)).toBe("PETG: good for looks and heat resistance");
     const asa = pickMaterial(["outdoor", "looks"], candidates(["ASA"]), defaultMaterialHelper().scores)!;
     expect(describePick(asa, "ASA", needs)).toBe("ASA: great for outdoor use, OK for looks");
   });

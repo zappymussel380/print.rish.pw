@@ -61,6 +61,10 @@ five pages:
 - **Filament:**
   - **Catalog:** which materials, colours and layer heights you offer. ABS and
     ASA start with black and white; add any colour by name and hex code.
+  - **Material helper:** "Help me choose" on the quote page. Customers tick
+    what matters (looks, strength, heat resistance, outdoor use, or up to four
+    needs of your own) and the material you rate best for those is picked for
+    them. You rate each material and can switch any need off.
   - **Your own materials:** up to four materials beyond the built-in list, each
     with an OrcaSlicer profile.
   - **Rates:** prices, the setup fee, lead time, and your real filament and
