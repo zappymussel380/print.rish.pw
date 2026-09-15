@@ -53,22 +53,28 @@ Then it builds everything. That takes 10–25 minutes the first time. When it's
 done it prints your site and admin addresses.
 
 <a id="after-install"></a>
-After that, **the admin dashboard is where you change things**:
+After that, **the admin dashboard is where you change things**. Its menu has
+five pages:
 
-- **Catalog:** which materials and colours you offer. ABS and ASA start with
-  black and white; add any colour by name and hex code.
-- **Rates:** per-gram prices, the setup fee, lead time, and your real filament
-  and running costs (for profit estimates).
+- **Home:** the numbers (revenue, profit, print hours) and every quotation,
+  with status changes, PDFs, the model files as a ZIP, and CSV export.
+- **Filament:**
+  - **Catalog:** which materials, colours and layer heights you offer. ABS and
+    ASA start with black and white; add any colour by name and hex code.
+  - **Your own materials:** up to four materials beyond the built-in list, each
+    with an OrcaSlicer profile.
+  - **Rates:** prices, the setup fee, lead time, and your real filament and
+    running costs (for profit estimates).
+  - **Slicer profiles**, if you skipped the printer step (see
+    [advanced mode](#your-own-printer-or-profiles-advanced-mode)).
 - **Site:** shop name, tagline, city, quotation initials, contact details,
-  footer, and the Materials page.
-- **Shipping:** live courier prices on the quote page (Shiprocket): switch
-  them on or off, or change the API user and pickup pincode. With them off,
-  the quote page has no shipping box and checkout says delivery is arranged
-  after the quotation. Once saved here, these settings replace the ones the
+  accent colour, footer, the Materials page, and the FAQ.
+- **Recent prints:** showcase photos.
+- **Settings:** live courier prices on the quote page (Shiprocket): switch them
+  on or off, or change the API user and pickup pincode. With them off, the
+  quote page has no shipping box and checkout says delivery is arranged after
+  the quotation. Once saved here, these settings replace the ones the
   installer wrote.
-- **FAQ** and **Recent prints** (showcase photos).
-- **Slicer profiles**, if you skipped the printer step (see
-  [advanced mode](#your-own-printer-or-profiles-advanced-mode)).
 
 The web address and HTTPS, the admin password, the printer, and email and
 Telegram change by running `sudo /opt/print-shop/install.sh` again.

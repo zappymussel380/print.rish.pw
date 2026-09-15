@@ -2,38 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Download,
-  ExternalLink,
-  FolderArchive,
-  LogOut,
-  RefreshCw,
-  Search,
-  Trash2,
-} from "lucide-react";
-import {
-  formatPaise,
-  type Catalog,
-  type FaqEntry,
-  type FaqSettings,
-  type LayerHeightUm,
-  type MaterialFamily,
-  type PricingInput,
-  type PublicMaterial,
-  type RecentPrint,
-  type ShippingAdminView,
-  type SiteProfile,
-  type CustomMaterialNames,
-} from "@print/shared";
-import { CatalogEditor } from "./catalog-editor";
-import { FaqEditor } from "./faq-editor";
-import { CustomMaterialsEditor } from "./custom-materials-editor";
-import { SlicerProfilesEditor } from "./slicer-profiles-editor";
-import type { SlicerProfilesState } from "@/lib/slicer-profiles";
-import { RatesEditor } from "./rates-editor";
-import { ShippingEditor } from "./shipping-editor";
-import { SiteEditor } from "./site-editor";
-import { ShowcaseEditor } from "./showcase-editor";
+import { Download, ExternalLink, FolderArchive, RefreshCw, Search, Trash2 } from "lucide-react";
+import { formatPaise, type MaterialFamily } from "@print/shared";
 
 export interface QuotationRow {
   id: string;
@@ -74,42 +44,13 @@ const STATUSES = [
 ] as const;
 const TERMINAL_STATUSES = new Set(["COMPLETED", "DELIVERED", "CANCELLED"]);
 
-const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+// A fixed time zone: the server (UTC) and the browser render this table, and
+// without one they disagree for quotations made after 18:30 UTC (React #418).
+const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" });
 
-export function AdminDashboard({
-  quotations,
-  stats,
-  catalog,
-  pricing,
-  rates,
-  siteProfile,
-  shipping,
-  faq,
-  recentPrints,
-  slicerProfiles,
-  advancedProfiles,
-  materialNames,
-}: {
-  quotations: QuotationRow[];
-  stats: AdminStats;
-  catalog: { materials: PublicMaterial[]; layerHeights: LayerHeightUm[] };
-  /** Every rate in storable form, for the rates editor. */
-  pricing: PricingInput;
-  /** The live customer-facing rates, for display elsewhere on the page. */
-  rates: Catalog;
-  /** Null when the stored profile could not be read. */
-  siteProfile: SiteProfile | null;
-  shipping: ShippingAdminView;
-  faq: { generated: FaqEntry[]; settings: FaqSettings };
-  recentPrints: RecentPrint[];
-  /** Uploaded slicer presets: every open slot (the shop's own materials on any
-   *  install, all of them in advanced mode). */
-  slicerProfiles: SlicerProfilesState;
-  /** Advanced mode: the owner's own printer and presets. */
-  advancedProfiles: boolean;
-  /** The shop's names for its own materials. */
-  materialNames: CustomMaterialNames;
-}) {
+/** Admin home: stats and the quotations table. Settings live on the other
+ *  admin pages (see AdminNav). */
+export function AdminDashboard({ quotations, stats }: { quotations: QuotationRow[]; stats: AdminStats }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string>("ALL");
@@ -171,30 +112,13 @@ export function AdminDashboard({
     }
   };
 
-  const logout = async () => {
-    await fetch("/api/admin/logout", {
-      method: "POST",
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    });
-    router.push("/admin/login");
-    router.refresh();
-  };
-
   return (
-    <div className="mx-auto max-w-6xl px-5 py-12">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Admin</p>
-          <h1 className="section-title mt-2">Quotations</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <a href="/api/admin/quotations/export" download className="btn-ghost text-sm">
-            <Download strokeWidth={1.8} className="h-4 w-4" /> Export CSV
-          </a>
-          <button type="button" onClick={logout} className="btn-ghost text-sm">
-            <LogOut strokeWidth={1.8} className="h-4 w-4" /> Sign out
-          </button>
-        </div>
+    <div>
+      <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
+        <h1 className="section-title">Quotations</h1>
+        <a href="/api/admin/quotations/export" download className="btn-ghost text-sm">
+          <Download strokeWidth={1.8} className="h-4 w-4" /> Export CSV
+        </a>
       </div>
 
       {/* Stats */}
@@ -213,30 +137,6 @@ export function AdminDashboard({
         <span className="font-[600] text-muted">{formatPaise(stats.profitPaise)}</span>
         <span className="text-faint"> (est., excluding shipping)</span>
       </p>
-
-      {/* Catalog availability */}
-      <CatalogEditor catalog={catalog} rates={rates} />
-
-      {/* The shop's own materials: names and OrcaSlicer profiles */}
-      <CustomMaterialsEditor catalog={catalog} initial={slicerProfiles} materialNames={materialNames} />
-
-      {/* Rates, customer-facing and internal */}
-      <RatesEditor pricing={pricing} materialNames={materialNames} />
-
-      {/* Shop name, contact details, materials page */}
-      <SiteEditor profile={siteProfile} materialNames={materialNames} />
-
-      {/* Courier estimates on the quote page */}
-      <ShippingEditor initial={shipping} />
-
-      {/* FAQ: hide generated answers, add the shop's own */}
-      <FaqEditor generated={faq.generated} settings={faq.settings} />
-
-      {/* Public "recent prints" showcase */}
-      <ShowcaseEditor prints={recentPrints} materialNames={materialNames} />
-
-      {/* Advanced mode: the owner's own OrcaSlicer presets */}
-      {advancedProfiles ? <SlicerProfilesEditor initial={slicerProfiles} /> : null}
 
       {/* Controls */}
       <div className="mt-8 flex flex-wrap items-center gap-3">

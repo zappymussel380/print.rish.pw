@@ -38,10 +38,13 @@ const MAX_PHOTO_MB = Math.round(MAX_SHOWCASE_PHOTO_BYTES / 1024 / 1024);
 export function ShowcaseEditor({
   prints,
   materialNames,
+  open,
 }: {
   prints: RecentPrint[];
   /** The shop's names for its own materials (only named ones are offered). */
   materialNames?: CustomMaterialNames;
+  /** Start unfolded (it has a page of its own). */
+  open?: boolean;
 }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -210,7 +213,7 @@ export function ShowcaseEditor({
   };
 
   return (
-    <details className="tile mt-4 p-0 [&_summary]:list-none">
+    <details open={open} className="tile mt-4 p-0 [&_summary]:list-none">
       <summary className="flex cursor-pointer items-center justify-between p-4 text-[0.62rem] font-[650] uppercase tracking-[0.14em] text-faint">
         <span>Recent prints · public showcase</span>
         <span className="text-faint">{items.length} shown</span>
