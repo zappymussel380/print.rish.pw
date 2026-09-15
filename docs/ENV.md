@@ -47,8 +47,8 @@ to `$$`. The container receives the intended single-dollar value.
 | `WHATSAPP_NUMBER` | empty | International digits only. Fallback for the WhatsApp number in admin → Site; empty in both disables the pre-filled handoff. Customer/order details are sent to WhatsApp when used. |
 | `CONTACT_EMAIL` | empty | Unused. The public contact email, phone and address are set in admin → Site. |
 | `GOOGLE_MAPS_EMBED_URL` | empty | Optional exact Google Maps HTTPS embed URL; enables Google in CSP `frame-src`. |
-| `RESEND_API_KEY` / `MAIL_TO` | none | Both are required for contact-form delivery. Messages contain the submitted name, email, subject, and message; the contact form has no phone field. |
-| `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender. |
+| `RESEND_API_KEY` / `MAIL_TO` | none | Contact-form delivery through Resend, used until admin → Settings → Email is saved (which also offers SMTP and replaces all three). Without either, the contact page shows WhatsApp and the shop's details instead of a form. Messages contain the submitted name, email, subject, and message. |
+| `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender (until admin → Settings → Email is saved). |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | empty | Both enable order notifications containing customer/order details and static, PII-free operator alerts. These remain web-only secrets. |
 | `TELEGRAM_MESSAGE_THREAD_ID` | empty | Optional positive Telegram forum topic ID. |
 | `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` | none | Optional API-user credentials for shipping estimates; do not use the dashboard login. Used until admin → Shipping is saved, which then replaces all three. Without either, the quote page has no shipping estimator. |

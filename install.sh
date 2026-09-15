@@ -494,6 +494,7 @@ sec_contact() {
 
 sec_integrations() {
   head_line "Optional extras (you can skip all of these)"
+  hint "Contact-form email (Resend or any SMTP server) can also be set up later, in the admin dashboard (Settings)."
   if confirm "Email contact-form messages to you (needs a free resend.com account)?" N RESEND; then
     ask_secret RESEND_KEY "Resend API key (input hidden)"
     ask MAIL_TO "Send contact-form messages to" "${ANS[EMAIL]:-${CFG[MAIL_TO]:-}}" valid_email "Enter an email address."
@@ -894,10 +895,10 @@ changeable_later() {
   say "       shop name, tagline, city, quotation initials, contact details and footer;"
   say "       per-gram rates, setup fee, your costs and lead time; which materials and"
   say "       colours you offer; the Materials page, FAQ and showcase photos; live"
-  say "       courier prices (Shiprocket); and your own OrcaSlicer presets if you skip"
-  say "       the printer step."
+  say "       courier prices (Shiprocket); contact-form email; and your own OrcaSlicer"
+  say "       presets if you skip the printer step."
   say "   • By running ${C_BOLD}sudo $ROOT_DIR/install.sh${C_OFF} again:"
-  say "       web address and HTTPS, admin password, printer, and email/Telegram."
+  say "       web address and HTTPS, admin password, printer, and Telegram."
   hint "So don't worry about getting everything perfect now."
 }
 

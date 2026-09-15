@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardMutation, jsonError, readJsonBody } from "@/lib/api-util";
-import { env } from "@/lib/env";
-import { logger, safeErrorMessage } from "@/lib/logger";
+import { sendMail } from "@/lib/mail";
+import { getMailConfig } from "@/lib/mail-settings";
 import { RATE_LIMITS } from "@/lib/security";
 import { getSiteProfile } from "@/lib/site-profile";
 
@@ -30,6 +30,13 @@ function stripControl(value: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // The contact page shows no form when mail isn't set up; this stops anything
+  // else before it costs a rate-limit slot.
+  const mail = await getMailConfig();
+  if (!mail.live) {
+    return jsonError(503, "NOT_CONFIGURED", "Messages by email aren't set up — please use WhatsApp or the details on the contact page.");
+  }
+
   const guard = await guardMutation(request, "contact", RATE_LIMITS.contact);
   if (guard) return guard;
 
@@ -63,30 +70,11 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "BAD_SUBJECT", "Invalid subject.");
   }
 
-  let resendApiKey: string;
-  let mailTo: string;
-  try {
-    resendApiKey = env.resendApiKey;
-    mailTo = env.mailTo;
-  } catch {
-    logger.error("Contact form: RESEND_API_KEY / MAIL_TO not configured");
-    return jsonError(500, "NOT_CONFIGURED", "Mail service is not configured.");
-  }
-
   const { brandName } = await getSiteProfile();
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: env.contactFrom,
-        to: [mailTo],
-        reply_to: email,
-        subject: `[${brandName}] ${subject} — from ${name}`,
-        text: `New message from the ${brandName} contact form.
+  const sent = await sendMail(mail, {
+    replyTo: email,
+    subject: `[${brandName}] ${subject} — from ${name}`,
+    text: `New message from the ${brandName} contact form.
 
 Name:    ${name}
 Email:   ${email}
@@ -97,17 +85,7 @@ ${message}
 
 ---
 Sent via ${brandName} contact form`,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!res.ok) {
-      logger.error({ status: res.status }, "Resend rejected contact email");
-      return jsonError(502, "SEND_FAILED", "Failed to send email. Please try again.");
-    }
-    return NextResponse.json({ status: "ok" });
-  } catch (err) {
-    logger.error({ error: safeErrorMessage(err) }, "Contact email send threw");
-    return jsonError(502, "SEND_FAILED", "Failed to send email. Please try again.");
-  }
+  });
+  if (!sent.ok) return jsonError(502, "SEND_FAILED", "Failed to send email. Please try again.");
+  return NextResponse.json({ status: "ok" });
 }

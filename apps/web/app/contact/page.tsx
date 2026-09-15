@@ -2,14 +2,15 @@ import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import { ContactForm } from "@/components/contact/contact-form";
 import { PageIntro } from "@/components/shell/page-intro";
+import { getMailConfig } from "@/lib/mail-settings";
 import { siteConfig } from "@/lib/site-config";
 import { getSiteProfile, profileWhatsappUrl } from "@/lib/site-profile";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { brandName, city } = await getSiteProfile();
+  const [{ brandName, city }, mail] = await Promise.all([getSiteProfile(), getMailConfig()]);
   return {
     title: "Contact",
-    description: `Reach ${brandName} by WhatsApp or the contact form.${city ? ` Based in ${city}, India.` : ""}`,
+    description: `Reach ${brandName} by WhatsApp${mail.live ? " or the contact form" : ""}.${city ? ` Based in ${city}, India.` : ""}`,
   };
 }
 
@@ -18,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = "force-dynamic";
 
 export default async function ContactPage() {
-  const profile = await getSiteProfile();
+  const [profile, mail] = await Promise.all([getSiteProfile(), getMailConfig()]);
   const waUrl = profileWhatsappUrl(profile, "Hi! I have a question about 3D printing.");
   const { email, phone, address } = profile.contact;
   const phoneHref = phone.replace(/[^0-9+]/g, "");
@@ -78,7 +79,8 @@ export default async function ContactPage() {
           </div>
         ) : null}
 
-        <ContactForm />
+        {/* Only when messages can actually reach the shop (admin → Settings → Email). */}
+        {mail.live ? <ContactForm /> : null}
       </div>
 
       {siteConfig.googleMapsEmbedUrl ? (
