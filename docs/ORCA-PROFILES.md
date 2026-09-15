@@ -6,7 +6,7 @@ invokes the CLI.
 
 ## Version
 
-Pinned to **OrcaSlicer v2.4.1** (`ORCA_VERSION` in `docker/worker.Dockerfile`).
+Pinned to **OrcaSlicer v2.4.2** (`ORCA_VERSION` in `docker/worker.Dockerfile`).
 The AppImage is extracted at image-build time (`--appimage-extract`; FUSE is
 unavailable in containers) into `/opt/orca`, and run via `xvfb-run` because the
 CLI still initialises wxWidgets/GL on some paths.
