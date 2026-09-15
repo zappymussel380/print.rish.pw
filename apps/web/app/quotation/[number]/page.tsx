@@ -6,7 +6,9 @@ import {
   colourName,
   formatGrams,
   formatPaise,
+  formatRoundOff,
   formatTaxRate,
+  formatTotal,
   materialName,
   summariseItems,
 } from "@print/shared";
@@ -157,6 +159,12 @@ export default async function ConfirmationPage({
               <span>{formatPaise(quotation.taxPaise)}</span>
             </div>
           ) : null}
+          {quotation.roundOffPaise !== 0 ? (
+            <div className="flex justify-between text-muted">
+              <span>Round off</span>
+              <span>{formatRoundOff(quotation.roundOffPaise)}</span>
+            </div>
+          ) : null}
           {quotation.estimatedCompletion && (
             <div className="flex justify-between text-muted">
               <span>Estimated ready</span>
@@ -166,7 +174,7 @@ export default async function ConfirmationPage({
         </div>
         <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
           <span className="font-[650]">Total</span>
-          <span className="text-2xl font-[750] text-accent">{formatPaise(quotation.totalPaise)}</span>
+          <span className="text-2xl font-[750] text-accent">{formatTotal(quotation.totalPaise)}</span>
         </div>
       </div>
 

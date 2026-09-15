@@ -285,23 +285,26 @@ describe("checkout with GST", () => {
     Object.assign(mocks.tax, { enabled: true, rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM" });
     const response = await submit();
     expect(response.status).toBe(201);
-    // 12.5 g × ₹2/g + ₹150 setup = ₹175.00; 18% GST = ₹31.50.
+    // 12.5 g × ₹2/g + ₹150 setup = ₹175.00; 18% GST = ₹31.50; ₹206.50 rounds to ₹207.
     const data = mocks.createQuotation.mock.calls[0]![0].data;
-    expect(data).toMatchObject({ taxPaise: 3150, totalPaise: 20650, taxRateBp: 1800, taxHsn: "9988", taxGstin: "18AABCU9603R1ZM" });
+    expect(data).toMatchObject({ taxPaise: 3150, roundOffPaise: 50, totalPaise: 20700, taxRateBp: 1800, taxHsn: "9988", taxGstin: "18AABCU9603R1ZM" });
+    expect(data.pricingSnapshot.roundOffPaise).toBe(50);
     expect(data.pricingSnapshot.tax).toEqual({ rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM", amountPaise: 3150 });
     // The PDF and the Telegram notice are made after the response.
     await vi.waitFor(() => expect(mocks.notifyNewQuotation).toHaveBeenCalled());
     expect(mocks.renderQuotationPdf.mock.calls[0]![0]).toMatchObject({
-      totalPaise: 20650,
+      totalPaise: 20700,
+      roundOffPaise: 50,
       tax: { paise: 3150, rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM" },
     });
-    expect(mocks.notifyNewQuotation.mock.calls[0]![0]).toMatchObject({ totalPaise: 20650, taxPaise: 3150 });
+    expect(mocks.notifyNewQuotation.mock.calls[0]![0]).toMatchObject({ totalPaise: 20700, taxPaise: 3150, roundOffPaise: 50 });
   });
 
   it("adds nothing when GST is off: totals exactly as before", async () => {
     await submit();
     const data = mocks.createQuotation.mock.calls[0]![0].data;
-    expect(data).toMatchObject({ taxPaise: 0, totalPaise: 17500 });
+    // ₹175.00 is already a whole rupee: nothing to round.
+    expect(data).toMatchObject({ taxPaise: 0, roundOffPaise: 0, totalPaise: 17500 });
     expect(data).not.toHaveProperty("taxRateBp");
     expect(data.pricingSnapshot.tax).toBeNull();
     await vi.waitFor(() => expect(mocks.renderQuotationPdf).toHaveBeenCalled());

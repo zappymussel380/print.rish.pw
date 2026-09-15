@@ -42,13 +42,18 @@ export function formatTaxRate(rateBp: number): string {
 }
 
 /** The totals of a quotation with GST: everything taxable is printing + setup
- *  fee (`quotePaise`, priceQuote's total) + shipping. */
+ *  fee (`quotePaise`, priceQuote's total) + shipping. The grand total is then
+ *  rounded half-up to a whole rupee; `roundOffPaise` (−50…+49) is what that
+ *  added, shown as its own "Round off" line. Every total a customer sees is
+ *  made here, so the quote page, checkout and the stored quotation agree. */
 export function withTax(
   quotePaise: number,
   shippingPaise: number,
   tax: PublicTax | null | undefined,
-): { taxPaise: number; grandTotalPaise: number } {
+): { taxPaise: number; roundOffPaise: number; grandTotalPaise: number } {
   const taxable = quotePaise + shippingPaise;
   const taxPaise = tax?.enabled ? taxOn(taxable, tax.rateBp) : 0;
-  return { taxPaise, grandTotalPaise: taxable + taxPaise };
+  const exact = taxable + taxPaise;
+  const grandTotalPaise = Math.round(exact / 100) * 100;
+  return { taxPaise, roundOffPaise: grandTotalPaise - exact, grandTotalPaise };
 }

@@ -1,3 +1,4 @@
+import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import * as React from "react";
 import { Document, Page, renderToBuffer } from "@react-pdf/renderer";
@@ -33,6 +34,27 @@ function pageCount(pdf: Buffer): number {
   const match = /\/Type\s*\/Pages[\s\S]*?\/Count\s+(\d+)/.exec(pdf.toString("latin1"));
   if (!match) throw new Error("no /Pages object found");
   return Number(match[1]);
+}
+
+/** The text drawn on the pages: every FlateDecoded content stream inflated,
+ *  and each text-showing operator's strings (react-pdf writes the standard
+ *  fonts' text as hex strings inside TJ arrays) decoded and joined, one line
+ *  per operator. */
+function pdfText(pdf: Buffer): string {
+  const lines: string[] = [];
+  for (const match of pdf.toString("latin1").matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    let body: string;
+    try {
+      body = inflateSync(Buffer.from(match[1]!, "latin1")).toString("latin1");
+    } catch {
+      continue;
+    }
+    for (const op of body.matchAll(/\[([^\]]*)\]\s*TJ|(<[0-9a-fA-F]*>)\s*Tj/g)) {
+      const operand = op[1] ?? op[2]!;
+      lines.push([...operand.matchAll(/<([0-9a-fA-F]*)>/g)].map((m) => Buffer.from(m[1]!, "hex").toString("latin1")).join(""));
+    }
+  }
+  return lines.join("\n");
 }
 
 function fixture(overrides: Partial<QuotationPdfData> = {}): QuotationPdfData {
@@ -90,6 +112,30 @@ describe("renderQuotationPdf", () => {
     );
     expect(pageCount(pdf)).toBe(3);
     expect(pdf.length).toBeGreaterThan(base.length);
+  });
+});
+
+describe("round off", () => {
+  it("shows the round-off line and a whole-rupee total, with the materials summed from the lines", async () => {
+    // 99 + 50 setup = 149.00 exactly → no line; 98.75 + 50 = 148.75 → +0.25, Rs 149.
+    const plain = pdfText(await renderQuotationPdf(fixture()));
+    expect(plain).not.toContain("Round off");
+    expect(plain.replace(/\n/g, "")).toContain("TotalRs 149");
+
+    const rounded = pdfText(
+      await renderQuotationPdf(
+        fixture({
+          lines: [{ ...fixture().lines[0]!, subtotalPaise: 9875 }],
+          roundOffPaise: 25,
+          totalPaise: 14_900,
+        }),
+      ),
+    );
+    // Operators split where the font kerns, so read the totals block run together.
+    const flat = rounded.replace(/\n/g, "");
+    expect(flat).toContain("Materials subtotalRs 98.75"); // summed from the lines
+    expect(flat).toContain("Round off+Rs 0.25TotalRs 149");
+    expect(flat).not.toContain("Rs 149.00");
   });
 });
 
