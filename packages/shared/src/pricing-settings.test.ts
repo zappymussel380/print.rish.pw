@@ -36,7 +36,7 @@ describe("normalizePricing", () => {
   it("falls back per field on anything out of range or malformed", () => {
     const p = normalizePricing({
       setupFeePaise: -1,
-      materials: { PLA: { sellPerGramPaise: 0 }, PETG: { sellPerGramPaise: 2.5 }, NYLON: { sellPerGramPaise: 300 } },
+      materials: { PLA: { sellPerGramPaise: 0 }, PETG: { sellPerGramPaise: 2.55 }, NYLON: { sellPerGramPaise: 300 } },
       kwhPerHour: "0.1",
       leadTime: { printHoursPerDay: 25, bufferDays: 3 },
       internal: { gstRate: 1.5 },
@@ -67,6 +67,13 @@ describe("normalizePricing", () => {
 });
 
 describe("findPricingIssues", () => {
+  it("takes a price per gram to a tenth of a paisa, so any whole ₹/kg is exact", () => {
+    // ₹3,499/kg typed in admin → 349.9 paise/g.
+    expect(normalizePricing({ materials: { PLA: { sellPerGramPaise: 349.9 } } }).catalog.materials.PLA.sellPerGramPaise).toBe(349.9);
+    expect(findPricingIssues({ materials: { PLA: { sellPerGramPaise: 349.9 } } })).toEqual([]);
+    expect(findPricingIssues({ materials: { PLA: { sellPerGramPaise: 349.95 } } })).toEqual(["materials.PLA.sellPerGramPaise"]);
+  });
+
   it("names each bad field and ignores absent ones", () => {
     expect(findPricingIssues({})).toEqual([]);
     expect(

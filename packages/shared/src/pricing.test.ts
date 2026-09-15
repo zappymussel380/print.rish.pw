@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CATALOG } from "./catalog";
 import { priceQuote } from "./pricing";
 import type { QuoteLineInput } from "./pricing";
+import { DEFAULT_MODEL_CONFIG } from "./quote-types";
 
 function line(overrides: Partial<QuoteLineInput> = {}): QuoteLineInput {
   return {
@@ -49,6 +50,13 @@ describe("priceQuote", () => {
     const quote = priceQuote([line({ config: { ...line().config, material } })], CATALOG);
     expect(quote.lines[0]!.materialPaise).toBe(10 * rate);
     expect(quote.totalPaise).toBe(15000 + 10 * rate);
+  });
+
+  it("rounds a line priced at a fractional per-gram rate to whole paise", () => {
+    const catalog = { ...CATALOG, materials: { ...CATALOG.materials, PLA: { ...CATALOG.materials.PLA, sellPerGramPaise: 349.9 } } };
+    const q = priceQuote([{ modelId: "m", config: { ...DEFAULT_MODEL_CONFIG, material: "PLA" }, stats: { filamentGrams: 10, filamentMm: 3000, printSeconds: 600, supportGrams: null } }], catalog);
+    expect(q.lines[0]!.subtotalPaise).toBe(3499);
+    expect(Number.isInteger(q.totalPaise)).toBe(true);
   });
 
   it("applies the setup fee once regardless of file count", () => {
