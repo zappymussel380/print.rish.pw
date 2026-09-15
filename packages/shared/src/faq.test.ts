@@ -11,13 +11,20 @@ const ctx: FaqContext = {
   city: "Guwahati",
   leadTime: { printHoursPerDay: 8, bufferDays: 2 },
   courierQuotes: true,
-  retention: { uploadHours: 48, fileDays: 30 },
+  retention: { uploadHours: 48, fileDays: 30, quotationDays: 90 },
   contactChannel: "WhatsApp",
   layerHeights: [120, 160, 200],
 };
 const answer = (c: FaqContext, id: string) => buildFaq(c).find((e) => e.id === id)?.a ?? "";
 
 describe("buildFaq", () => {
+  it("says how long records are kept, as the shop set it", () => {
+    expect(answer(ctx, "retention")).toContain("kept for at most 90 days after completion or cancellation");
+    expect(answer({ ...ctx, retention: { uploadHours: 72, fileDays: 60, quotationDays: null } }, "retention")).toMatch(
+      /within 72 hours.*60 days after completion.*kept with the shop's records; ask and they're deleted\./,
+    );
+  });
+
   it("talks only about the layer heights on offer, and reads as before with all three", () => {
     expect(answer(ctx, "layer-lines")).toBe(
       "Yes — every FDM print has them; they're the nature of the process. At 0.12 mm layer height they're subtle and mostly disappear at arm's length. Choose 0.12 mm for display pieces and 0.20 mm for functional parts where speed and price matter more.",

@@ -47,8 +47,8 @@ to `$$`. The container receives the intended single-dollar value.
 | `WHATSAPP_NUMBER` | empty | International digits only. Fallback for the WhatsApp number in admin → Site; empty in both disables the pre-filled handoff. Customer/order details are sent to WhatsApp when used. |
 | `CONTACT_EMAIL` | empty | Unused. The public contact email, phone and address are set in admin → Site. |
 | `GOOGLE_MAPS_EMBED_URL` | empty | Optional exact Google Maps HTTPS embed URL; enables Google in CSP `frame-src`. |
-| `RESEND_API_KEY` / `MAIL_TO` | none | Both are required for contact-form delivery. Messages contain the submitted name, email, subject, and message; the contact form has no phone field. |
-| `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender. |
+| `RESEND_API_KEY` / `MAIL_TO` | none | Contact-form delivery through Resend, used until admin → Settings → Email is saved (which also offers SMTP and replaces all three). Without either, the contact page shows WhatsApp and the shop's details instead of a form. Messages contain the submitted name, email, subject, and message. |
+| `CONTACT_FROM` | `print.rish.pw <contact@rish.pw>` | Verified Resend sender (until admin → Settings → Email is saved). |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | empty | Both enable order notifications containing customer/order details and static, PII-free operator alerts. These remain web-only secrets. |
 | `TELEGRAM_MESSAGE_THREAD_ID` | empty | Optional positive Telegram forum topic ID. |
 | `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` | none | Optional API-user credentials for shipping estimates; do not use the dashboard login. Used until admin → Shipping is saved, which then replaces all three. Without either, the quote page has no shipping estimator. |
@@ -69,7 +69,7 @@ one. Review vendor retention/access terms before enabling it.
 | `DOWNLOAD_WINDOW_MB` | `1200` | Model download bytes per observed IP per 10 minutes. |
 | `STORAGE_RESERVE_MB` | `2048` | Free-space reserve preserved by capacity reservations and final checks. |
 | `MAX_MODELS_PER_SESSION` | `20` | Active models in one quote session. |
-| `UPLOAD_RETENTION_HOURS` | `48` | Unattached upload lifetime. |
+| `UPLOAD_RETENTION_HOURS` | `48` | Unattached upload lifetime. This and the two below apply until admin → Settings → File clean-up is saved. |
 | `FILE_RETENTION_DAYS` | `30` | Model-file lifetime after all referencing quotations are terminal and old. Quotation/model rows and PDFs remain until the quotation sweep. |
 | `QUOTATION_RETENTION_DAYS` | `90` | Deletion threshold measured from `updatedAt` for `COMPLETED`, `DELIVERED`, and `CANCELLED` quotations. Policy caps the threshold at 90 days, so larger values are reduced to 90; the next daily sweep deletes the quotation and its customer/contact/address data, items/history, PDF, and models that become unreferenced. Non-terminal quotations do not age out. |
 | `PRINT_DB_DIR`, `PRINT_UPLOAD_DIR`, `PRINT_PDF_DIR`, `PRINT_REDIS_DIR` | none | Required host paths when using `docker-compose.vault.yml`. |

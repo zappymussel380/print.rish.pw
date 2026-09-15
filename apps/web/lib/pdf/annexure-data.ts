@@ -24,6 +24,7 @@ export interface AnnexureInput {
     filamentMm: unknown;
     printSeconds: number | null;
     slicerVersion: string | null;
+    supportGrams?: unknown;
   };
   settings: {
     material: MaterialId;
@@ -63,6 +64,7 @@ export function buildAnnexure(input: AnnexureInput): PdfAnnexure {
       filamentMm: num(input.slice.filamentMm),
       printSeconds: input.slice.printSeconds ?? 0,
       slicerVersion: input.slice.slicerVersion,
+      supportGrams: input.slice.supportGrams == null ? null : Number(input.slice.supportGrams),
     },
     pricing: { ...input.pricing },
   };

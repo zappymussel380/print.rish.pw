@@ -12,24 +12,49 @@ import { Loader2 } from "lucide-react";
 /** Interactive WebGL preview of an uploaded model. Loaded via dynamic import
  *  (ssr:false) so three.js never enters the server bundle. Fetches the raw
  *  bytes from the model file endpoint and parses with the format's loader. */
+const NEUTRAL = "#d0d4d9";
+const NO_WEBGL = "3D preview isn't available in this browser. The image view still works.";
+
+function hasWebGL(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2") ?? canvas.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
+
 export default function ModelViewer({
   modelId,
   format,
   wireframe,
+  colour,
 }: {
   modelId: string;
   format: string;
   wireframe: boolean;
+  /** The chosen filament colour, already made preview-safe (previewColour). */
+  colour?: string | null;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const materialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const colourRef = useRef(colour ?? NEUTRAL);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Checked once (this component only ever renders in the browser): without
+  // WebGL, three.js throws, which would take the whole quote page down.
+  const [webgl] = useState(hasWebGL);
 
   // Toggle wireframe on the live materials without rebuilding the scene.
   useEffect(() => {
     for (const m of materialsRef.current) m.wireframe = wireframe;
   }, [wireframe]);
+
+  // Likewise the filament colour, as the customer changes it.
+  useEffect(() => {
+    colourRef.current = colour ?? NEUTRAL;
+    for (const m of materialsRef.current) m.color.set(colourRef.current);
+  }, [colour]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -42,7 +67,15 @@ export default function ModelViewer({
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    if (!webgl) return;
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch {
+      // WebGL looked available but a context still couldn't be made.
+      queueMicrotask(() => setError(NO_WEBGL));
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
     mount.appendChild(renderer.domElement);
@@ -76,7 +109,7 @@ export default function ModelViewer({
 
     const material = () => {
       const m = new THREE.MeshStandardMaterial({
-        color: 0xd0d4d9,
+        color: colourRef.current,
         metalness: 0.05,
         roughness: 0.75,
         wireframe,
@@ -169,7 +202,10 @@ export default function ModelViewer({
   return (
     <div className="relative h-full w-full">
       <div ref={mountRef} className="h-full w-full" />
-      {loading && !error && (
+      {!webgl && (
+        <div className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-muted">{NO_WEBGL}</div>
+      )}
+      {webgl && loading && !error && (
         <div className="absolute inset-0 grid place-items-center text-muted">
           <Loader2 strokeWidth={1.65} className="h-6 w-6 animate-spin" />
         </div>

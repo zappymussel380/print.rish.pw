@@ -105,6 +105,7 @@ const quotation = {
         filamentMm: new FakeDecimal("6470"),
         printSeconds: 3060,
         slicerVersion: "OrcaSlicer 2.3.0",
+        supportGrams: new FakeDecimal("1.25"),
       },
     },
   ],
@@ -156,6 +157,8 @@ describe("admin PDF regeneration", () => {
         layerHeightUm: 200,
         infillPct: 15,
         supports: "auto",
+        // What the slicer measured, read back from the frozen slice.
+        supportGrams: 1.25,
         quantity: 2,
         totalGrams: 38.6,
         totalPrintSeconds: 6120,

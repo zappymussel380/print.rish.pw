@@ -10,8 +10,8 @@ import {
   type FaqSettings,
 } from "@print/shared";
 import { getCatalogAvailability } from "./catalog-availability";
-import { env } from "./env";
 import { getPricing } from "./pricing-settings";
+import { getRetention } from "./retention-settings";
 import { getShippingConfig } from "./shipping-settings";
 import { getSiteProfile } from "./site-profile";
 
@@ -40,11 +40,12 @@ export async function saveFaqSettings(settings: FaqSettings): Promise<FaqSetting
 
 /** The generated FAQ, answered from this shop's live settings. */
 export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
-  const [availability, { catalog }, profile, shipping] = await Promise.all([
+  const [availability, { catalog }, profile, shipping, retention] = await Promise.all([
     getCatalogAvailability(),
     getPricing(),
     getSiteProfile(),
     getShippingConfig(),
+    getRetention(),
   ]);
   const printer = catalog.printers[catalog.defaultPrinterId]!;
   const offered = MATERIAL_IDS.filter((m) => availability.materials[m]);
@@ -55,7 +56,11 @@ export const getGeneratedFaq = cache(async (): Promise<FaqEntry[]> => {
     city: profile.city,
     leadTime: catalog.leadTime,
     courierQuotes: shipping.live,
-    retention: { uploadHours: env.uploadRetentionHours, fileDays: env.fileRetentionDays },
+    retention: {
+      uploadHours: retention.policy.uploadRetentionHours,
+      fileDays: retention.policy.fileRetentionDays,
+      quotationDays: retention.policy.quotationRetentionDays,
+    },
     contactChannel: profile.contact.whatsappNumber ? "WhatsApp" : "the contact page",
     layerHeights: availability.layerHeights,
   });

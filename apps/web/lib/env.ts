@@ -167,14 +167,12 @@ export const env = {
   get fileRetentionDays() {
     return int("FILE_RETENTION_DAYS", 30);
   },
-  // Contact form → Resend. Secrets have no defaults so a misconfigured deploy
-  // fails loudly at send time rather than silently dropping messages.
-  get resendApiKey() {
-    return required("RESEND_API_KEY");
+  /** Mirrors the worker: the environment can only shorten the 90 days. */
+  get quotationRetentionDays() {
+    return Math.min(int("QUOTATION_RETENTION_DAYS", 90), 90);
   },
-  get mailTo() {
-    return required("MAIL_TO");
-  },
+  // Contact form sender until admin → Settings → Email is saved (see
+  // lib/mail-settings.ts, which reads RESEND_API_KEY / MAIL_TO itself).
   get contactFrom() {
     return process.env.CONTACT_FROM ?? "print.rish.pw <contact@rish.pw>";
   },

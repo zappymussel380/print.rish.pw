@@ -28,6 +28,7 @@ describe("buildAnnexure", () => {
         filamentMm: dec("12894.10"),
         printSeconds: 6120,
         slicerVersion: "OrcaSlicer 2.4.1",
+        supportGrams: dec("2.55"),
       },
       settings: {
         material: "PETG",
@@ -64,6 +65,7 @@ describe("buildAnnexure", () => {
         filamentMm: 12894.1,
         printSeconds: 6120,
         slicerVersion: "OrcaSlicer 2.4.1",
+        supportGrams: 2.55,
       },
       pricing: { materialPaise: 5000, electricityPaise: 3000, maintenancePaise: 1653, subtotalPaise: 9653 },
     });
@@ -119,6 +121,8 @@ describe("buildAnnexure", () => {
       filamentMm: 0,
       printSeconds: 0,
       slicerVersion: null,
+      // Slices made before supports were measured.
+      supportGrams: null,
     });
   });
 });

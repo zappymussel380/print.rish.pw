@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertTriangle, Box, Clock, IndianRupee, Loader2, Trash2, Weight } from "lucide-react";
 import {
@@ -9,8 +9,10 @@ import {
   formatPaise,
   priceLine,
   settingsKey,
+  type SupportMode,
 } from "@print/shared";
 import { formatDimensions, formatBytes, formatVolume } from "@/lib/format";
+import { previewColour, tintThumbPixels } from "@/lib/preview-colour";
 import {
   type QuoteModel,
   isIngestPending,
@@ -38,7 +40,11 @@ export function ModelCard({ model }: { model: QuoteModel }) {
 
   const remove = useQuoteStore((s) => s.remove);
   const slices = useQuoteStore((s) => s.slices);
-  const { pricing } = useCatalog();
+  const catalog = useCatalog();
+  const { pricing } = catalog;
+  // Preview in the chosen filament colour (a gradient's first stop).
+  const chosen = catalog.materials.find((m) => m.id === model.config.material)?.colours.find((c) => c.id === model.config.colour);
+  const tint = previewColour(chosen?.stops?.[0] ?? chosen?.hex);
   const [removing, setRemoving] = useState(false);
   const [view3d, setView3d] = useState(false);
   const [wireframe, setWireframe] = useState(false);
@@ -71,14 +77,9 @@ export function ModelCard({ model }: { model: QuoteModel }) {
         {/* Preview */}
         <div className="relative aspect-square border-b border-line bg-[color-mix(in_srgb,var(--line)_18%,transparent)] md:aspect-auto md:border-b-0 md:border-r">
           {model.status === "ready" && server && view3d ? (
-            <ModelViewer modelId={server.id} format={server.format} wireframe={wireframe} />
+            <ModelViewer modelId={server.id} format={server.format} wireframe={wireframe} colour={tint} />
           ) : hasSlicedOnce && server ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={`/api/models/${server.id}/thumb`}
-              alt={`Preview of ${model.fileName}`}
-              className="h-full w-full object-contain p-2"
-            />
+            <TintedThumb src={`/api/models/${server.id}/thumb`} tint={tint} alt={`Preview of ${model.fileName}`} />
           ) : (
             <div className="grid h-full min-h-[180px] place-items-center text-faint">
               {model.status === "error" ? (
@@ -177,7 +178,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
                 )}
               </div>
 
-              <SliceStatsRow slice={slice} line={line} />
+              <SliceStatsRow slice={slice} line={line} supports={model.config.supports} />
 
               <div className="mt-5 border-t border-line pt-5">
                 <SettingsPanel
@@ -232,12 +233,22 @@ function UploadProgress({ progress }: { progress: number }) {
 function SliceStatsRow({
   slice,
   line,
+  supports,
 }: {
   slice: ReturnType<typeof useQuoteStore.getState>["slices"][string] | undefined;
   line: ReturnType<typeof priceLine> | null;
+  supports: SupportMode;
 }) {
   const pending = !slice || !["done", "failed"].includes(slice.status);
   const failed = slice?.status === "failed";
+  // What the slicer did about supports: they're filament the customer pays for.
+  const supportGrams = slice?.status === "done" ? slice.result?.supportGrams : undefined;
+  const supportNote =
+    line && supports !== "off" && supportGrams != null
+      ? supportGrams > 0
+        ? `Includes about ${formatGrams(supportGrams)} of supports per print, which the slicer added under overhangs.`
+        : "No supports needed for this part."
+      : null;
 
   return (
     <div className="mt-4 grid grid-cols-3 gap-3" aria-live="polite">
@@ -250,6 +261,7 @@ function SliceStatsRow({
       <Stat icon={<IndianRupee strokeWidth={1.65} className="h-4 w-4" />} label="Line price">
         {failed ? "—" : line ? formatPaise(line.subtotalPaise) : <Skel />}
       </Stat>
+      {supportNote ? <p className="col-span-3 -mt-1 text-xs text-faint">{supportNote}</p> : null}
       {pending && !failed && (
         <SliceProgress progress={slice?.progress} />
       )}
@@ -316,4 +328,42 @@ function Stat({
 
 function Skel() {
   return <span className="skeleton inline-block h-4 w-14 align-middle" />;
+}
+
+/** The server's grey thumbnail, recoloured in the browser to the chosen
+ *  filament. Shows the grey image until the tint is ready, or if it fails. */
+function TintedThumb({ src, tint, alt }: { src: string; tint: string | null; alt: string }) {
+  const [tinted, setTinted] = useState<{ key: string; url: string } | null>(null);
+  const key = `${src}|${tint}`;
+
+  useEffect(() => {
+    if (!tint) return;
+    let alive = true;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        tintThumbPixels(pixels.data, tint);
+        ctx.putImageData(pixels, 0, 0);
+        if (alive) setTinted({ key, url: canvas.toDataURL("image/png") });
+      } catch {
+        // A canvas that can't be read keeps the grey image.
+      }
+    };
+    img.src = src;
+    return () => {
+      alive = false;
+    };
+  }, [src, tint, key]);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={tint && tinted?.key === key ? tinted.url : src} alt={alt} className="h-full w-full object-contain p-2" />
+  );
 }

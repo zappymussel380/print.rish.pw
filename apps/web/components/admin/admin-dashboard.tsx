@@ -44,7 +44,9 @@ const STATUSES = [
 ] as const;
 const TERMINAL_STATUSES = new Set(["COMPLETED", "DELIVERED", "CANCELLED"]);
 
-const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+// A fixed time zone: the server (UTC) and the browser render this table, and
+// without one they disagree for quotations made after 18:30 UTC (React #418).
+const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "2-digit", timeZone: "Asia/Kolkata" });
 
 /** Admin home: stats and the quotations table. Settings live on the other
  *  admin pages (see AdminNav). */
