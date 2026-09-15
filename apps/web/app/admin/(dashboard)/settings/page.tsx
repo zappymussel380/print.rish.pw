@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { BackupEditor } from "@/components/admin/backup-editor";
 import { MailEditor } from "@/components/admin/mail-editor";
 import { RetentionEditor } from "@/components/admin/retention-editor";
 import { ShippingEditor } from "@/components/admin/shipping-editor";
@@ -27,12 +28,13 @@ export default async function SettingsPage() {
     <>
       <AdminPageHeader
         title="Settings"
-        lede="Courier estimates on the quote page, where contact-form messages go, GST on quotations, and how long uploads and old quotations are kept."
+        lede="Courier estimates on the quote page, where contact-form messages go, GST on quotations, how long uploads and old quotations are kept, and a backup of all your settings."
       />
       <ShippingEditor initial={toAdminView(shipping)} />
       <MailEditor initial={toMailAdminView(mail)} />
       <TaxEditor initial={tax} />
       <RetentionEditor initial={retention.settings} saved={retention.saved} />
+      <BackupEditor />
     </>
   );
 }
