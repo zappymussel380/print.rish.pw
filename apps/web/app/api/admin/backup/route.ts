@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
  *  allows this path a little more, so an oversized file gets this app's error. */
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
+// The shop's day (India), as the restore step shows the file's date.
+const fileDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+
 /** Admin: download every saved setting and the live slicer presets. */
 export async function GET() {
   const auth = await requireAdminApi();
@@ -20,7 +23,7 @@ export async function GET() {
   return new NextResponse(JSON.stringify(backup, null, 2), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${slug}-settings-${backup.exportedAt.slice(0, 10)}.json"`,
+      "Content-Disposition": `attachment; filename="${slug}-settings-${fileDate.format(new Date(backup.exportedAt))}.json"`,
       "Cache-Control": "no-store",
     },
   });
