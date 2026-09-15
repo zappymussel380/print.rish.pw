@@ -211,8 +211,11 @@ function joinAnd(parts: string[]): string {
  *  ("PLA: great for looks, not made for heat resistance"). */
 export function describePick(pick: MaterialPick, materialName: string, needs: readonly PublicNeed[]): string {
   const phrase = (id: NeedId) => needs.find((n) => n.id === id)?.phrase ?? id;
+  // Within a rating, in the order the needs are offered, not the order ticked.
+  const order = (id: NeedId) => needs.findIndex((n) => n.id === id);
+  const ratings = [...pick.ratings].sort((a, b) => order(a.need) - order(b.need));
   const groups = ([3, 2, 1, 0] as const).flatMap((score) => {
-    const named = pick.ratings.filter((r) => r.score === score).map((r) => phrase(r.need));
+    const named = ratings.filter((r) => r.score === score).map((r) => phrase(r.need));
     return named.length > 0 ? [`${SCORE_WORDS[score]} ${joinAnd(named)}`] : [];
   });
   return `${materialName}: ${groups.join(", ")}`;
