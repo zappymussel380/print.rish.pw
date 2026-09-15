@@ -408,6 +408,12 @@ await maintenanceQueue.upsertJobScheduler(
     opts: { removeOnComplete: true, removeOnFail: 20 },
   },
 );
+// BullMQ ignores an add whose job id still exists, and a failed startup sweep
+// is kept (removeOnFail), so clear a finished one or no later boot sweeps.
+const priorStartup = await maintenanceQueue.getJob("retention-startup");
+if (priorStartup && ["failed", "completed"].includes(await priorStartup.getState())) {
+  await priorStartup.remove();
+}
 await maintenanceQueue.add("retention", {}, {
   jobId: "retention-startup",
   removeOnComplete: true,
@@ -433,6 +439,13 @@ profileWorker.on("failed", (job, err) => {
   }
 });
 
+// The temp uploads the ingest backlog still owns. The queue is bounded at
+// admission (INGEST_MAX_WAITING), so listing it is cheap.
+const liveTmpNames = async (): Promise<ReadonlySet<string>> => {
+  const jobs = await ingestQueue.getJobs(["active", "waiting", "delayed", "prioritized"]);
+  return new Set(jobs.flatMap((job) => (typeof job?.data?.tmpName === "string" ? [job.data.tmpName] : [])));
+};
+
 const maintenanceWorker = new Worker(
   MAINTENANCE_QUEUE,
   async (job) => {
@@ -443,10 +456,14 @@ const maintenanceWorker = new Worker(
       const days = Number(data.olderThanDays);
       const { min, max } = RETENTION_BOUNDS.purgeOlderThanDays;
       if (!Number.isInteger(days) || days < min || days > max) throw new Error("Purge job has an invalid age");
-      return runRetention(log, { uploadRetentionHours: days * 24, fileRetentionDays: days, quotationRetentionDays: null }, { purgeOnly: true });
+      return runRetention(
+        log,
+        { uploadRetentionHours: days * 24, fileRetentionDays: days, quotationRetentionDays: null },
+        { purgeOnly: true, liveTmpNames },
+      );
     }
     const policy = await loadRetentionPolicy(log);
-    return policy ? runRetention(log, policy) : null;
+    return policy ? runRetention(log, policy, { liveTmpNames }) : null;
   },
   { connection: redisOptions() },
 );

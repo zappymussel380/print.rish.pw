@@ -126,11 +126,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         // stored PDF file is always complete.
         await removeQuietly(path);
         await writeFile(path, pdf, { flag: "wx", mode: 0o600 });
-        try {
-          await prisma.quotation.update({ where: { id }, data: { pdfPath: path } });
-        } catch (err) {
-          await removeQuietly(path).catch(() => {});
-          throw err;
+        // Only record the path when it isn't already: any update bumps
+        // updatedAt, which is the retention clock for finished quotations, so
+        // re-rendering old PDFs after a template change would quietly restart
+        // the deletion countdown customers were promised.
+        if (quotation.pdfPath !== path) {
+          try {
+            await prisma.quotation.update({ where: { id }, data: { pdfPath: path } });
+          } catch (err) {
+            await removeQuietly(path).catch(() => {});
+            throw err;
+          }
         }
       },
       { leaseMs: 30_000, waitMs: 10_000 },

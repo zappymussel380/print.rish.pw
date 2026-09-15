@@ -42,6 +42,8 @@ export function ModelCard({ model }: { model: QuoteModel }) {
   const slices = useQuoteStore((s) => s.slices);
   const catalog = useCatalog();
   const { pricing } = catalog;
+  // The shop's installed printer: the same bed the server judged fitsBed by.
+  const bedMm = pricing.printers[pricing.defaultPrinterId]?.bedMm;
   // Preview in the chosen filament colour (a gradient's first stop).
   const chosen = catalog.materials.find((m) => m.id === model.config.material)?.colours.find((c) => c.id === model.config.colour);
   const tint = previewColour(chosen?.stops?.[0] ?? chosen?.hex);
@@ -173,7 +175,7 @@ export function ModelCard({ model }: { model: QuoteModel }) {
                 {!server.fitsBed && (
                   <span className="inline-flex items-center gap-1 text-danger">
                     <AlertTriangle strokeWidth={1.65} className="h-3.5 w-3.5" />
-                    Larger than the 256mm bed
+                    {bedMm ? `Larger than the ${bedMm.join(" × ")} mm bed` : "Larger than the printer's bed"}
                   </span>
                 )}
               </div>

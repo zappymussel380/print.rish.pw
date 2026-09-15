@@ -156,6 +156,33 @@ describe("retention and STEP sources", () => {
     expect(existsSync(jpeg)).toBe(true);
   });
 
+  it("keeps old temp uploads a queued ingest job still owns", async () => {
+    // After a worker outage longer than the orphan grace, the backlog's temp
+    // files are old by the time the startup sweep runs — but still wanted.
+    const tmp = join(mocks.state.dir, "tmp");
+    await mkdir(tmp);
+    const queued = await putOld(join(tmp, LIVE_ID));
+    const leftover = await putOld(join(tmp, DEAD_ID));
+
+    await runRetention(log, POLICY, { liveTmpNames: async () => new Set([LIVE_ID]) });
+
+    expect(existsSync(queued)).toBe(true);
+    expect(existsSync(leftover)).toBe(false);
+  });
+
+  it("leaves temp uploads alone when the upload queue can't be read", async () => {
+    const tmp = join(mocks.state.dir, "tmp");
+    await mkdir(tmp);
+    const upload = await putOld(join(tmp, LIVE_ID));
+
+    await runRetention(log, POLICY, {
+      liveTmpNames: async () => {
+        throw new Error("redis down");
+      },
+    });
+
+    expect(existsSync(upload)).toBe(true);
+  });
 });
 
 describe("the owner's retention settings", () => {

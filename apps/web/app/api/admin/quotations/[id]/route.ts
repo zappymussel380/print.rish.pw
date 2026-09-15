@@ -40,11 +40,13 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
   const current = await prisma.quotation.findUnique({ where: { id }, select: { status: true } });
   if (!current) return jsonError(404, "NOT_FOUND", "Quotation not found");
 
-  // Terminal status is immutable. Retention is allowed to purge its model
-  // files after the age threshold; permitting a concurrent reopen would make
-  // it impossible to establish a safe file-lifetime boundary.
-  if (TERMINAL_STATUSES.has(current.status) && current.status !== status) {
-    return jsonError(409, "TERMINAL_STATUS", "A terminal quotation cannot be reopened");
+  // A finished quotation can't be reopened. Retention is allowed to purge its
+  // model files after the age threshold; permitting a concurrent reopen would
+  // make it impossible to establish a safe file-lifetime boundary. Moving
+  // between finished statuses (Completed → Delivered, or fixing a misclick)
+  // keeps it finished, and the updatedAt bump only delays the purge.
+  if (TERMINAL_STATUSES.has(current.status) && !TERMINAL_STATUSES.has(status)) {
+    return jsonError(409, "TERMINAL_STATUS", "A finished quotation cannot be reopened");
   }
 
   if (current.status !== status) {

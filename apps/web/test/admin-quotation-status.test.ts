@@ -76,6 +76,38 @@ describe("admin quotation status transitions", () => {
     });
   });
 
+  it("moves a finished quotation between finished statuses", async () => {
+    db.findUnique.mockResolvedValue({ status: "COMPLETED" });
+
+    const response = await PATCH(request("DELIVERED"), {
+      params: Promise.resolve({ id: "quote-id" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: { id: "quote-id", status: "COMPLETED" },
+      data: { status: "DELIVERED" },
+    });
+    expect(db.createHistory).toHaveBeenCalledWith({
+      data: { quotationId: "quote-id", fromStatus: "COMPLETED", toStatus: "DELIVERED", note: "" },
+    });
+  });
+
+  it.each(["PENDING", "QUOTED", "APPROVED", "PRINTING"])(
+    "never reopens a finished quotation to %s",
+    async (status) => {
+      db.findUnique.mockResolvedValue({ status: "DELIVERED" });
+
+      const response = await PATCH(request(status), {
+        params: Promise.resolve({ id: "quote-id" }),
+      });
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({ error: { code: "TERMINAL_STATUS" } });
+      expect(db.transaction).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects a stale concurrent transition without writing history", async () => {
     db.updateMany.mockResolvedValue({ count: 0 });
 

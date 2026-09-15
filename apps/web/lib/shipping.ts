@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
+import { shippingBinding } from "@print/shared";
 import { env } from "./env";
 import { logger, safeErrorMessage } from "./logger";
 import { redis } from "./redis";
 import { sendOperatorAlert } from "./telegram";
 import { readBoundedJson } from "./upstream-response";
 import type { ShippingConfig } from "./shipping-settings";
+
+export { billedWeightKg, shippingBinding } from "@print/shared";
 
 /**
  * Shared Shiprocket rate estimator. Both the interactive estimate endpoint
@@ -23,7 +26,6 @@ const tokenKey = (email: string) => `sr:token:${createHash("sha256").update(emai
 const TOKEN_TTL_SECONDS = 8 * 24 * 60 * 60; // Shiprocket tokens live ~10 days.
 const RESULT_TTL_SECONDS = 24 * 60 * 60; // Rates barely move; cache aggressively.
 const DAILY_CALL_CAP = 400; // Global backstop on upstream calls per day.
-const PACKAGING_GRAMS = 200;
 
 /** Refuse to estimate above this — a parcel this heavy needs a manual quote and
  *  courier slabs get unreliable. Guards against a huge quote silently billing a
@@ -49,22 +51,6 @@ class UpstreamError extends Error {}
 interface CourierCompany {
   rate?: number;
   estimated_delivery_days?: string;
-}
-
-/** Part weight + packaging, billed by Shiprocket's 0.5 kg slabs. */
-export function billedWeightKg(weightGrams: number): number {
-  return Math.max(0.5, Math.ceil(((weightGrams + PACKAGING_GRAMS) / 1000) * 2) / 2);
-}
-
-/** The rate-affecting parcel dimensions Shiprocket bills on: the 0.5 kg-slab
- *  billed weight and the declared value in whole rupees (clamped). Isolated so
- *  the cache key, the upstream call, and the signed estimate token all derive
- *  them identically from the same authoritative weight/value. */
-export function shippingBinding(weightGrams: number, declaredValuePaise: number) {
-  return {
-    weightKg: billedWeightKg(weightGrams),
-    declaredValue: Math.min(1_000_000, Math.max(1, Math.round(declaredValuePaise / 100))),
-  };
 }
 
 /** What the estimator needs from the shop's settings. */

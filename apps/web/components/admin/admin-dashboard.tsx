@@ -70,14 +70,27 @@ export function AdminDashboard({ quotations, stats }: { quotations: QuotationRow
     });
   }, [quotations, query, filter]);
 
-  const changeStatus = async (id: string, status: string) => {
-    setBusyId(id);
+  const changeStatus = async (row: QuotationRow, status: string) => {
+    // Finishing an order is one-way: it can move between Completed, Delivered
+    // and Cancelled afterwards, but never back to an open status.
+    if (
+      TERMINAL_STATUSES.has(status) &&
+      !TERMINAL_STATUSES.has(row.status) &&
+      !confirm(`Mark ${row.number} as ${label(status)}? A finished quotation can't be reopened.`)
+    ) {
+      return;
+    }
+    setBusyId(row.id);
     try {
-      await fetch(`/api/admin/quotations/${id}`, {
+      const res = await fetch(`/api/admin/quotations/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify({ status }),
       });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        alert(data?.error?.message ?? `Changing the status of ${row.number} failed.`);
+      }
       router.refresh();
     } finally {
       setBusyId(null);
@@ -197,13 +210,17 @@ export function AdminDashboard({ quotations, stats }: { quotations: QuotationRow
                 <td className="py-3 pr-3">
                   <select
                     value={row.status}
-                    disabled={busyId === row.id || TERMINAL_STATUSES.has(row.status)}
-                    onChange={(e) => changeStatus(row.id, e.target.value)}
+                    disabled={busyId === row.id}
+                    onChange={(e) => changeStatus(row, e.target.value)}
                     className="input-base w-auto px-2 py-1.5 text-xs"
                     aria-label={`Status of ${row.number}`}
                   >
                     {STATUSES.map((s) => (
-                      <option key={s} value={s}>
+                      <option
+                        key={s}
+                        value={s}
+                        disabled={TERMINAL_STATUSES.has(row.status) && !TERMINAL_STATUSES.has(s)}
+                      >
                         {label(s)}
                       </option>
                     ))}

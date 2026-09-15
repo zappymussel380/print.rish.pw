@@ -45,8 +45,9 @@ export function sliceCacheKey(modelId: string, settingsKey: string): string {
 }
 
 /** A shipping estimate the customer ran on the quote page, carried through to
- *  checkout. `quoteKey` (grams:totalPaise) ties it to the exact quote it was
- *  estimated for, so the client hides it if the quote has since changed. `token`
+ *  checkout. `parcelKey` (shippingParcelKey) ties it to the parcel it was
+ *  priced for — the same test checkout's token check applies — so the client
+ *  hides it exactly when the server would refuse it. `token`
  *  is the server-signed proof of the shown amount that checkout verifies before
  *  charging it — the amount/pincode/days here are for display only. */
 export interface SavedShipping {
@@ -54,7 +55,7 @@ export interface SavedShipping {
   amountPaise: number;
   days: string | null;
   token: string;
-  quoteKey: string;
+  parcelKey: string;
 }
 
 interface QuoteState {

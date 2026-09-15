@@ -91,7 +91,11 @@ async function cleanOrphanFiles(
   return removed;
 }
 
-async function reconcileOrphans(now: number): Promise<number> {
+async function reconcileOrphans(
+  now: number,
+  log: Logger,
+  liveTmpNames?: () => Promise<ReadonlySet<string>>,
+): Promise<number> {
   const cutoff = now - ORPHAN_GRACE_MS;
   let removed = 0;
   removed += await cleanOrphanFiles(
@@ -159,14 +163,28 @@ async function reconcileOrphans(now: number): Promise<number> {
   );
 
   // Temp files have no DB row by design. An accepted ingest ticket owns its
-  // file until terminal worker cleanup; the bounded FIFO should transit far
+  // file until terminal worker cleanup; the bounded FIFO normally transits far
   // inside this two-hour grace, while producer/worker crash leftovers age out.
+  // But after a worker outage longer than the grace, the backlog is still
+  // queued when the startup sweep runs — so a file a live job still names is
+  // never an orphan, whatever its age. Read before listing: a file created
+  // after this is younger than the cutoff anyway.
+  let owned: ReadonlySet<string> = new Set();
+  if (liveTmpNames) {
+    try {
+      owned = await liveTmpNames();
+    } catch (err) {
+      log.warn({ err: String(err) }, "can't see the upload queue; leaving temp uploads for the next sweep");
+      return removed;
+    }
+  }
   const tmpDir = resolve(config.uploadDir, "tmp");
   try {
     const dir = await opendir(tmpDir);
     for await (const entry of dir) {
       const path = join(tmpDir, entry.name);
       try {
+        if (owned.has(entry.name)) continue;
         if ((await lstat(path)).mtimeMs >= cutoff) continue;
         await removeTree(path, { recursive: true, force: true });
         removed += 1;
@@ -231,7 +249,11 @@ export interface RetentionReport {
 export async function runRetention(
   log: Logger,
   policy: RetentionPolicy,
-  opts: { purgeOnly?: boolean } = {},
+  opts: {
+    purgeOnly?: boolean;
+    /** Temp upload names still owned by a queued or running ingest job. */
+    liveTmpNames?: () => Promise<ReadonlySet<string>>;
+  } = {},
 ): Promise<RetentionReport> {
   const now = Date.now();
 
@@ -312,7 +334,7 @@ export async function runRetention(
       if (protectedReferences > 0) continue;
 
       const { count } = await prisma.uploadedModel.updateMany({
-        // Terminal statuses are immutable in the admin API. Reassert all
+        // The admin API never reopens a terminal status. Reassert all
         // references and their age in the same statement that clears paths.
         where: {
           id: modelId,
@@ -412,7 +434,7 @@ export async function runRetention(
     }
   }
 
-  const orphanFiles = await reconcileOrphans(now);
+  const orphanFiles = await reconcileOrphans(now, log, opts.liveTmpNames);
 
   const report: RetentionReport = {
     staleUploads: deletedUploads,
