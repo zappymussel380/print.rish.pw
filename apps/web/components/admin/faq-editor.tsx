@@ -78,16 +78,18 @@ export function FaqEditor({ generated, settings }: { generated: FaqEntry[]; sett
                   <input
                     type="checkbox"
                     checked={!hidden.has(e.id)}
-                    onChange={(ev) =>
+                    onChange={(ev) => {
+                      // Read now, not inside the updater (see catalog-editor).
+                      const shown = ev.target.checked;
                       change(() =>
                         setHidden((h) => {
                           const next = new Set(h);
-                          if (ev.target.checked) next.delete(e.id);
+                          if (shown) next.delete(e.id);
                           else next.add(e.id);
                           return next;
                         }),
-                      )(null)
-                    }
+                      )(null);
+                    }}
                     className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
                   />
                   <span className="min-w-0">

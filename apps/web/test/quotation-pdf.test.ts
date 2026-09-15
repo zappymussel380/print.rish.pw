@@ -20,7 +20,7 @@ function annexure(overrides: Partial<PdfAnnexure> = {}): PdfAnnexure {
     thumbnailPng: null,
     geometry: { bboxXMm: 20, bboxYMm: 30.5, bboxZMm: 10, volumeCm3: 8.2, format: "stl", sizeBytes: 2663084 },
     settings: { material: "PLA", colour: "black", layerHeightUm: 200, infillPct: 15, supports: "auto", quantity: 1 },
-    slicer: { filamentGrams: 12.5, filamentMm: 4183, printSeconds: 3600, slicerVersion: "OrcaSlicer 2.4.1" },
+    slicer: { filamentGrams: 12.5, filamentMm: 4183, printSeconds: 3600, slicerVersion: "OrcaSlicer 2.4.1", supportGrams: 1.4 },
     pricing: { materialPaise: 5000, electricityPaise: 2000, maintenancePaise: 900, subtotalPaise: 9900 },
     ...overrides,
   };

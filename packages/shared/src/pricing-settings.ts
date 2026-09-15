@@ -27,7 +27,14 @@ const ratio = (max: number) => z.number().finite().min(0).max(max);
  *  that a typo (an extra zero or two) cannot silently reprice everything. */
 export const PRICING_BOUNDS = {
   setupFeePaise: paise(0, 1_00_000 * RUPEE),
-  sellPerGramPaise: paise(1, 1_000 * RUPEE),
+  // Per gram, to a tenth of a paisa: the admin types a price per kg, and any
+  // whole ₹/kg is exact (₹3,499/kg = 349.9 paise/g). Lines round to whole paise.
+  sellPerGramPaise: z
+    .number()
+    .finite()
+    .min(1)
+    .max(1_000 * RUPEE)
+    .refine((v) => Math.abs(v * 10 - Math.round(v * 10)) < 1e-6, "at most one decimal"),
   costPerKgPaise: paise(0, 1_00_000 * RUPEE),
   electricityPerKwhPaise: paise(0, 1_000 * RUPEE),
   maintenancePerGramPaise: paise(0, 100 * RUPEE),

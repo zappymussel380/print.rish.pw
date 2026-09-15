@@ -10,6 +10,7 @@ import { formatDuration, formatGrams, formatPaise } from "./money";
 import { SLICE_PIPELINE_VERSION, settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
+import { supportsSummary } from "./supports";
 import { customerSchema, sliceSettingsSchema, type Customer, type SliceSettings } from "./quote-schema";
 import type { LayerHeightUm } from "./quote-types";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "./whatsapp";
@@ -239,5 +240,17 @@ describe("money formatting", () => {
     expect(formatDuration(7500)).toBe("2h 5m");
     expect(formatGrams(5.11)).toBe("5.1 g");
     expect(formatGrams(1234)).toBe("1.23 kg");
+  });
+});
+
+describe("supportsSummary", () => {
+  it("says what the slicer did, not just the setting", () => {
+    expect(supportsSummary("off", 0)).toEqual({ label: "Off", detail: "Off — printed without supports" });
+    expect(supportsSummary("auto", 2.55)).toEqual({ label: "Auto, added (2.6 g)", detail: "Auto — added by the slicer (2.6 g of supports)" });
+    expect(supportsSummary("auto", 0).label).toBe("Auto, none needed");
+    // Slices from before supports were measured.
+    expect(supportsSummary("auto", null).label).toBe("Auto");
+    expect(supportsSummary("always", 4).detail).toBe("On everywhere — 4 g of supports");
+    expect(supportsSummary("always", null).label).toBe("On");
   });
 });

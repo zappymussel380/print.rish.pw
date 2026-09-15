@@ -29,6 +29,7 @@ export * from "./recent-prints";
 export * from "./session-constants";
 export * from "./settings-key";
 export * from "./site-profile";
+export * from "./supports";
 export * from "./site-profile-schema";
 export * from "./shipping-settings";
 export * from "./shipping-settings-schema";
