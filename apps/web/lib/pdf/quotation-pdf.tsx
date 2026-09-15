@@ -16,6 +16,7 @@ import {
   formatPaise,
   materialName,
   splitBrand,
+  supportsSummary,
   type MaterialId,
   type SupportMode,
 } from "@print/shared";
@@ -38,6 +39,8 @@ export interface PdfLine {
   layerHeightUm: number;
   infillPct: number;
   supports: SupportMode;
+  /** Grams of supports the slice generated per print; null when not measured. */
+  supportGrams?: number | null;
   quantity: number;
   totalGrams: number;
   totalPrintSeconds: number;
@@ -72,6 +75,8 @@ export interface PdfAnnexure {
     filamentMm: number;
     printSeconds: number;
     slicerVersion: string | null;
+    /** Of filamentGrams, how much is supports; null when not measured. */
+    supportGrams: number | null;
   };
   pricing: {
     materialPaise: number;
@@ -256,7 +261,7 @@ function AnnexurePage({
           <KV label="Material" value={`${settings.materialName ?? materialName(settings.material)} · ${settings.colourName ?? colourName(settings.colour)}`} />
           <KV label="Layer height" value={LAYER(settings.layerHeightUm)} />
           <KV label="Infill" value={`${settings.infillPct}%`} />
-          <KV label="Supports" value={settings.supports} />
+          <KV label="Supports" value={supportsSummary(settings.supports, slicer.supportGrams).detail} />
           <KV label="Quantity" value={String(settings.quantity)} />
         </View>
 
@@ -337,7 +342,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
             <Text style={s.cSpec}>
               {l.materialName ?? materialName(l.material)} · {l.colourName ?? colourName(l.colour)}
               {"\n"}
-              {LAYER(l.layerHeightUm)} · {l.infillPct}% · supports {l.supports}
+              {LAYER(l.layerHeightUm)} · {l.infillPct}% · supports {supportsSummary(l.supports, l.supportGrams).label.toLowerCase()}
             </Text>
             <Text style={s.cNum}>{l.quantity}</Text>
             <Text style={s.cNum}>{formatGrams(l.totalGrams)}</Text>
