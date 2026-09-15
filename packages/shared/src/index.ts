@@ -15,6 +15,8 @@ export * from "./parse-child-contract";
 export * from "./mail-settings";
 export * from "./mail-settings-schema";
 export * from "./material-guide";
+export * from "./material-helper";
+export * from "./material-helper-schema";
 export * from "./money";
 export * from "./orca-profile";
 export * from "./order-summary";

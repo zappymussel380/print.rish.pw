@@ -9,6 +9,7 @@ import {
   toPublicCatalog,
   type Catalog,
   type LayerHeightUm,
+  type PublicMaterialHelper,
   type PublicTax,
   type PublicMaterial,
 } from "@print/shared";
@@ -21,12 +22,15 @@ export interface PublicCatalog {
   pricing: Catalog;
   /** GST the shop adds on top, if any. */
   tax: PublicTax;
+  /** "Help me choose": the needs a customer can tick and the materials'
+   *  ratings; null when the shop has it off. */
+  helper: PublicMaterialHelper | null;
 }
 
 /** Safe default the UI renders with until (or if) the live fetch resolves:
  *  every material on, black/white only, code-default rates — matching the
  *  server-side defaults. */
-const FALLBACK: PublicCatalog = { ...toPublicCatalog(defaultAvailability()), pricing: CATALOG, tax: { enabled: false, rateBp: 0 } };
+const FALLBACK: PublicCatalog = { ...toPublicCatalog(defaultAvailability()), pricing: CATALOG, tax: { enabled: false, rateBp: 0 }, helper: null };
 
 // Shared across every model card so the page fetches /api/catalog once.
 let cached: PublicCatalog | null = null;
