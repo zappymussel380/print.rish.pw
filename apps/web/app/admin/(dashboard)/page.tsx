@@ -79,7 +79,8 @@ function computeStats(quotations: QuotationWithItems[], costBasis: InternalCostB
   for (const q of quotations) {
     statusCounts[q.status] = (statusCounts[q.status] ?? 0) + 1;
     if (q.status === "CANCELLED") continue;
-    revenuePaise += q.totalPaise;
+    // GST collected isn't the shop's revenue.
+    revenuePaise += q.totalPaise - q.taxPaise;
     profitPaise += estimateOrderProfitPaise(q, orderCostItems(q), costBasis);
     billableCount += 1;
     for (const item of q.items) {

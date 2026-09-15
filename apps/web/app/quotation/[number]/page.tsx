@@ -6,6 +6,7 @@ import {
   colourName,
   formatGrams,
   formatPaise,
+  formatTaxRate,
   materialName,
   summariseItems,
 } from "@print/shared";
@@ -141,6 +142,14 @@ export default async function ConfirmationPage({
               <span>Not included — confirmed over WhatsApp</span>
             </div>
           )}
+          {quotation.taxPaise > 0 && quotation.taxRateBp != null ? (
+            <div className="flex justify-between text-muted">
+              <span>
+                GST ({formatTaxRate(quotation.taxRateBp)}){quotation.taxGstin ? ` · GSTIN ${quotation.taxGstin}` : ""}
+              </span>
+              <span>{formatPaise(quotation.taxPaise)}</span>
+            </div>
+          ) : null}
           {quotation.estimatedCompletion && (
             <div className="flex justify-between text-muted">
               <span>Estimated ready</span>

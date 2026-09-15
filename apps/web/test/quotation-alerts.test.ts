@@ -13,13 +13,15 @@ const mocks = vi.hoisted(() => ({
   renderQuotationPdf: vi.fn(),
   notifyNewQuotation: vi.fn(),
   sendOperatorAlert: vi.fn(),
+  createQuotation: vi.fn(),
+  tax: { enabled: false, rateBp: 1800, hsn: "", gstin: "" },
 }));
 
 vi.mock("@print/db", () => ({
   Prisma: {},
   prisma: {
-    uploadedModel: { findFirst: mocks.findModel },
-    sliceResult: { findUnique: mocks.findSlice },
+    uploadedModel: { findFirst: mocks.findModel, findMany: vi.fn(async () => []) },
+    sliceResult: { findUnique: mocks.findSlice, findMany: vi.fn(async () => []) },
     quotation: { update: mocks.updateQuotation },
     // No live presets for the shop's own materials: the printer as installed.
     slicerProfileUpload: { findMany: vi.fn(async () => []) },
@@ -88,6 +90,8 @@ vi.mock("@/lib/storage", () => ({
   removeQuietly: vi.fn(async () => {}),
 }));
 
+vi.mock("@/lib/tax-settings", () => ({ getTax: vi.fn(async () => mocks.tax) }));
+
 vi.mock("@/lib/site-config", () => ({
   siteConfig: { whatsappNumber: "" },
   whatsappChatUrl: vi.fn(() => null),
@@ -145,15 +149,15 @@ beforeEach(() => {
     async (action: (tx: unknown) => Promise<unknown>) =>
       action({
         uploadedModel: { updateMany: vi.fn(async () => ({ count: 1 })) },
-        quotation: {
-          create: vi.fn(async () => ({
-            id: "33333333-3333-4333-8333-333333333333",
-            number: "RSP-2026-0001",
-            createdAt: new Date("2026-07-13T00:00:00.000Z"),
-          })),
-        },
+        quotation: { create: mocks.createQuotation },
       }),
   );
+  mocks.createQuotation.mockResolvedValue({
+    id: "33333333-3333-4333-8333-333333333333",
+    number: "RSP-2026-0001",
+    createdAt: new Date("2026-07-13T00:00:00.000Z"),
+  });
+  Object.assign(mocks.tax, { enabled: false, rateBp: 1800, hsn: "", gstin: "" });
   mocks.reserveRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
   mocks.releaseRateLimitReservation.mockResolvedValue(undefined);
   mocks.withRedisLock.mockImplementation(
@@ -271,5 +275,36 @@ describe("checkout operational alerts", () => {
     );
     expect(mocks.notifyNewQuotation).toHaveBeenCalledOnce();
     finishAlert?.();
+  });
+});
+
+describe("checkout with GST", () => {
+  const submit = () => POST(new Request("http://localhost/api/quotations", { method: "POST" }) as never);
+
+  it("adds GST on top, and freezes rate, HSN and GSTIN with the quotation", async () => {
+    Object.assign(mocks.tax, { enabled: true, rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM" });
+    const response = await submit();
+    expect(response.status).toBe(201);
+    // 12.5 g × ₹2/g + ₹150 setup = ₹175.00; 18% GST = ₹31.50.
+    const data = mocks.createQuotation.mock.calls[0]![0].data;
+    expect(data).toMatchObject({ taxPaise: 3150, totalPaise: 20650, taxRateBp: 1800, taxHsn: "9988", taxGstin: "18AABCU9603R1ZM" });
+    expect(data.pricingSnapshot.tax).toEqual({ rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM", amountPaise: 3150 });
+    // The PDF and the Telegram notice are made after the response.
+    await vi.waitFor(() => expect(mocks.notifyNewQuotation).toHaveBeenCalled());
+    expect(mocks.renderQuotationPdf.mock.calls[0]![0]).toMatchObject({
+      totalPaise: 20650,
+      tax: { paise: 3150, rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM" },
+    });
+    expect(mocks.notifyNewQuotation.mock.calls[0]![0]).toMatchObject({ totalPaise: 20650, taxPaise: 3150 });
+  });
+
+  it("adds nothing when GST is off: totals exactly as before", async () => {
+    await submit();
+    const data = mocks.createQuotation.mock.calls[0]![0].data;
+    expect(data).toMatchObject({ taxPaise: 0, totalPaise: 17500 });
+    expect(data).not.toHaveProperty("taxRateBp");
+    expect(data.pricingSnapshot.tax).toBeNull();
+    await vi.waitFor(() => expect(mocks.renderQuotationPdf).toHaveBeenCalled());
+    expect(mocks.renderQuotationPdf.mock.calls[0]![0].tax).toBeNull();
   });
 });

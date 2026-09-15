@@ -26,6 +26,7 @@ export async function GET(_request: NextRequest) {
     "Models",
     "Filament (g)",
     "Print hours",
+    "GST (INR)",
     "Total (INR)",
     "Notes",
   ];
@@ -44,6 +45,7 @@ export async function GET(_request: NextRequest) {
       q.items.length,
       grams.toFixed(1),
       (seconds / 3600).toFixed(2),
+      (q.taxPaise / 100).toFixed(2),
       (q.totalPaise / 100).toFixed(2),
       q.notes,
     ].map(csvCell).join(",");

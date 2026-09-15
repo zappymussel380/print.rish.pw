@@ -229,6 +229,8 @@ export interface NewQuotationTelegramInput {
   totalPaise: number;
   shippingPaise: number;
   shippingPincode: string | null;
+  /** GST included in totalPaise; 0 or absent when none was added. */
+  taxPaise?: number;
   appOrigin?: string;
 }
 
@@ -249,6 +251,7 @@ export function buildNewQuotationTelegramMessage(input: NewQuotationTelegramInpu
     `Total: ${money(input.totalPaise)} (${input.lines.length} model${input.lines.length === 1 ? "" : "s"}, ${totalQuantity} print${totalQuantity === 1 ? "" : "s"})`,
     `Filament/time: ${formatGrams(totalGrams)}, ${formatDuration(totalSeconds)}`,
     `Shipping: ${shipping}`,
+    ...(input.taxPaise ? [`GST: ${money(input.taxPaise)} (included in total)`] : []),
     "",
     `Customer: ${singleLine(input.customer.name, 120)}`,
     `Phone: ${singleLine(input.customer.phone, 80)}`,

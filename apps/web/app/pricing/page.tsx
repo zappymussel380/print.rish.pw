@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   formatPaise,
+  formatTaxRate,
   isMaterialEnabled,
   MATERIAL_IDS,
   materialName,
@@ -12,6 +13,7 @@ import { PageIntro } from "@/components/shell/page-intro";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
 import { getPricing } from "@/lib/pricing-settings";
 import { getSiteProfile } from "@/lib/site-profile";
+import { getTax } from "@/lib/tax-settings";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { brandName } = await getSiteProfile();
@@ -34,7 +36,7 @@ const MATERIAL_BLURB: Record<StockMaterialId, string> = {
 };
 
 export default async function PricingPage() {
-  const [{ catalog }, availability] = await Promise.all([getPricing(), getCatalogAvailability()]);
+  const [{ catalog }, availability, tax] = await Promise.all([getPricing(), getCatalogAvailability(), getTax()]);
   const { setupFeePaise, materials, electricityPerKwhPaise, maintenancePerGramPaise, printers } =
     catalog;
   const printer = printers[catalog.defaultPrinterId]!;
@@ -85,7 +87,7 @@ export default async function PricingPage() {
             },
             {
               t: "Grams × rate + setup fee",
-              b: "Your price is the slicer's filament weight multiplied by the per-gram rate for your material, times quantity, plus the one-time setup fee. Change a setting and the model is re-sliced — the price you see always matches real toolpaths.",
+              b: `Your price is the slicer's filament weight multiplied by the per-gram rate for your material, times quantity, plus the one-time setup fee.${tax.enabled ? ` GST at ${formatTaxRate(tax.rateBp)} is added on top, on the printing, setup fee and any shipping, and shown on every quote.` : ""} Change a setting and the model is re-sliced — the price you see always matches real toolpaths.`,
             },
             {
               t: "The breakdown is honest",

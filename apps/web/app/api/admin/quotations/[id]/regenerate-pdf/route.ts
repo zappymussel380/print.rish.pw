@@ -100,6 +100,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       lines,
       setupFeePaise: quotation.setupFeePaise,
       shippingPaise: quotation.shippingPaise,
+      // Frozen at submission — never today's GST settings.
+      tax:
+        quotation.taxPaise > 0 && quotation.taxRateBp != null
+          ? { paise: quotation.taxPaise, rateBp: quotation.taxRateBp, hsn: quotation.taxHsn, gstin: quotation.taxGstin }
+          : null,
       totalPaise: quotation.totalPaise,
       totalGrams: lines.reduce((sum, line) => sum + line.totalGrams, 0),
       totalPrintSeconds: lines.reduce((sum, line) => sum + line.totalPrintSeconds, 0),

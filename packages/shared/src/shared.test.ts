@@ -10,6 +10,9 @@ import { formatDuration, formatGrams, formatPaise } from "./money";
 import { SLICE_PIPELINE_VERSION, settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
+import { formatTaxRate, taxOn, withTax } from "./tax-settings";
+import { normalizeTax } from "./tax-settings-schema";
+import { estimateOrderProfitPaise } from "./costs";
 import { supportsSummary } from "./supports";
 import { customerSchema, sliceSettingsSchema, type Customer, type SliceSettings } from "./quote-schema";
 import type { LayerHeightUm } from "./quote-types";
@@ -240,6 +243,36 @@ describe("money formatting", () => {
     expect(formatDuration(7500)).toBe("2h 5m");
     expect(formatGrams(5.11)).toBe("5.1 g");
     expect(formatGrams(1234)).toBe("1.23 kg");
+  });
+});
+
+describe("sales GST", () => {
+  it("adds GST on printing + setup + shipping, rounded to the paisa", () => {
+    expect(taxOn(10_000, 1800)).toBe(1800);
+    expect(taxOn(333, 1800)).toBe(60); // 59.94
+    expect(withTax(15_756, 9_000, { enabled: true, rateBp: 1800 })).toEqual({ taxPaise: 4456, grandTotalPaise: 29_212 });
+    expect(withTax(15_756, 0, { enabled: false, rateBp: 1800 })).toEqual({ taxPaise: 0, grandTotalPaise: 15_756 });
+    expect(formatTaxRate(1800)).toBe("18%");
+    expect(formatTaxRate(1250)).toBe("12.5%");
+  });
+
+  it("is only ever on with a rate, HSN and a valid GSTIN", () => {
+    const ok = { enabled: true, rateBp: 1800, hsn: "9988", gstin: "18AABCU9603R1ZM" };
+    expect(normalizeTax(ok)).toEqual(ok);
+    expect(normalizeTax({ ...ok, gstin: "18AABCU9603R1Z" }).enabled).toBe(false);
+    expect(normalizeTax({ ...ok, hsn: "99" }).enabled).toBe(false);
+    expect(normalizeTax({ ...ok, rateBp: 5000 })).toMatchObject({ rateBp: 1800 });
+    expect(normalizeTax(null)).toEqual({ enabled: false, rateBp: 1800, hsn: "", gstin: "" });
+  });
+
+  it("keeps GST out of profit, and says it in the WhatsApp message", () => {
+    const order = { totalPaise: 29_212, shippingPaise: 9_000, taxPaise: 4_456 };
+    expect(estimateOrderProfitPaise(order, [])).toBe(15_756);
+    const msg = buildWhatsAppMessage({
+      brandName: "Shop", quotationNumber: "RSP-2026-0001", customerName: "A", materialsSummary: "1× PLA",
+      totalPaise: 29_212, shippingPaise: 9_000, shippingPincode: "411001", taxPaise: 4_456, taxRate: "18%",
+    });
+    expect(msg).toContain("GST (18%): ₹44.56 (included in total)");
   });
 });
 

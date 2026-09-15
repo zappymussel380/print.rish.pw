@@ -18,6 +18,10 @@ export interface WhatsAppMessageInput {
    *  in this chat, so an excluded-shipping quote must say so. */
   shippingPaise: number;
   shippingPincode: string | null;
+  /** GST folded into totalPaise (0 when the shop doesn't add GST). */
+  taxPaise?: number;
+  /** "18%", when taxPaise is set. */
+  taxRate?: string;
   notes?: string;
 }
 
@@ -33,6 +37,7 @@ export function buildWhatsAppMessage(input: Omit<WhatsAppMessageInput, "number">
     input.shippingPaise > 0
       ? `Shipping: ${formatPaise(input.shippingPaise)}${input.shippingPincode ? ` to ${input.shippingPincode}` : ""} (included in total)`
       : `Shipping: not included — to be confirmed`,
+    ...(input.taxPaise ? [`GST${input.taxRate ? ` (${input.taxRate})` : ""}: ${formatPaise(input.taxPaise)} (included in total)`] : []),
   ];
   const notes = input.notes?.trim();
   if (notes) {

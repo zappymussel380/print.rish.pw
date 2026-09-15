@@ -33,6 +33,8 @@ export * from "./settings-key";
 export * from "./site-profile";
 export * from "./supports";
 export * from "./site-profile-schema";
+export * from "./tax-settings";
+export * from "./tax-settings-schema";
 export * from "./shipping-settings";
 export * from "./shipping-settings-schema";
 export * from "./slice-job";
