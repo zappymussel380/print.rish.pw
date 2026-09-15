@@ -19,6 +19,7 @@ import {
 } from "@print/shared";
 import { useQuoteStore } from "@/lib/quote-store";
 import { useCatalog } from "@/lib/use-catalog";
+import { MaterialHelper } from "./material-helper";
 
 /** Past this many enabled materials a segmented control no longer fits a phone. */
 const MAX_SEGMENTED_MATERIALS = 3;
@@ -110,8 +111,20 @@ export function SettingsPanel({
     }
   }, [catalog, config.material, config.colour]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const helper = catalog.helper;
+  const showHelper = !!helper && helper.needs.length > 0 && enabledMaterials.length > 1 && lockedConfig?.material !== true;
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
+      {showHelper ? (
+        <MaterialHelper
+          helper={helper}
+          materials={enabledMaterials}
+          rates={catalog.pricing.materials}
+          current={config.material}
+          onPick={chooseMaterial}
+        />
+      ) : null}
       <Field
         label="Material"
         info={materialInfo}
