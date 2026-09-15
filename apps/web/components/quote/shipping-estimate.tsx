@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { Loader2, Truck } from "lucide-react";
-import { formatPaise, settingsKey } from "@print/shared";
+import { formatPaise, settingsKey, shippingParcelKey } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { useCatalog } from "@/lib/use-catalog";
 import { useSite } from "@/lib/site-context";
@@ -41,8 +41,10 @@ export function ShippingEstimate() {
   const pincodeHintId = useId();
 
   const valid = /^\d{6}$/.test(pincode);
-  const quoteKey = breakdown ? `${breakdown.totals.grams}:${breakdown.totalPaise}` : "";
-  const currentKey = breakdown ? `${pincode}:${quoteKey}` : "";
+  // Keyed by the parcel, not the exact quote: an edit that keeps the courier
+  // slab and declared value keeps the estimate, just as checkout's token check does.
+  const parcelKey = breakdown ? shippingParcelKey(breakdown.totals.grams, breakdown.totalPaise) : "";
+  const currentKey = breakdown ? `${pincode}:${parcelKey}` : "";
 
   // Always-current pincode+quote signature, read by the async handler so a
   // response for a pincode/quote the user has since changed is discarded rather
@@ -106,7 +108,7 @@ export function ShippingEstimate() {
               amountPaise: data.estimate.amountPaise,
               days: data.estimate.days,
               token: data.estimate.token,
-              quoteKey,
+              parcelKey,
             }
           : null,
       );

@@ -10,6 +10,7 @@ import {
   formatPaise,
   formatTaxRate,
   settingsKey,
+  shippingParcelKey,
   withTax,
 } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
@@ -86,9 +87,12 @@ export function CheckoutForm({
     );
   }
 
-  // Only trust the saved shipping estimate if it was priced for this exact quote.
-  const quoteKey = `${breakdown.totals.grams}:${breakdown.totalPaise}`;
-  const shippingValid = shipping && shipping.quoteKey === quoteKey ? shipping : null;
+  // Only trust the saved shipping estimate if it prices this quote's parcel —
+  // the test the server applies to its token — so the total shown here is
+  // exactly what submitting charges.
+  const parcelKey = shippingParcelKey(breakdown.totals.grams, breakdown.totalPaise);
+  const shippingValid = shipping && shipping.parcelKey === parcelKey ? shipping : null;
+  const shippingStale = !!shipping && !shippingValid;
   // GST (when the shop adds it) is on the printing, setup fee and shipping.
   const { taxPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingValid?.amountPaise ?? 0, catalog.tax);
 
@@ -296,6 +300,8 @@ export function CheckoutForm({
             <Row label="Setup fee" value={formatPaise(breakdown.setupFeePaise)} />
             {shippingValid ? (
               <Row label={`Shipping (to ${shippingValid.pincode})`} value={formatPaise(shippingValid.amountPaise)} />
+            ) : shippingStale ? (
+              <Row label="Shipping" value="Re-estimate: the quote changed" muted />
             ) : (
               <Row label="Shipping" value="Confirmed on WhatsApp" muted />
             )}
@@ -310,6 +316,8 @@ export function CheckoutForm({
           <p className="mt-3 text-[0.7rem] leading-5 text-faint">
             {shippingValid
               ? "Includes estimated prepaid shipping. "
+              : shippingStale
+              ? "Your quote changed after you estimated shipping; go back to the quote builder and estimate it again. "
               : `Shipping is not included — ${city ? `pickup in ${city} or ` : ""}arranged over WhatsApp. `}
             Estimate from real slicing on a {catalog.pricing.printers[catalog.pricing.defaultPrinterId]!.name}. Final
             confirmation over WhatsApp.

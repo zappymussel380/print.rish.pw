@@ -80,6 +80,13 @@ export default async function ConfirmationPage({
         totalPaise: quotation.totalPaise,
         shippingPaise: quotation.shippingPaise,
         shippingPincode: quotation.shippingPincode,
+        // Checkout lands here, so this is the message customers actually send.
+        ...(quotation.taxPaise > 0
+          ? {
+              taxPaise: quotation.taxPaise,
+              ...(quotation.taxRateBp != null ? { taxRate: formatTaxRate(quotation.taxRateBp) } : {}),
+            }
+          : {}),
         notes: quotation.notes,
       })
     : profileWhatsappUrl(profile);

@@ -8,6 +8,8 @@ import { assertSameOrigin } from "@/lib/security";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PURGE_JOB_ID = "purge";
+
 /** Admin: how many uploads and finished quotations' files a purge of
  *  everything older than ?olderThanDays would remove. */
 export async function GET(request: NextRequest) {
@@ -30,7 +32,19 @@ export async function POST(request: NextRequest) {
   const parsed = purgeInputSchema.safeParse(body.value);
   if (!parsed.success) return jsonError(422, "BAD_DAYS", "Pick 1 to 3650 days.");
   try {
-    await getMaintenanceQueue().add("purge", { kind: "purge", olderThanDays: parsed.data.olderThanDays }, { jobId: "purge" });
+    const queue = getMaintenanceQueue();
+    // The fixed job id keeps it to one purge at a time, but BullMQ silently
+    // ignores an add whose id still exists — and a failed purge is kept for
+    // inspection. Clear a finished one first, or every later purge is a no-op.
+    const previous = await queue.getJob(PURGE_JOB_ID);
+    if (previous) {
+      const state = await previous.getState();
+      if (["active", "waiting", "delayed", "prioritized", "waiting-children"].includes(state)) {
+        return jsonError(409, "PURGE_RUNNING", "A purge is already running. Check again in a minute.");
+      }
+      await previous.remove();
+    }
+    await queue.add("purge", { kind: "purge", olderThanDays: parsed.data.olderThanDays }, { jobId: PURGE_JOB_ID });
   } catch {
     return jsonError(503, "QUEUE_UNAVAILABLE", "The worker's queue isn't reachable. Try again in a minute.");
   }

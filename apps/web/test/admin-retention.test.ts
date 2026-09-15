@@ -7,7 +7,7 @@ const apiUtil = vi.hoisted(() => ({
   jsonError: (status: number, code: string, message: string) => Response.json({ error: { code, message } }, { status }),
   readJsonBody: vi.fn(),
 }));
-const queue = vi.hoisted(() => ({ add: vi.fn() }));
+const queue = vi.hoisted(() => ({ add: vi.fn(), getJob: vi.fn() }));
 const origin = vi.hoisted(() => ({ ok: true }));
 
 vi.mock("@print/db", () => ({
@@ -38,6 +38,7 @@ beforeEach(() => {
   db.upsert.mockClear();
   db.count.mockReset();
   queue.add.mockReset().mockResolvedValue({});
+  queue.getJob.mockReset().mockResolvedValue(undefined);
   apiUtil.requireAdminApi.mockResolvedValue(null);
   origin.ok = true;
   vi.stubEnv("UPLOAD_RETENTION_HOURS", "48");
@@ -96,5 +97,27 @@ describe("/api/admin/retention/purge", () => {
     queue.add.mockRejectedValueOnce(new Error("redis down"));
     body({ olderThanDays: 30 });
     expect((await purge.POST(req())).status).toBe(503);
+  });
+
+  it("clears a failed purge first, since BullMQ ignores an add whose job id still exists", async () => {
+    const failed = { getState: vi.fn(async () => "failed"), remove: vi.fn(async () => {}) };
+    queue.getJob.mockResolvedValue(failed);
+    body({ olderThanDays: 7 });
+    expect((await purge.POST(req())).status).toBe(202);
+    expect(queue.getJob).toHaveBeenCalledWith("purge");
+    expect(failed.remove).toHaveBeenCalled();
+    expect(failed.remove.mock.invocationCallOrder[0]!).toBeLessThan(queue.add.mock.invocationCallOrder[0]!);
+    expect(queue.add).toHaveBeenCalledWith("purge", { kind: "purge", olderThanDays: 7 }, { jobId: "purge" });
+  });
+
+  it("says so, rather than claiming to queue, while a purge is still running", async () => {
+    const running = { getState: vi.fn(async () => "active"), remove: vi.fn() };
+    queue.getJob.mockResolvedValue(running);
+    body({ olderThanDays: 7 });
+    const res = await purge.POST(req());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "PURGE_RUNNING" } });
+    expect(running.remove).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });

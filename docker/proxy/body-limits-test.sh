@@ -113,6 +113,10 @@ check /api/admin/slicer-profiles 2048 pass
 check /api/admin/slicer-profiles 4096 reject
 # The exact match must not widen the admin endpoints beside it.
 check /api/admin/slicer-profiles-x 200 reject
+# The FAQ editor saves the whole FAQ at once; the app caps it at 256 KiB.
+check /api/admin/faq 200 pass
+check /api/admin/faq 512 reject
+check /api/admin/faq/x 200 reject
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures body-limit expectation(s) failed" >&2

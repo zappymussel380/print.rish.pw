@@ -94,7 +94,7 @@ describe("queued upload state", () => {
       amountPaise: 10000,
       days: "2",
       token: "token",
-      quoteKey: "10:10000",
+      parcelKey: "0.5:100",
     });
 
     store.addUploading("client-1", "part.stl", 84);

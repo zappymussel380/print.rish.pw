@@ -7,7 +7,9 @@ import { assertSameOrigin } from "@/lib/security";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_BODY_BYTES = 128 * 1024;
+// A full FAQ (FAQ_LIMITS) in non-Latin script is up to 3 bytes a character:
+// ~195 KB. docker/proxy/nginx.conf allows this path a little more than this.
+const MAX_BODY_BYTES = 256 * 1024;
 
 export async function GET() {
   const auth = await requireAdminApi();

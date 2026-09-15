@@ -11,6 +11,7 @@ import { SLICE_PIPELINE_VERSION, settingsKey, sliceArtifactKey } from "./setting
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
 import { formatTaxRate, taxOn, withTax } from "./tax-settings";
+import { shippingParcelKey } from "./shipping-binding";
 import { normalizeTax } from "./tax-settings-schema";
 import { estimateOrderProfitPaise } from "./costs";
 import { supportsSummary } from "./supports";
@@ -285,5 +286,20 @@ describe("supportsSummary", () => {
     expect(supportsSummary("auto", null).label).toBe("Auto");
     expect(supportsSummary("always", 4).detail).toBe("On everywhere — 4 g of supports");
     expect(supportsSummary("always", null).label).toBe("On");
+  });
+});
+
+describe("shippingParcelKey", () => {
+  it("keeps an estimate across edits that ship as the same parcel", () => {
+    // 100 g + packaging is the 0.5 kg slab; ₹862.29 declares as ₹862.
+    const key = shippingParcelKey(100, 86229);
+    expect(key).toBe("0.5:862");
+    expect(shippingParcelKey(100.1, 86240)).toBe(key);
+  });
+
+  it("changes when the courier would price it differently", () => {
+    const key = shippingParcelKey(100, 86229);
+    expect(shippingParcelKey(301, 86229)).not.toBe(key); // next 0.5 kg slab
+    expect(shippingParcelKey(100, 86260)).not.toBe(key); // declared value rounds to ₹863
   });
 });

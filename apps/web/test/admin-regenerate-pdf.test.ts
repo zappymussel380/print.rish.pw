@@ -192,6 +192,17 @@ describe("admin PDF regeneration", () => {
       expect.any(Buffer),
       { flag: "wx", mode: 0o600 },
     );
+    // The path is already recorded: re-rendering must not touch the row, or
+    // the updatedAt bump restarts a finished quotation's retention clock.
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it("records the path of a quotation whose first render failed", async () => {
+    db.findUnique.mockResolvedValue({ ...quotation, pdfPath: null });
+
+    const response = await POST(request(), ctx);
+
+    expect(response.status).toBe(200);
     expect(db.update).toHaveBeenCalledWith({
       where: { id: "quote-id" },
       data: { pdfPath: "/data/pdfs/RSP-2026-0002.pdf" },
@@ -199,6 +210,7 @@ describe("admin PDF regeneration", () => {
   });
 
   it("rolls the file back when the pdfPath update fails", async () => {
+    db.findUnique.mockResolvedValue({ ...quotation, pdfPath: null });
     db.update.mockRejectedValue(new Error("db down"));
 
     const response = await POST(request(), ctx);
