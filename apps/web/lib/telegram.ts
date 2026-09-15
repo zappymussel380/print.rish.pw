@@ -231,6 +231,8 @@ export interface NewQuotationTelegramInput {
   shippingPincode: string | null;
   /** GST included in totalPaise; 0 or absent when none was added. */
   taxPaise?: number;
+  /** What rounding to a whole rupee added, included in totalPaise. */
+  roundOffPaise?: number;
   appOrigin?: string;
 }
 
@@ -252,6 +254,9 @@ export function buildNewQuotationTelegramMessage(input: NewQuotationTelegramInpu
     `Filament/time: ${formatGrams(totalGrams)}, ${formatDuration(totalSeconds)}`,
     `Shipping: ${shipping}`,
     ...(input.taxPaise ? [`GST: ${money(input.taxPaise)} (included in total)`] : []),
+    ...(input.roundOffPaise
+      ? [`Round off: ${input.roundOffPaise < 0 ? "-" : "+"}${money(Math.abs(input.roundOffPaise))} (included in total)`]
+      : []),
     "",
     `Customer: ${singleLine(input.customer.name, 120)}`,
     `Phone: ${singleLine(input.customer.phone, 80)}`,

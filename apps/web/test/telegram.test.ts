@@ -38,6 +38,21 @@ describe("Telegram order notification", () => {
     expect(message).toContain("https://print.rish.pw/admin");
     expect(message).toContain("https://print.rish.pw/api/models/model_1/file");
     expect(message).toContain("PETG Black, 0.20mm, 15% infill, supports off");
+    expect(message).not.toContain("Round off");
+  });
+
+  it("says what rounding the total added, signed", () => {
+    const base = {
+      number: "Q-2026-0002",
+      appOrigin: "https://print.rish.pw",
+      customer: { name: "A", email: "a@example.com", phone: "9999999999", city: "Guwahati" },
+      shippingPaise: 0,
+      shippingPincode: null,
+      totalPaise: 45000,
+      lines: [],
+    };
+    expect(buildNewQuotationTelegramMessage({ ...base, roundOffPaise: -29 })).toContain("Round off: -Rs 0.29 (included in total)");
+    expect(buildNewQuotationTelegramMessage({ ...base, roundOffPaise: 25 })).toContain("Round off: +Rs 0.25 (included in total)");
   });
 
   it("keeps long messages within Telegram's payload budget", () => {

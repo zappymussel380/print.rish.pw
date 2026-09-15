@@ -8,7 +8,9 @@ import {
   formatDuration,
   formatGrams,
   formatPaise,
+  formatRoundOff,
   formatTaxRate,
+  formatTotal,
   settingsKey,
   shippingParcelKey,
   withTax,
@@ -94,7 +96,7 @@ export function CheckoutForm({
   const shippingValid = shipping && shipping.parcelKey === parcelKey ? shipping : null;
   const shippingStale = !!shipping && !shippingValid;
   // GST (when the shop adds it) is on the printing, setup fee and shipping.
-  const { taxPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingValid?.amountPaise ?? 0, catalog.tax);
+  const { taxPaise, roundOffPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingValid?.amountPaise ?? 0, catalog.tax);
 
   const field = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -306,12 +308,13 @@ export function CheckoutForm({
               <Row label="Shipping" value="Confirmed on WhatsApp" muted />
             )}
             {catalog.tax.enabled ? <Row label={`GST (${formatTaxRate(catalog.tax.rateBp)})`} value={formatPaise(taxPaise)} /> : null}
+            {roundOffPaise !== 0 ? <Row label="Round off" value={formatRoundOff(roundOffPaise)} muted /> : null}
             <Row label="Print time" value={formatDuration(breakdown.totals.printSeconds)} muted />
             {completion && <Row label="Ready by" value={dateFmt.format(completion)} muted />}
           </div>
           <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
             <span className="font-[650]">Total</span>
-            <span className="text-xl font-[750] text-accent">{formatPaise(grandTotalPaise)}</span>
+            <span className="text-xl font-[750] text-accent">{formatTotal(grandTotalPaise)}</span>
           </div>
           <p className="mt-3 text-[0.7rem] leading-5 text-faint">
             {shippingValid

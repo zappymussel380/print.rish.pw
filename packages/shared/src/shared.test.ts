@@ -6,7 +6,7 @@ import {
   sanitizeOriginalName,
   uploadFormatFromFilename,
 } from "./filename";
-import { formatDuration, formatGrams, formatPaise } from "./money";
+import { formatDuration, formatGrams, formatPaise, formatRoundOff, formatTotal } from "./money";
 import { SLICE_PIPELINE_VERSION, settingsKey, sliceArtifactKey } from "./settings-key";
 import { sliceJobId } from "./slice-job";
 import { summariseItems } from "./order-summary";
@@ -247,12 +247,31 @@ describe("money formatting", () => {
   });
 });
 
+describe("round off", () => {
+  it("rounds every total half-up to a whole rupee and says by how much", () => {
+    expect(withTax(10_050, 0, null)).toEqual({ taxPaise: 0, roundOffPaise: 50, grandTotalPaise: 10_100 });
+    expect(withTax(10_049, 0, null)).toEqual({ taxPaise: 0, roundOffPaise: -49, grandTotalPaise: 10_000 });
+    expect(withTax(10_000, 0, null)).toEqual({ taxPaise: 0, roundOffPaise: 0, grandTotalPaise: 10_000 });
+    // GST is on the exact amount; only the grand total is rounded.
+    expect(withTax(9_953, 1_234, { enabled: true, rateBp: 1800 })).toEqual({ taxPaise: 2014, roundOffPaise: -1, grandTotalPaise: 13_200 });
+  });
+
+  it("formats whole totals without paise, older ones with, and round off signed", () => {
+    expect(formatTotal(145_700)).toBe("₹1,457");
+    expect(formatTotal(145_712)).toBe("₹1,457.12");
+    expect(formatRoundOff(25)).toBe("+₹0.25");
+    expect(formatRoundOff(-29)).toBe("−₹0.29");
+    expect(formatRoundOff(0)).toBe("+₹0.00");
+  });
+});
+
 describe("sales GST", () => {
   it("adds GST on printing + setup + shipping, rounded to the paisa", () => {
     expect(taxOn(10_000, 1800)).toBe(1800);
     expect(taxOn(333, 1800)).toBe(60); // 59.94
-    expect(withTax(15_756, 9_000, { enabled: true, rateBp: 1800 })).toEqual({ taxPaise: 4456, grandTotalPaise: 29_212 });
-    expect(withTax(15_756, 0, { enabled: false, rateBp: 1800 })).toEqual({ taxPaise: 0, grandTotalPaise: 15_756 });
+    // ₹292.12 rounds down to ₹292; ₹157.56 rounds up to ₹158.
+    expect(withTax(15_756, 9_000, { enabled: true, rateBp: 1800 })).toEqual({ taxPaise: 4456, roundOffPaise: -12, grandTotalPaise: 29_200 });
+    expect(withTax(15_756, 0, { enabled: false, rateBp: 1800 })).toEqual({ taxPaise: 0, roundOffPaise: 44, grandTotalPaise: 15_800 });
     expect(formatTaxRate(1800)).toBe("18%");
     expect(formatTaxRate(1250)).toBe("12.5%");
   });
