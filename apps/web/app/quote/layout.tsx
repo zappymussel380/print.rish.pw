@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { toPublicCatalog } from "@print/shared";
 import { getCatalogAvailability } from "@/lib/catalog-availability";
+import { getMaterialHelper, toPublicHelper } from "@/lib/material-helper";
 import { getPricing } from "@/lib/pricing-settings";
 import { getTax, toPublicTax } from "@/lib/tax-settings";
 import { CatalogProvider } from "@/lib/use-catalog";
@@ -10,9 +11,11 @@ import { CatalogProvider } from "@/lib/use-catalog";
 export const dynamic = "force-dynamic";
 
 export default async function QuoteLayout({ children }: { children: ReactNode }) {
-  const [availability, pricing, tax] = await Promise.all([getCatalogAvailability(), getPricing(), getTax()]);
+  const [availability, pricing, tax, helper] = await Promise.all([getCatalogAvailability(), getPricing(), getTax(), getMaterialHelper()]);
   return (
-    <CatalogProvider value={{ ...toPublicCatalog(availability), pricing: pricing.catalog, tax: toPublicTax(tax) }}>
+    <CatalogProvider
+      value={{ ...toPublicCatalog(availability), pricing: pricing.catalog, tax: toPublicTax(tax), helper: toPublicHelper(helper, availability) }}
+    >
       {children}
     </CatalogProvider>
   );
