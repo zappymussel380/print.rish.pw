@@ -14,6 +14,7 @@ import {
   formatDuration,
   formatGrams,
   formatPaise,
+  formatTotal,
   materialName,
   formatTaxRate,
   splitBrand,
@@ -100,6 +101,8 @@ export interface QuotationPdfData {
   shippingPaise?: number;
   /** GST included in totalPaise, frozen at submission; null/absent when none. */
   tax?: { paise: number; rateBp: number; hsn: string | null; gstin: string | null } | null;
+  /** What rounding to a whole rupee added, inside totalPaise; 0/absent before round off. */
+  roundOffPaise?: number;
   totalPaise: number;
   totalGrams: number;
   totalPrintSeconds: number;
@@ -186,6 +189,9 @@ function PdfFooter({ number, brandName, printer }: { number: string; brandName: 
 
 // Built-in Helvetica has no ₹ (U+20B9) glyph, so use an ASCII "Rs" in the PDF.
 const money = (paise: number) => formatPaise(paise).replace("₹", "Rs ");
+// The PDF's built-in font has neither ₹ nor the Unicode minus.
+const totalMoney = (paise: number) => formatTotal(paise).replace("₹", "Rs ");
+const roundOffMoney = (paise: number) => `${paise < 0 ? "-" : "+"}${money(Math.abs(paise))}`;
 
 const LAYER = (um: number) => `${(um / 1000).toFixed(2)}mm`;
 
@@ -357,7 +363,7 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
         <View style={s.totals}>
           <View style={s.totalRow}>
             <Text style={{ color: MUTED }}>Materials subtotal</Text>
-            <Text>{money(data.totalPaise - data.setupFeePaise - (data.shippingPaise ?? 0) - (data.tax?.paise ?? 0))}</Text>
+            <Text>{money(data.lines.reduce((sum, line) => sum + line.subtotalPaise, 0))}</Text>
           </View>
           <View style={s.totalRow}>
             <Text style={{ color: MUTED }}>Setup fee</Text>
@@ -380,9 +386,15 @@ function QuotationDocument({ data }: { data: QuotationPdfData }) {
               <Text>{money(data.tax.paise)}</Text>
             </View>
           ) : null}
+          {data.roundOffPaise ? (
+            <View style={s.totalRow}>
+              <Text style={{ color: MUTED }}>Round off</Text>
+              <Text>{roundOffMoney(data.roundOffPaise)}</Text>
+            </View>
+          ) : null}
           <View style={s.grandRow}>
             <Text style={s.grandLabel}>Total</Text>
-            <Text style={[s.grandValue, { color: accent }]}>{money(data.totalPaise)}</Text>
+            <Text style={[s.grandValue, { color: accent }]}>{totalMoney(data.totalPaise)}</Text>
           </View>
         </View>
 

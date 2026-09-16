@@ -22,6 +22,21 @@ total = Σ lineCharge + setupFee          (one setup fee per order, any file cou
 
 All arithmetic is in **integer paise**, rounded half-up at the line level.
 
+What the customer owes adds any prepaid shipping and, when the shop charges it, GST
+(on printing + setup + shipping), and is then rounded half-up to a whole rupee
+(`withTax` in `packages/shared/src/tax-settings.ts`):
+
+```
+exact      = total + shipping + GST
+grandTotal = round(exact / 100) × 100
+roundOff   = grandTotal − exact          (−50…+49 paise, its own "Round off" line)
+```
+
+Lines, setup fee, shipping and GST keep their paise; only the grand total is whole.
+The quote page, checkout, the confirmation page, the PDF and the Telegram notice all
+show the same figures, and `Quotation.roundOffPaise` freezes it (0 on quotations
+issued before round off, whose totals may carry paise).
+
 ## Informational components (never added on top)
 
 The per-gram rate already covers these; they're shown for transparency only:

@@ -224,13 +224,15 @@ async function postQuotation(request: NextRequest) {
   }
   // GST (when the shop adds it) on the printing, setup fee and shipping —
   // the same sum the checkout page showed the customer.
-  const { taxPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingPaise, tax);
+  const { taxPaise, roundOffPaise, grandTotalPaise } = withTax(breakdown.totalPaise, shippingPaise, tax);
 
   const persistedIntegers = [
     breakdown.setupFeePaise,
     breakdown.totalPaise,
     shippingPaise,
     taxPaise,
+    // Signed by nature (−50…+49); bounded here like the rest.
+    Math.abs(roundOffPaise),
     grandTotalPaise,
     ...breakdown.lines.flatMap((line) => [
       line.unitPrintSeconds,
@@ -307,6 +309,7 @@ async function postQuotation(request: NextRequest) {
           shippingPaise,
           shippingPincode,
           taxPaise,
+          roundOffPaise,
           ...(tax.enabled ? { taxRateBp: tax.rateBp, taxHsn: tax.hsn, taxGstin: tax.gstin } : {}),
           estimatedCompletion: completion,
           pricingSnapshot: {
@@ -317,6 +320,7 @@ async function postQuotation(request: NextRequest) {
                 ? { pincode: shippingPincode, amountPaise: shippingPaise, days: shippingDays }
                 : { excluded: true },
             tax: tax.enabled ? { rateBp: tax.rateBp, hsn: tax.hsn, gstin: tax.gstin, amountPaise: taxPaise } : null,
+            roundOffPaise,
             generatedAt: new Date().toISOString(),
           } as unknown as Prisma.InputJsonValue,
           items: {
@@ -435,6 +439,7 @@ async function postQuotation(request: NextRequest) {
       setupFeePaise: breakdown.setupFeePaise,
       shippingPaise,
       tax: tax.enabled ? { paise: taxPaise, rateBp: tax.rateBp, hsn: tax.hsn, gstin: tax.gstin } : null,
+      roundOffPaise,
       totalPaise: grandTotalPaise,
       totalGrams: breakdown.totals.grams,
       totalPrintSeconds: breakdown.totals.printSeconds,
@@ -505,6 +510,7 @@ async function postQuotation(request: NextRequest) {
     shippingPaise,
     shippingPincode,
     taxPaise,
+    roundOffPaise,
   });
 
   const materialsSummary = summariseItems(

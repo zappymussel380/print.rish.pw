@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, Loader2 } from "lucide-react";
-import { formatDuration, formatGrams, formatPaise, formatTaxRate, withTax } from "@print/shared";
+import { formatDuration, formatGrams, formatPaise, formatTaxRate, formatTotal, withTax } from "@print/shared";
 import { computePricing } from "@/lib/pricing-client";
 import { useCatalog } from "@/lib/use-catalog";
 import { useQuoteStore } from "@/lib/quote-store";
@@ -36,7 +36,7 @@ export function SummaryBar() {
             {completion ? dateFmt.format(completion) : "—"}
           </Metric>
           <Metric label={tax.enabled ? "Total incl. GST" : "Total"} accent>
-            {breakdown ? formatPaise(withTax(breakdown.totalPaise, 0, tax).grandTotalPaise) : "—"}
+            {breakdown ? formatTotal(withTax(breakdown.totalPaise, 0, tax).grandTotalPaise) : "—"}
           </Metric>
         </div>
 

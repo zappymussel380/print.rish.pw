@@ -152,8 +152,9 @@ model Quotation {
   customerCity        String
   notes               String          @default("")
   setupFeePaise       Int
-  /// Grand total in paise = parts + setup + shipping + GST. Every reader treats this
-  /// as the amount owed, so shipping (when present) is already included here.
+  /// Grand total in paise = parts + setup + shipping + GST + round off. Every reader
+  /// treats this as the amount owed, so shipping (when present) is already included
+  /// here. Whole rupees since round off; older quotations may carry paise.
   totalPaise          Int
   /// Prepaid shipping added at submission (0 when no delivery pincode was
   /// given). Stored separately so the PDF/view can show it as its own line.
@@ -163,6 +164,9 @@ model Quotation {
   /// totalPaise; 0 when the shop didn't add GST. Rate (basis points), HSN/SAC
   /// and the shop's GSTIN are frozen with it for the PDF.
   taxPaise            Int             @default(0)
+  /// What rounding the total to a whole rupee added (−50…+49), already inside
+  /// totalPaise; 0 for quotations issued before round off.
+  roundOffPaise       Int             @default(0)
   taxRateBp           Int?
   taxHsn              String?
   taxGstin            String?
