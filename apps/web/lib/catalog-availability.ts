@@ -72,6 +72,14 @@ export async function saveCatalogAvailability(input: AvailabilityInput): Promise
   return writeAvailability({ ...normalized, customMaterials: stored.customMaterials });
 }
 
+/** Put back availability from a settings backup, own materials' names and
+ *  copy included. Written as-is rather than through the Catalog editor's
+ *  switch-on check: one of the shop's own materials stays off for customers
+ *  (`effectiveAvailability`) until its restored preset passes its test slice. */
+export async function restoreCatalogAvailability(input: unknown): Promise<Availability> {
+  return writeAvailability(normalizeAvailability(input));
+}
+
 /** Rename the shop's own materials, or change the copy /materials shows for
  *  them (admin only). An empty name clears one, which also takes it off sale
  *  and drops its copy; a guide of blanks clears the copy. When a name or guide

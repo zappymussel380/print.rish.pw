@@ -117,6 +117,11 @@ check /api/admin/slicer-profiles-x 200 reject
 check /api/admin/faq 200 pass
 check /api/admin/faq 512 reject
 check /api/admin/faq/x 200 reject
+# Settings restore: every setting plus the live presets; the app caps it at 8 MiB.
+check /api/admin/backup 200 pass
+check /api/admin/backup 4096 pass
+check /api/admin/backup 20480 reject
+check /api/admin/backup-x 200 reject
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures body-limit expectation(s) failed" >&2

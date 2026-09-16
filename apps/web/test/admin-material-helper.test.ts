@@ -24,9 +24,6 @@ vi.mock("@print/db", () => ({
 }));
 vi.mock("@/lib/api-util", () => apiUtil);
 vi.mock("@/lib/security", () => ({ assertSameOrigin: () => origin.ok }));
-// react's cache() memoises per request on the server; in a test it would pin
-// the first read, so pass the function straight through.
-vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), cache: <T,>(fn: T) => fn }));
 
 const route = await import("@/app/api/admin/material-helper/route");
 const { toPublicHelper } = await import("@/lib/material-helper");
