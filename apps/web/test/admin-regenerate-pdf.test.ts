@@ -72,6 +72,7 @@ const quotation = {
   setupFeePaise: 5000,
   shippingPaise: 0,
   totalPaise: 86229,
+  roundOffPaise: 0,
   estimatedCompletion: new Date("2026-07-20T10:00:00Z"),
   pdfPath: "/data/pdfs/RSP-2026-0002.pdf",
   items: [
@@ -140,6 +141,7 @@ describe("admin PDF regeneration", () => {
       number: "RSP-2026-0002",
       setupFeePaise: 5000,
       shippingPaise: 0,
+      roundOffPaise: 0,
       totalPaise: 86229,
       customer: {
         name: "Madhusudhan V",
