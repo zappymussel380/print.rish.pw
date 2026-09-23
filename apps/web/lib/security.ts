@@ -9,8 +9,15 @@ import { redis } from "./redis";
  *
  * The app is same-origin only (no cross-site API consumers), so the modern,
  * token-free approach applies: require `Sec-Fetch-Site: same-origin` where the
- * browser sends it, otherwise require an exact Origin match. Session cookies
- * are additionally SameSite=Strict and host-prefixed in production.
+ * browser sends it, otherwise require a matching Origin. Session cookies are
+ * additionally SameSite=Strict and host-prefixed in production.
+ *
+ * Origin matches when it is APP_ORIGIN, or when it names the host the request
+ * was sent to — a site opened through a tunnel or proxy at another address
+ * than the installer recorded (a local-mode install behind the owner's own
+ * Cloudflare Tunnel) still works. That stays CSRF-proof: a page on another
+ * site can't send an Origin naming this host. Hostnames only, as nginx's
+ * `$host` drops the port.
  */
 export function assertSameOrigin(request: NextRequest): boolean {
   const secFetchSite = request.headers.get("sec-fetch-site");
@@ -19,11 +26,26 @@ export function assertSameOrigin(request: NextRequest): boolean {
     if (secFetchSite !== "same-origin") return false;
     // Modern browsers sometimes omit Origin when Fetch Metadata already proves
     // same-origin. If both exist, require both signals to agree.
-    return origin === null || origin === env.appOrigin;
+    return origin === null || originMatches(origin, request);
   }
-  // Legacy browsers/clients must provide an exact origin. Production never
+  // Legacy browsers/clients must provide an origin. Production never
   // whitelists localhost; development already has localhost as APP_ORIGIN.
-  return origin === env.appOrigin;
+  return origin !== null && originMatches(origin, request);
+}
+
+function originMatches(origin: string, request: NextRequest): boolean {
+  if (origin === env.appOrigin) return true;
+  const host = request.headers.get("host");
+  if (!host) return false;
+  let originHost: string;
+  let requestHost: string;
+  try {
+    originHost = new URL(origin).hostname;
+    requestHost = new URL(`http://${host}`).hostname;
+  } catch {
+    return false;
+  }
+  return originHost !== "" && originHost === requestHost;
 }
 
 /**
@@ -238,7 +260,11 @@ export async function rateLimit(
 }
 
 export const RATE_LIMITS = {
-  upload: { max: 20, windowSeconds: 600 },
+  // Three full quotes' worth (MAX_MODELS_PER_SESSION is 20): one quote plus a
+  // few retries or re-drops mustn't lock a customer out. The byte budget
+  // (UPLOAD_WINDOW_MB), the storage reservation and the per-quote cap bound
+  // what uploads can cost; this only stops a request flood.
+  upload: { max: 60, windowSeconds: 600 },
   modelMutation: { max: 60, windowSeconds: 600 },
   slice: { max: 60, windowSeconds: 600 },
   slicePoll: { max: 3000, windowSeconds: 600 },

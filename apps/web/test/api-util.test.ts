@@ -7,7 +7,7 @@ vi.mock("@/lib/security", () => ({
 }));
 vi.mock("@/lib/session", () => ({ isAdmin: async () => false }));
 
-const { readJsonBody } = await import("@/lib/api-util");
+const { readJsonBody, waitText } = await import("@/lib/api-util");
 
 describe("bounded JSON bodies", () => {
   it("parses a valid body", async () => {
@@ -36,5 +36,15 @@ describe("bounded JSON bodies", () => {
     const result = await readJsonBody(request as never, 32);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.response.status).toBe(413);
+  });
+});
+
+describe("waitText", () => {
+  it("says how long a rate-limited visitor waits", () => {
+    expect(waitText(1)).toBe("1 second");
+    expect(waitText(40)).toBe("40 seconds");
+    expect(waitText(60)).toBe("1 minute");
+    expect(waitText(61)).toBe("2 minutes");
+    expect(waitText(600)).toBe("10 minutes");
   });
 });

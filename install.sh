@@ -254,9 +254,10 @@ sec_address() {
   say "   2) It's at home / behind a router — use a free Cloudflare Tunnel  ${C_DIM}(no port forwarding)${C_OFF}"
   say "   3) I already run my own reverse proxy (nginx, Nginx Proxy Manager, Traefik…)"
   say "   4) Try it on this computer or your home network first  ${C_DIM}(plain http — nothing on the internet can reach it; go live later)${C_OFF}"
+  say "   5) I already have a Cloudflare Tunnel for other things — add this site to it"
   local current=1
-  case "${CFG[SELFHOST_MODE]:-}" in tunnel) current=2 ;; proxy) current=3 ;; local) current=4 ;; esac
-  ask MODE_CHOICE "Choose 1–4" "$current" valid_mode_choice "Please answer 1, 2, 3 or 4."
+  case "${CFG[SELFHOST_MODE]:-}" in tunnel) current=2 ;; proxy) current=3 ;; local) current=4 ;; owntunnel) current=5 ;; esac
+  ask MODE_CHOICE "Choose 1–5" "$current" valid_mode_choice "Please answer 1, 2, 3, 4 or 5."
   case "${ANS[MODE_CHOICE]}" in
     4|local) ;;
     *)
@@ -296,8 +297,47 @@ sec_address() {
       sec_local_access
       ask LOCAL_PORT "Port to open it on" "${CFG[LOCAL_PORT]:-8000}" valid_local_port "Pick a free port between 1024 and 65535 (8080 is taken by the site itself)."
       check_local_port_free "${ANS[LOCAL_PORT]}" ;;
+    5|owntunnel)
+      ANS[MODE]=owntunnel
+      sec_own_tunnel_access
+      ask LOCAL_PORT "Port for your tunnel to connect to" "${CFG[LOCAL_PORT]:-8000}" valid_local_port "Pick a free port between 1024 and 65535 (8080 is taken by the site itself)."
+      check_local_port_free "${ANS[LOCAL_PORT]}"
+      say ""
+      say "  In the Cloudflare dashboard, open your tunnel (Zero Trust → Networks → Tunnels) and add a"
+      say "  public hostname: ${C_BOLD}${ANS[DOMAIN]}${C_OFF} → Service type ${C_BOLD}HTTP${C_OFF}, URL ${C_BOLD}${ANS[LOCAL_BIND]}:${ANS[LOCAL_PORT]}${C_OFF}"
+      hint "Your cloudflared keeps running as it is; nothing else in it changes."
+      warn "Cloudflare limits uploads to 100 MB per file, so model uploads are capped at 95 MB in this mode." ;;
   esac
 }
+
+# Own-tunnel mode: where the owner's cloudflared connects from. Caddy listens on
+# that one address alone, and only for the tunnel — visitors come in over HTTPS
+# at the domain.
+sec_own_tunnel_access() {
+  local lan stored="" access_default=1
+  lan=$(lan_address)
+  if [ "${CFG[SELFHOST_MODE]:-}" = owntunnel ] && [ -n "${CFG[LOCAL_BIND]:-}" ] && [ "${CFG[LOCAL_BIND]}" != 127.0.0.1 ]; then
+    stored=${CFG[LOCAL_BIND]}
+    access_default=2
+  fi
+  say ""
+  say "  Where does your cloudflared run?"
+  say "   1) On this computer, installed directly (not in Docker)"
+  say "   2) In Docker, or on another computer on this network"
+  ask TUNNEL_ACCESS "Choose 1–2" "$access_default" valid_tunnel_access "Please answer 1 or 2."
+  case "${ANS[TUNNEL_ACCESS]}" in
+    2|network)
+      if [ -z "$lan" ] && [ -z "$stored" ]; then
+        die "This computer has no home-network address (10.x, 172.16–31.x or 192.168.x) for cloudflared to reach."
+      fi
+      ask LOCAL_ADDRESS "This computer's address on your network" "${stored:-$lan}" valid_lan_address \
+        "Enter one of this computer's own private addresses: $(private_ipv4s | paste -sd' ' -)."
+      ANS[LOCAL_BIND]=${ANS[LOCAL_ADDRESS]} ;;
+    *)
+      ANS[LOCAL_BIND]=127.0.0.1 ;;
+  esac
+}
+valid_tunnel_access() { [[ "$1" =~ ^(1|2|host|network)$ ]]; }
 
 # Local test mode: this computer only, or the devices on its home network too.
 # Caddy then listens on that one private address — never on every address, or a
@@ -396,7 +436,7 @@ initials_for() {
 }
 valid_tagline() { valid_text_or_empty "$1" && [ ${#1} -le 80 ]; }
 valid_city()    { valid_text_or_empty "$1" && [ ${#1} -le 60 ]; }
-valid_mode_choice() { [[ "$1" =~ ^(1|2|3|4|caddy|tunnel|proxy|local)$ ]]; }
+valid_mode_choice() { [[ "$1" =~ ^(1|2|3|4|5|caddy|tunnel|proxy|local|owntunnel)$ ]]; }
 valid_tunnel_token() { [[ "$1" =~ ^[A-Za-z0-9+/=_-]{60,}$ ]]; }
 valid_bind_address() { valid_ipv4 "$1" && [ "$1" != "0.0.0.0" ]; }
 
@@ -572,7 +612,7 @@ configure_env() {
   local branch; branch=$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)
   [ "$branch" = HEAD ] || CFG[SELFHOST_BRANCH]=$branch
   CFG[APP_ORIGIN]=$(site_url)
-  if [ "$mode" = local ]; then
+  if [ "$mode" = local ] || [ "$mode" = owntunnel ]; then
     CFG[LOCAL_PORT]=${ANS[LOCAL_PORT]}
     CFG[LOCAL_BIND]=${ANS[LOCAL_BIND]:-127.0.0.1}
   else
@@ -583,7 +623,7 @@ configure_env() {
 
   unset 'CFG[EDGE_SUBNET]' 'CFG[EDGE_CADDY_IP]' 'CFG[TUNNEL_SUBNET]' 'CFG[TUNNEL_CADDY_IP]' 'CFG[TUNNEL_CLOUDFLARED_IP]' 'CFG[CLOUDFLARE_TUNNEL_TOKEN]'
   case "$mode" in
-    caddy|tunnel|local)
+    caddy|tunnel|local|owntunnel)
       CFG[EDGE_SUBNET]=${PREV_EDGE_SUBNET:-$(pick_subnet)}
       CFG[EDGE_CADDY_IP]=$(subnet_host "${CFG[EDGE_SUBNET]}" 10)
       CFG[PROXY_BIND]=127.0.0.1
@@ -597,6 +637,8 @@ configure_env() {
     CFG[TUNNEL_CADDY_IP]=$(subnet_host "${CFG[TUNNEL_SUBNET]}" 10)
     CFG[TUNNEL_CLOUDFLARED_IP]=$(subnet_host "${CFG[TUNNEL_SUBNET]}" 20)
     CFG[CLOUDFLARE_TUNNEL_TOKEN]=${ANS[TUNNEL_TOKEN]}
+  fi
+  if [ "$mode" = tunnel ] || [ "$mode" = owntunnel ]; then
     CFG[MAX_UPLOAD_MB]=95
   elif [ "${CFG[MAX_UPLOAD_MB]:-300}" = 95 ]; then
     CFG[MAX_UPLOAD_MB]=300
@@ -814,6 +856,9 @@ finish() {
       if curl -fsS --max-time 15 "$url/api/health" >/dev/null 2>&1; then ok "Reachable over HTTPS"
       else warn "Not reachable over HTTPS yet — usually DNS still propagating. Caddy keeps retrying the certificate."; fi ;;
     tunnel) hint "Make sure the tunnel's public hostname points ${CFG[SELFHOST_DOMAIN]} at http://caddy:80." ;;
+    owntunnel)
+      if curl -fsS --max-time 15 "$url/api/health" >/dev/null 2>&1; then ok "Reachable through your tunnel"
+      else hint "In your tunnel, point the public hostname ${CFG[SELFHOST_DOMAIN]} at http://${CFG[LOCAL_BIND]}:${CFG[LOCAL_PORT]}."; fi ;;
     local)
       local where="in your browser" who="Only this computer can open it."
       if [ "${CFG[LOCAL_BIND]:-127.0.0.1}" != 127.0.0.1 ]; then
