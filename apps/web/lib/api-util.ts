@@ -156,11 +156,18 @@ export async function guardMutation(
   }
   const result = await rateLimit(bucket, clientIp(request), limits.max, limits.windowSeconds);
   if (!result.allowed) {
-    const response = jsonError(429, "RATE_LIMITED", "Too many requests — please slow down", {
+    const response = jsonError(429, "RATE_LIMITED", `Too many requests — please try again in ${waitText(result.retryAfterSeconds)}`, {
       retryAfterSeconds: result.retryAfterSeconds,
     });
     response.headers.set("Retry-After", String(result.retryAfterSeconds));
     return response;
   }
   return null;
+}
+
+/** "40 seconds", "1 minute", "7 minutes": how long a rate-limited visitor waits. */
+export function waitText(seconds: number): string {
+  if (seconds < 60) return `${Math.max(1, Math.ceil(seconds))} second${Math.ceil(seconds) === 1 ? "" : "s"}`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }

@@ -377,6 +377,36 @@ EOF
 }
 EOF
       ;;
+    owntunnel)
+      cat > "$file" <<EOF
+# Written by install.sh from .env — edits are overwritten on update.
+# Own-tunnel mode: the owner's cloudflared (already running for other things)
+# connects here. Published on LOCAL_BIND alone — 127.0.0.1 or one private
+# address — so only this computer or its network can connect, and a peer on a
+# private address is trusted for Cloudflare's CF-Connecting-IP.
+{
+	admin off
+	auto_https off
+	servers :80 {
+		trusted_proxies static private_ranges
+		client_ip_headers Cf-Connecting-Ip
+	}
+}
+
+:80 {
+	request_body {
+		max_size ${max_mb}MB
+	}
+	header -Server
+	reverse_proxy proxy:8080 {
+		header_up X-Real-IP {client_ip}
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto https
+		flush_interval -1
+	}
+}
+EOF
+      ;;
     *) rm -f "$file" ;;
   esac
 }
@@ -411,6 +441,8 @@ compose_files_for_mode() {
     tunnel) echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.tunnel.yml" ;;
     proxy)  echo "docker-compose.yml:docker/selfhost/compose.base.yml" ;;
     local)  echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.local.yml" ;;
+    # The owner's own cloudflared connects to Caddy, published as in local mode.
+    owntunnel) echo "docker-compose.yml:docker/selfhost/compose.base.yml:docker/selfhost/compose.local.yml" ;;
   esac
 }
 

@@ -152,6 +152,28 @@ describe("restore", () => {
     expect(before.size).toBe(6);
   });
 
+  it("puts back every rate over the installer's, spool prices and own materials included", async () => {
+    const { defaultPricing, toPricingInput } = await import("@print/shared");
+    const rates = toPricingInput(defaultPricing());
+    rates.setupFeePaise = 7700;
+    for (const m of Object.values(rates.materials!)) {
+      m.sellPerGramPaise = Math.round((m.sellPerGramPaise as number) * 10 + 13) / 10;
+      m.costPerKgPaise = (m.costPerKgPaise as number) + 1100;
+    }
+    const spools = rates.internal!.spoolListPriceInr!;
+    for (const line of Object.keys(spools)) spools[line] = (spools[line] as number) + 11;
+    Object.assign(rates.internal!, { gstRate: 0.12, spoolShippingPaise: 4400, electricityPerKwhPaise: 880, maintenancePerHourPaise: 1500 });
+    Object.assign(rates, { electricityPerKwhPaise: 950, maintenancePerGramPaise: 30, kwhPerHour: 0.2, leadTime: { printHoursPerDay: 14, bufferDays: 3 } });
+    db.rows.set("pricing", rates);
+    const backup = await download();
+    expect(backup.sections.pricing).toEqual(rates);
+
+    // A fresh install: the installer's per-gram answers, nothing else.
+    db.rows.set("pricing", { setupFeePaise: 5000, materials: { PLA: { sellPerGramPaise: 200 } } });
+    expect((await restore(backup)).status).toBe(200);
+    expect(db.rows.get("pricing")).toEqual(rates);
+  });
+
   it("keeps this install's password or key when it's for the same account", async () => {
     seedShop();
     const backup = await download();

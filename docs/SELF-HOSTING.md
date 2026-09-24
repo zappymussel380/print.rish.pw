@@ -224,6 +224,24 @@ Your proxy must:
 See the nginx example in [DEPLOYMENT.md](DEPLOYMENT.md#4-public-reverse-proxy).
 Firewall port 8080 so only your proxy can reach it.
 
+**5. A Cloudflare Tunnel you already run** (for other services). The site
+joins it instead of starting a second cloudflared. The installer asks where
+your cloudflared runs:
+
+- **On this computer, installed directly**: the site listens on
+  `127.0.0.1:<port>`.
+- **In Docker, or on another computer on your network**: the site listens on
+  one of this computer's private addresses (for example `192.168.1.20:<port>`).
+  Docker containers can't reach the host's `127.0.0.1`.
+
+Then, in your tunnel, add a **public hostname**: your domain → service
+**HTTP**, URL `<that address>:<port>`. The 95 MB upload cap from option 2
+applies here too.
+
+Don't put local test mode (option 4) behind a tunnel. The site then thinks
+it lives at `http://localhost:8000`, so links in emails and quotations point
+there. Switch with `sudo ./install.sh` → option 2 (web address) → 5.
+
 ## Updating
 
 ```bash
@@ -326,8 +344,9 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_PRINTER_NAME` | With `PS_PRINTER_SETUP=2`: the printer name customers see (default "3D printer") |
 | `PS_CONFIRM_MULTI_MATERIAL` | `y` if the printer has an AMS/MMU for automatic multicolour |
 | `PS_DOMAIN` | Domain name (not needed for local test mode) |
-| `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed) |
-| `PS_LOCAL_PORT` | Port for local test mode (default 8000) |
+| `PS_MODE_CHOICE` | `1` Caddy, `2` Cloudflare Tunnel, `3` own proxy, `4` local test (no domain needed), `5` your existing Cloudflare Tunnel |
+| `PS_LOCAL_PORT` | Port for local test mode, or for your tunnel to connect to in mode 5 (default 8000) |
+| `PS_TUNNEL_ACCESS` | Mode 5: `host` (cloudflared installed on this computer, default) or `network` (in Docker or on another computer); with `network`, `PS_LOCAL_ADDRESS` picks the address |
 | `PS_LOCAL_ACCESS` | Local test mode: `computer` (default when unattended) or `network` for the devices on your home network |
 | `PS_LOCAL_ADDRESS` | With `PS_LOCAL_ACCESS=network`, optional: which of this computer's private addresses to use (default: the one its default route uses) |
 | `PS_ACME_EMAIL` | Let's Encrypt email (mode 1, optional) |
