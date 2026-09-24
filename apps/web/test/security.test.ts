@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/redis", () => ({ redis: {} }));
 
@@ -37,7 +37,9 @@ describe("clientIp", () => {
 });
 
 describe("assertSameOrigin", () => {
-  // Test APP_ORIGIN is the development default, http://localhost:3000.
+  // CI sets its own APP_ORIGIN; pin one here.
+  beforeAll(() => vi.stubEnv("APP_ORIGIN", "http://localhost:3000"));
+  afterAll(() => vi.unstubAllEnvs());
   const post = (headers: Record<string, string>) =>
     new Request("http://localhost/api/admin/pricing", { method: "PUT", headers }) as never;
 
