@@ -93,6 +93,15 @@ export const MATERIAL_GUIDE: Record<StockMaterialId, MaterialGuideEntry> = {
     printQuality: "Good, with a slightly matte finish; large flat parts can warp slightly.",
     bestFor: "Outdoor fixtures, car exterior trim, garden and marine parts, signage.",
   },
+  TPU: {
+    subtitle: "Thermoplastic polyurethane, 95A",
+    strength: "Very tough: absorbs impacts and resists tearing and abrasion.",
+    flexibility: "High — rubber-like; bends, squashes and springs back.",
+    temperature: "Softens around 60–80 °C.",
+    uv: "Fair; fine outdoors for a few seasons, may yellow over time.",
+    printQuality: "Prints slowly, one colour per part; fine overhangs and bridges come out softer.",
+    bestFor: "Phone cases, gaskets and seals, bumpers, feet and grips, wearables.",
+  },
 };
 
 /** The owner's copy for one of their own materials. Every field is optional; a

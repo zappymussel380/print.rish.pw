@@ -74,7 +74,7 @@ function computeStats(quotations: QuotationWithItems[], costBasis: InternalCostB
   let profitPaise = 0;
   let billableCount = 0;
   let printSeconds = 0;
-  const familyGrams: Record<MaterialFamily, number> = { PLA: 0, PETG: 0, ABS: 0, ASA: 0, Other: 0 };
+  const familyGrams: Record<MaterialFamily, number> = { PLA: 0, PETG: 0, ABS: 0, ASA: 0, TPU: 0, Other: 0 };
 
   for (const q of quotations) {
     statusCounts[q.status] = (statusCounts[q.status] ?? 0) + 1;

@@ -80,12 +80,13 @@ ENV_FILE="$ROOT_DIR/.env"
 trap 'echo; die "Stopped."' INT
 
 # ── Materials offered out of the box (ids, names and default rates) ───────────
-MATERIALS=(PLA PLA_AESTHETIC PLA_CF PETG PETG_PREMIUM ABS ASA)
+MATERIALS=(PLA PLA_AESTHETIC PLA_CF PETG PETG_PREMIUM ABS ASA TPU)
 declare -A MAT_NAME=(
   [PLA]="PLA" [PLA_AESTHETIC]="Aesthetic PLA (silk, matte, metallic…)" [PLA_CF]="PLA-CF (carbon fibre)"
   [PETG]="PETG" [PETG_PREMIUM]="PETG Premium (translucent, carbon fibre)" [ABS]="ABS" [ASA]="ASA"
+  [TPU]="TPU (flexible)"
 )
-declare -A MAT_RATE=([PLA]=2 [PLA_AESTHETIC]=3 [PLA_CF]=3.5 [PETG]=2.5 [PETG_PREMIUM]=3.5 [ABS]=2.5 [ASA]=3)
+declare -A MAT_RATE=([PLA]=2 [PLA_AESTHETIC]=3 [PLA_CF]=3.5 [PETG]=2.5 [PETG_PREMIUM]=3.5 [ABS]=2.5 [ASA]=3 [TPU]=5)
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 preflight() {
@@ -840,6 +841,10 @@ seed_shop_settings() {
     json_customs+=",{\"id\":\"custom-$id-white\",\"name\":\"White\",\"hex\":\"#F4F4F0\",\"material\":\"$m\"}"
     json_colours+="${json_colours:+,}\"$m\":[\"custom-$id-black\",\"custom-$id-white\"]"
   done
+  # TPU starts with the one Numakers colour it's stocked in.
+  if [[ " ${OFFERED[*]} " == *" TPU "* ]]; then
+    json_colours+="${json_colours:+,}\"TPU\":[\"outrageous-orange\"]"
+  fi
   local payload
   payload=$(settings_json "$json_page" "$json_rates" "$json_offered" "$json_colours" "$json_customs")
   printf '%s' "$payload" | dc run --rm -T migrate seed-settings >/dev/null || die "Saving the shop settings failed."

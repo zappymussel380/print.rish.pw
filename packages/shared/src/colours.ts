@@ -37,7 +37,7 @@ export const MASTER_COLOURS: Record<ColourId, ColourDef> = {
   "mauve-purple": { name: "Mauve Purple", hex: "#915F84", materials: PLA_PETG },
   "nuclear-red": { name: "Nuclear Red", hex: "#E10E1A", materials: PLA_PETG },
   "imperial-red": { name: "Imperial Red", hex: "#C41E28", materials: PLA_ONLY },
-  "outrageous-orange": { name: "Outrageous Orange", hex: "#FF6A3D", materials: PLA_PETG },
+  "outrageous-orange": { name: "Outrageous Orange", hex: "#FF6A3D", materials: ["PLA", "PETG", "TPU"] },
   "atomic-pink": { name: "Atomic Pink", hex: "#FF3E96", materials: PLA_PETG },
   "royal-blue": { name: "Royal Blue", hex: "#2A4BA0", materials: PLA_PETG },
   "light-gray": { name: "Light Gray", hex: "#C6CACE", materials: PLA_PETG },
@@ -206,6 +206,7 @@ export const DEFAULT_ENABLED_MATERIALS: Record<MaterialId, boolean> = {
   PETG_PREMIUM: false,
   ABS: false,
   ASA: false,
+  TPU: false,
   OTHER_1: false,
   OTHER_2: false,
   OTHER_3: false,
@@ -223,6 +224,7 @@ export const DEFAULT_ENABLED_COLOURS: Record<MaterialId, readonly ColourId[]> = 
   // No supplier palette: every ABS/ASA colour is added in the admin editor.
   ABS: [],
   ASA: [],
+  TPU: [],
   // The shop's own materials: colours are added with the hex picker too.
   OTHER_1: [],
   OTHER_2: [],

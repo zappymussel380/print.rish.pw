@@ -217,6 +217,7 @@ export const TIER_FILAMENTS: Record<MaterialId, { types: string[]; name: RegExp;
   PETG_PREMIUM: { types: ["PETG-CF", "PETG", "PET"], name: /petg[- ]?cf/i },
   ABS: { types: ["ABS"], name: /\bGeneric ABS\b/i, exclude: /gf|cf/i },
   ASA: { types: ["ASA"], name: /\bGeneric ASA\b/i, exclude: /gf|cf|aero/i },
+  TPU: { types: ["TPU"], name: /\bGeneric TPU\b/i, exclude: /for ams|\d{2}a/i },
   // The shop's own materials: a placeholder so every set is complete. The owner
   // replaces it in admin, and a slot isn't offered until they have.
   OTHER_1: OTHER_PLACEHOLDER,

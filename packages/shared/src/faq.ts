@@ -41,6 +41,7 @@ const HEAT: Record<MaterialFamily, string> = {
   PETG: "PETG takes impacts, heat up to ~80 °C and outdoor exposure",
   ABS: "ABS is tough and holds its shape to ~95–100 °C",
   ASA: "ASA adds long-term sun and weather resistance to ABS's toughness",
+  TPU: "TPU is rubber-like and flexible: it bends and springs back instead of cracking",
   Other: "", // the shop's own materials: nothing known to say
 };
 

@@ -27,6 +27,7 @@ enum MaterialId {
   PETG_PREMIUM
   ABS
   ASA
+  TPU
   OTHER_1
   OTHER_2
   OTHER_3

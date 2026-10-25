@@ -31,6 +31,7 @@ TARGETS = [
     ("filament.petg-premium.json", "generic-petg.json", "petg-cf.json"),
     ("filament.abs.json", "generic-abs.json", None),
     ("filament.asa.json", "generic-asa.json", None),
+    ("filament.tpu.json", "generic-tpu.json", None),
     # The shop's own materials (OTHER_*): a placeholder until the owner gives
     # each one an OrcaSlicer profile in admin. Never quoted with.
     ("filament.other-1.json", "generic-petg.json", None),

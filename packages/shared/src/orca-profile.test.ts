@@ -24,7 +24,7 @@ describe("orca profile slots", () => {
     expect(PROFILE_SLOTS).toContain("process:160");
     expect(PROFILE_SLOTS).toContain("filament:PETG_PREMIUM");
     expect(PROFILE_SLOTS).toContain("filament:OTHER_4");
-    expect(PROFILE_SLOTS).toHaveLength(1 + 3 + 7 + 4);
+    expect(PROFILE_SLOTS).toHaveLength(1 + 3 + 8 + 4);
     expect(isProfileSlot("process:280")).toBe(false);
     expect(isProfileSlot("filament:NYLON")).toBe(false);
   });

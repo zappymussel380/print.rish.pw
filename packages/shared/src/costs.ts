@@ -33,6 +33,7 @@ export type FilamentLine =
   | "petgCf"
   | "abs"
   | "asa"
+  | "tpu"
   // The shop's own materials (CUSTOM_MATERIAL_IDS), one spool line each.
   | "other1"
   | "other2"
@@ -60,6 +61,7 @@ export const FILAMENT_LINE_LABELS: Record<FilamentLine, string> = {
   petgCf: "PETG-CF",
   abs: "ABS",
   asa: "ASA",
+  tpu: "TPU",
   // Shown under the shop's own name for the material where it has one.
   other1: "Other material 1",
   other2: "Other material 2",
@@ -106,6 +108,7 @@ export const INTERNAL_COST: InternalCostBasis = {
     // Placeholders until the operator enters real spool prices in admin → Rates.
     abs: 650,
     asa: 900,
+    tpu: 1200,
     other1: 1500,
     other2: 1500,
     other3: 1500,
@@ -174,6 +177,8 @@ export function filamentLine(material: MaterialId, colour: string): FilamentLine
       return "abs";
     case "ASA":
       return "asa";
+    case "TPU":
+      return "tpu";
     case "OTHER_1":
       return "other1";
     case "OTHER_2":
@@ -204,6 +209,7 @@ export const MATERIAL_LINES: Record<MaterialId, readonly FilamentLine[]> = {
   PETG_PREMIUM: ["translucent", "translucentGlitter", "petgCf"],
   ABS: ["abs"],
   ASA: ["asa"],
+  TPU: ["tpu"],
   OTHER_1: ["other1"],
   OTHER_2: ["other2"],
   OTHER_3: ["other3"],

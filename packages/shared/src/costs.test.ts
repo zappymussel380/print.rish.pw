@@ -70,7 +70,8 @@ describe("spool cost", () => {
       expect(filamentCostPerKgPaise(tier, id), key).toBe(cost);
     }
     // …and every orderable colour is either in that list or a known exception.
-    const elsewhere = new Set(["PLA:baby-pink"]);
+    // TPU isn't in that snapshot: its spool price is a placeholder.
+    const elsewhere = new Set(["PLA:baby-pink", "TPU:outrageous-orange"]);
     for (const m of MATERIAL_IDS) {
       for (const id of MATERIAL_COLOURS[m]) {
         const key = `${m}:${id}`;
