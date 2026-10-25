@@ -12,7 +12,9 @@ overrides:
   # Reached in production via next > postcss.
   "postcss@<8.5.23": "^8.5.23"
   "nanoid@<3.3.17": "^3.3.17"
-  "sharp@<0.35.0": "^0.35.0"
+  "sharp@<0.35.5": "^0.35.5"
+  # Reached via next/postcss source maps; GHSA event-loop DoS on indexed maps.
+  "source-map-js@>=1.0.0 <1.2.2": "^1.2.2"
   # CLI-only: Prisma Migrate reads prisma.config.mjs through @prisma/config,
   # which pins deepmerge-ts exactly, so nothing but an override reaches it. The
   # fix for GHSA-ggr8-5vv4-36mx (stack exhaustion on recursive object graphs)
@@ -31,12 +33,16 @@ overrides:
   # (Prisma's local dev database), never by the runtime client. GHSA-f65p-4m7j-42xc,
   # GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp and GHSA-5jgf-p345-68v8 (SSRF / host
   # confusion in URI normalization) are all fixed in 3.1.6. Stays inside major 3.
-  "fast-uri@>=3.0.0 <3.1.6": "^3.1.6"
+  "fast-uri@>=3.0.0 <3.1.9": "^3.1.9"
   # Dev-only: eslint and vitest toolchains. Three majors are live at once.
-  "brace-expansion@<1.1.18": "^1.1.18"
+  "brace-expansion@<1.1.21": "^1.1.21"
   "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4"
-  "brace-expansion@>=4.0.0 <5.0.9": "^5.0.9"
+  "brace-expansion@>=4.0.0 <5.0.12": "^5.0.12"
   "js-yaml@>=4.0.0 <4.3.1": "^4.3.1"
+  # Dev-only: eslint-config-next > eslint-plugin-react-hooks pins an older zod.
+  "zod@<4.6.6": "^4.6.6"
+  # Dev-only: vitest > vite (launch-editor bypass, dev middleware).
+  "vite@>=7.0.0 <7.3.7": "^7.3.7"
 
 # pnpm 11 blocks dependency lifecycle scripts unless explicitly approved.
 allowBuilds:
