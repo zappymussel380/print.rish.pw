@@ -292,6 +292,7 @@ const FAMILY_SHADE: Record<MaterialFamily, string> = {
   PETG: "color-mix(in srgb, var(--accent) 45%, transparent)",
   ABS: "color-mix(in srgb, var(--accent) 70%, var(--text))",
   ASA: "color-mix(in srgb, var(--accent) 25%, transparent)",
+  TPU: "color-mix(in srgb, var(--accent) 55%, var(--text))",
   // The shop's own materials, together.
   Other: "color-mix(in srgb, var(--text) 35%, transparent)",
 };

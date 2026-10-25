@@ -59,6 +59,7 @@ export const DEFAULT_NEED_SCORES: Partial<Record<MaterialId, NeedScores>> = {
   PETG_PREMIUM: { looks: 2, strength: 2, heat: 2, outdoor: 2 },
   ABS: { looks: 1, strength: 3, heat: 3, outdoor: 1 },
   ASA: { looks: 1, strength: 3, heat: 3, outdoor: 3 },
+  TPU: { looks: 1, strength: 2, heat: 1, outdoor: 2 },
 };
 
 export function defaultMaterialHelper(): MaterialHelperSettings {

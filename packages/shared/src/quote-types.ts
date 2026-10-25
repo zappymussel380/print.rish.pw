@@ -16,6 +16,7 @@ export const MATERIAL_IDS = [
   "PETG_PREMIUM",
   "ABS",
   "ASA",
+  "TPU",
   // Named, priced and given an OrcaSlicer profile by the shop in the admin
   // dashboard (ABS-CF, PC, PA…); they ship disabled. See CUSTOM_MATERIAL_IDS.
   "OTHER_1",

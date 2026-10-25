@@ -39,7 +39,7 @@ running the installer again (see [after that](#after-install)).
    (see [HTTPS options](#https-options)).
 4. **Admin password:** for `https://your-domain/admin`.
 5. **Materials and rates:** which materials you print (PLA, Aesthetic PLA,
-   PLA-CF, PETG, PETG Premium, ABS, ASA), the price per gram of each, and your
+   PLA-CF, PETG, PETG Premium, ABS, ASA, TPU), the price per gram of each, and your
    setup fee per order.
 6. **Materials page:** which materials `/materials` compares for customers.
 7. **Contact details:** WhatsApp (every quote hands off to it), email, phone,
@@ -353,7 +353,7 @@ curl -fsSL https://raw.githubusercontent.com/zappymussel380/print.rish.pw/main/i
 | `PS_TUNNEL_TOKEN` | Tunnel token (mode 2) |
 | `PS_PROXY_IP`, `PS_PROXY_BIND` | Proxy source IP, and the address to listen on (mode 3) |
 | `PS_ADMIN_PASSWORD` | Admin password (12–72 characters) |
-| `PS_MATERIALS` | Materials offered, by number: 1 PLA, 2 Aesthetic PLA, 3 PLA-CF, 4 PETG, 5 PETG Premium, 6 ABS, 7 ASA |
+| `PS_MATERIALS` | Materials offered, by number: 1 PLA, 2 Aesthetic PLA, 3 PLA-CF, 4 PETG, 5 PETG Premium, 6 ABS, 7 ASA, 8 TPU |
 | `PS_SETUP_FEE`, `PS_RATE_<ID>` | Setup fee and per-gram rate in ₹, e.g. `PS_RATE_PLA_CF=3.5` |
 | `PS_MATERIALS_PAGE` | Materials on `/materials`, by number (defaults to those offered) |
 | `PS_WHATSAPP`, `PS_EMAIL`, `PS_PHONE`, `PS_ADDRESS`, `PS_MAPS_URL` | Contact details |
@@ -388,6 +388,13 @@ docker compose restart web
   check `docker compose logs caddy`.
 - **Slices fail on big models.** The slicer needs memory; 8 GB is recommended.
 - **Uploads over 95 MB fail with a tunnel.** That is Cloudflare's limit.
+- **`ERR_SSL_PROTOCOL_ERROR` in the browser console, page unstyled.** You
+  opened the site at its local address (`http://192.168.x.x:8000` or
+  `http://localhost:8000`) after setting it up for a domain. The site tells
+  the browser to fetch everything over HTTPS, and that port only speaks plain
+  HTTP. Open it at `https://<your domain>` instead; signing in to admin only
+  works there too. If the domain itself shows Cloudflare's 502 page, check the
+  tunnel's public hostname: service type must be **HTTP**, not HTTPS.
 - **`migrate` fails with `P1000: Authentication failed … for print_owner`.**
   The server still has the database of an earlier install (Postgres logs
   "Skipping initialization"), and that database uses the password from the

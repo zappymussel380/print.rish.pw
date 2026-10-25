@@ -32,6 +32,9 @@ const PREMIUM_TIERS: readonly MaterialId[] = ["PLA_AESTHETIC", "PLA_CF", "PETG_P
 const ENGINEERING_INFO =
   " ABS and ASA handle heat best (around 95–100 °C) and are tough enough for functional parts; ASA also resists sun and weather, so it is the pick for outdoor parts that must last.";
 const ENGINEERING_TIERS: readonly MaterialId[] = ["ABS", "ASA"];
+const FLEXIBLE_INFO =
+  " TPU is flexible and rubber-like — for phone cases, gaskets, bumpers and grips. It prints slowly and in one colour per part.";
+const FLEXIBLE_TIERS: readonly MaterialId[] = ["TPU"];
 
 const LAYER_HEIGHT_INFO: Record<LayerHeightUm, string> = {
   120: "0.12 mm gives the finest detail but prints slowest",
@@ -77,7 +80,8 @@ export function SettingsPanel({
   const materialInfo =
     MATERIAL_INFO +
     (anyEnabled(PREMIUM_TIERS) ? PREMIUM_INFO : "") +
-    (anyEnabled(ENGINEERING_TIERS) ? ENGINEERING_INFO : "");
+    (anyEnabled(ENGINEERING_TIERS) ? ENGINEERING_INFO : "") +
+    (anyEnabled(FLEXIBLE_TIERS) ? FLEXIBLE_INFO : "");
 
   const chooseMaterial = (v: MaterialId) => {
     const next = catalog.materials.find((m) => m.id === v);

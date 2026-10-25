@@ -134,7 +134,7 @@ describe("/api/admin/slicer-profiles", () => {
     ]);
     expect(queue.add).toHaveBeenCalledWith("test", { batchId: rows[0].batchId }, { jobId: `profile_${rows[0].batchId}` });
     const body = await res.json();
-    expect(body.slots).toHaveLength(15);
+    expect(body.slots).toHaveLength(16);
   });
 
   it("explains a rejected file and stores nothing", async () => {

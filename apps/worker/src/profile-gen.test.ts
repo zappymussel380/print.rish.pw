@@ -74,6 +74,7 @@ beforeAll(() => {
     ["Generic PETG-CF @System", "PET", 60, 80],
     ["Generic ABS @System", "ABS", 90, 90],
     ["Generic ASA @System", "ASA", 0, 100],
+    ["Generic TPU @System", "TPU", 35, 35],
   ] as const;
   put("OrcaFilamentLibrary/filament/base.json", { name: "fdm_filament_common", filament_density: ["1.24"] });
   for (const [name, type, textured, hot] of lib) {

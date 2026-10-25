@@ -31,6 +31,7 @@ would be reused under the new slicer.
 | `filament.petg-premium.json` | Numakers PETG-CF (density 1.25) |
 | `filament.abs.json` | Orca Generic ABS @BBL A1 (density 1.04) |
 | `filament.asa.json` | Orca Generic ASA @BBL A1 (density 1.04) |
+| `filament.tpu.json` | Orca Generic TPU @BBL A1 (density 1.24) |
 
 Each material tier maps to one filament profile (`filamentProfile` in
 `apps/worker/src/config.ts`).
@@ -49,6 +50,7 @@ cube at 0.20 mm / 15% (2026-09-12), and reproduced exactly by that product:
 | Numakers PETG-CF (`filament.petg-premium.json`) | 1.25 | 0.960 | 3.57 |
 | Generic ABS (`filament.abs.json`) | 1.04 | 0.950 | see below |
 | Generic ASA (`filament.asa.json`) | 1.04 | 0.950 | see below |
+| Generic TPU (`filament.tpu.json`) | 1.24 | 1.000 | see below |
 
 Two tiers span several filament lines and slice them all with one preset, so
 some lines in them are quoted slightly light:
@@ -68,6 +70,10 @@ Orca's own `Generic ABS/ASA @BBL A1` and `overlay-numakers-profiles.py` ships
 them base-only (same cleanup as every other profile). The A1 is open-frame and
 Bambu does not recommend ABS/ASA on it (warping on large flat parts, fumes), so
 both tiers ship disabled until the operator chooses to offer them.
+
+**TPU** is shipped the same way, from Orca's `Generic TPU @BBL A1` (95A, max
+3.2 mm³/s, so it prints slowly). It is fed from the external spool, never the
+AMS, and ships disabled.
 
 ### Filament profiles: Numakers presets over a Bambu base
 

@@ -36,6 +36,7 @@ TARGETS = {
         # No supplier preset for these: shipped as the flattened base itself.
         ("Generic ABS @BBL A1", "generic-abs.json"),
         ("Generic ASA @BBL A1", "generic-asa.json"),
+        ("Generic TPU @BBL A1", "generic-tpu.json"),
     ],
 }
 

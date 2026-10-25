@@ -123,6 +123,15 @@ export const CATALOG: Catalog = {
       densityGcm3: 1.04,
       colours: MATERIAL_COLOURS.ASA,
     },
+    // Flexible TPU 95A, sliced with Orca's generic A1 preset. Ships disabled;
+    // the cost is a placeholder until the shop sets its own in Rates.
+    TPU: {
+      name: "TPU (flexible)",
+      sellPerGramPaise: 500,
+      costPerKgPaise: 1200_00,
+      densityGcm3: 1.24,
+      colours: MATERIAL_COLOURS.TPU,
+    },
     // The shop's own materials (CUSTOM_MATERIAL_IDS): named, priced and given
     // an OrcaSlicer profile in admin. Placeholder rates until then; the billed
     // grams come from the slicer profile the owner chooses.
@@ -154,7 +163,7 @@ export type CustomMaterialNames = Partial<Record<CustomMaterialId, { name: strin
 
 /** The base polymer a material tier is made of. Tiers of one family share its
  *  handling (print temperatures, reported weight splits, 3MF import). */
-export type MaterialFamily = "PLA" | "PETG" | "ABS" | "ASA" | "Other";
+export type MaterialFamily = "PLA" | "PETG" | "ABS" | "ASA" | "TPU" | "Other";
 
 export const MATERIAL_FAMILY: Record<MaterialId, MaterialFamily> = {
   PLA: "PLA",
@@ -164,6 +173,7 @@ export const MATERIAL_FAMILY: Record<MaterialId, MaterialFamily> = {
   PETG_PREMIUM: "PETG",
   ABS: "ABS",
   ASA: "ASA",
+  TPU: "TPU",
   OTHER_1: "Other",
   OTHER_2: "Other",
   OTHER_3: "Other",
