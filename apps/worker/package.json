@@ -18,7 +18,7 @@
     "@print/shared": "workspace:*",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "bullmq": "^6.3.2",
+    "bullmq": "^6.5.1",
     "fflate": "^0.8.2",
     "ioredis": "^6.0.0",
     "pino": "^10.3.1"
