@@ -21,7 +21,7 @@
     "bullmq": "^6.3.2",
     "fflate": "^0.8.2",
     "ioredis": "^6.0.0",
-    "pino": "^10.3.1"
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
